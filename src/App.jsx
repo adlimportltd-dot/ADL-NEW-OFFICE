@@ -1,100 +1,5 @@
 import { supabase } from "./supabaseClient";
-import { supabase } from "./supabaseClient";
-"locations").insert({ name: location.name, type: location.type });
-  if (error) throw error;
-}
 
-// ---------- Customers ----------
-export async function addCustomer(customer) {
-  const { error } = await supabase.from("customers").insert({
-    name: customer.name, address: customer.address, contact: customer.contact,
-  });
-  if (error) throw error;
-}
-
-// ---------- Transactions ----------
-// שים לב: אין צורך לעדכן מלאי ידנית - טריגר ב-DB (apply_transaction_to_stock)
-// מעדכן את stock_levels אוטומטית עם כל שורה חדשה בטבלת transactions.
-export async function insertTransaction(tx) {
-  const { error } = await supabase.from("transactions").insert({
-    type: tx.type,
-    item_id: tx.itemId,
-    qty: tx.qty,
-    from_location_id: tx.fromLocationId || null,
-    to_location_id: tx.toLocationId || null,
-    customer_id: tx.customerId || null,
-    condition: tx.condition || null,
-    note: tx.note || null,
-  });
-  if (error) throw error;
-}
-
-// ---------- Realtime ----------
-// מאזין לשינויים במלאי ובתנועות מכל משתמש אחר, כדי לרענן את הדשבורד בזמן אמת
-export function subscribeToChanges(onChange) {
-  const channel = supabase
-    .channel("inventory-changes")
-    .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "stock_levels" }, onChange)
-    .subscribe();
-  return () => supabase.removeChannel(channel);
-}
-
-// ---------- Landed cost ----------
-export async function updateItemUnitCost(itemId, unitCost) {
-  const { error } = await supabase.from("items").update({ unit_cost: unitCost }).eq("id", itemId);
-  if (error) throw error;
-}
-export async function updateItemsUnitCosts(updates) {
-  // updates: [{ itemId, unitCost }]
-  await Promise.all(updates.map((u) => updateItemUnitCost(u.itemId, u.unitCost)));
-}
-
-// ---------- Purchase Orders ----------
-export async function createPurchaseOrder(supplierId, lines) {
-  const poNumber = `ADL-PO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 900 + 100)}`;
-  const { data: po, error } = await supabase
-    .from("purchase_orders")
-    .insert({ po_number: poNumber, supplier_id: supplierId, status: "draft" })
-    .select()
-    .single();
-  if (error) throw error;
-  const { error: linesError } = await supabase.from("po_lines").insert(
-    lines.map((l) => ({ po_id: po.id, item_id: l.itemId, qty: l.qty, unit_price: l.unitPrice }))
-  );
-  if (linesError) throw linesError;
-  return po.id;
-}
-
-// ---------- Settings / Logo ----------
-export async function updateLogoUrl(dataUrl) {
-  const { error } = await supabase.from("app_settings").upsert({ key: "logo_url", value: dataUrl });
-  if (error) throw error;
-}
-export async function fetchPublicLogo() {
-  const { data, error } = await supabase.from("app_settings").select("value").eq("key", "logo_url").maybeSingle();
-  if (error) return null;
-  return data?.value || null;
-}
-
-// ---------- Settings / Company profile ----------
-export async function updateCompanySettings(settings) {
-  const { error } = await supabase.from("app_settings").upsert({ key: "company_settings", value: JSON.stringify(settings) });
-}
-
-// ---------- Account: email + password ----------
-export async function updateAccountEmail(newEmail) {
-  const { error } = await supabase.auth.updateUser({ email: newEmail });
-  if (error) throw error;
-  // שים לב: שינוי דוא"ל ב-Supabase דורש כברירת מחדל אישור בקישור שנשלח לכתובת החדשה (ולעיתים גם לישנה)
-}
-export async function changePassword(currentEmail, currentPassword, newPassword) {
-  // מאמת את הסיסמה הנוכחית ע"י ניסיון התחברות מחדש, ורק אז מעדכן לסיסמה החדשה
-  const { error: verifyError } = await supabase.auth.signInWithPassword({ email: currentEmail, password: currentPassword });
-  if (verifyError) throw new Error("הסיסמה הנוכחית שגויה");
-  const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw error;
-}
 // ---------- מיפוי snake_case (DB) <-> camelCase (UI) ----------
 const mapItem = (r) => ({
   id: r.id, name: r.name, category: r.category, model: r.model,
@@ -291,7 +196,7 @@ export async function fetchPublicLogo() {
 }
 
 // ---------- Settings / Company profile ----------
-export async function updateCompanySettings(settings)
+export async function updateCompanySettings(settings) {
   const { error } = await supabase.from("app_settings").upsert({ key: "company_settings", value: JSON.stringify(settings) });
   if (error) throw error;
 }
