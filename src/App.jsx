@@ -1,234 +1,15 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard, Package, Warehouse, Users, ArrowLeftRight,
   ScrollText, Plus, X, TriangleAlert, Download, Truck, Building2,
-  CircleCheck, CircleX, Trash2, ChevronLeft, Menu, LogOut, Loader2,
-  Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
+  CircleCheck, CircleX, Trash2, ChevronLeft, Menu, Calculator, Ship,
+  BarChart3, FileText, Printer, TrendingDown, Gauge, Lock, LogOut, Upload,
   Settings, Database, KeyRound, User,
 } from "lucide-react";
-import { supabase } from "./lib/supabaseClient";
 
-// ==================== API layer (merged inline - single file) ====================
-// ---------- מיפוי snake_case (DB) <-> camelCase (UI) ----------
-const mapItem = (r) => ({
-  id: r.id, name: r.name, category: r.category, model: r.model,
-  color: r.color, unit: r.unit, minThreshold: Number(r.min_threshold),
-  unitCost: r.unit_cost !== null && r.unit_cost !== undefined ? Number(r.unit_cost) : null,
-});
-const mapLocation = (r) => ({ id: r.id, name: r.name, type: r.type });
-const mapCustomer = (r) => ({ id: r.id, name: r.name, address: r.address, contact: r.contact });
-const mapTransaction = (r) => ({
-  id: r.id, type: r.type, itemId: r.item_id, qty: Number(r.qty),
-  fromLocationId: r.from_location_id, toLocationId: r.to_location_id,
-  customerId: r.customer_id, condition: r.condition, note: r.note,
-  date: r.created_at,
-});
-const mapSupplier = (r) => ({ id: r.id, name: r.name, country: r.country, contact: r.contact, phone: r.phone, email: r.email });
-const mapPO = (r) => ({
-  id: r.id, poNumber: r.po_number, supplierId: r.supplier_id, status: r.status, date: r.created_at,
-  lines: (r.po_lines || []).map((l) => ({ itemId: l.item_id, qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
-});
-
-// ---------- Auth ----------
-async function signIn(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return data;
-}
-async function signUp(email, password, fullName) {
-  const { data, error } = await supabase.auth.signUp({
-    email, password, options: { data: { full_name: fullName } },
-  });
-  if (error) throw error;
-  return data;
-}
-async function signOut() {
-  await supabase.auth.signOut();
-}
-function onAuthChange(callback) {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
-  return () => data.subscription.unsubscribe();
-}
-async function getSession() {
-  const { data } = await supabase.auth.getSession();
-  return data.session;
-}
-async function fetchMyProfile(userId) {
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-  if (error) throw error;
-  if (data) {
-    return { id: data.id, fullName: data.full_name, role: data.role, locationId: data.location_id };
-  }
-  // אין עדיין שורת פרופיל למשתמש הזה (למשל: המשתמש נוצר ידנית ב-Dashboard ולא דרך הטריגר האוטומטי).
-  // יוצרים אותה עכשיו - RLS מגביל יצירה עצמית לתפקיד 'technician' בלבד, קידום למנהל נעשה רק דרך SQL מפורש.
-  const { data: created, error: insertError } = await supabase
-    .from("profiles")
-    .insert({ id: userId, role: "technician" })
-    .select()
-    .maybeSingle();
-  if (insertError) throw insertError;
-  if (!created) throw new Error("לא ניתן היה ליצור פרופיל משתמש אוטומטית. פנה למנהל המערכת להרצת שורת ה-SQL הידנית.");
-  return { id: created.id, fullName: created.full_name, role: created.role, locationId: created.location_id };
-}
-
-// ---------- Fetch everything needed for the app ----------
-async function fetchAllData() {
-  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, posRes, settingsRes] = await Promise.all([
-    supabase.from("items").select("*").order("category").order("name"),
-    supabase.from("locations").select("*").order("type"),
-    supabase.from("customers").select("*").order("name"),
-    supabase.from("stock_levels").select("*"),
-    supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(500),
-    supabase.from("suppliers").select("*").order("name"),
-    supabase.from("purchase_orders").select("*, po_lines(*)").order("created_at", { ascending: false }),
-    supabase.from("app_settings").select("*"),
-  ]);
-
-  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, posRes, settingsRes]) {
-    if (r.error) throw r.error;
-  }
-
-  const stock = {};
-  stockRes.data.forEach((row) => {
-    stock[`${row.item_id}|${row.location_id}`] = Number(row.quantity);
-  });
-
-  const settings = {};
-  (settingsRes.data || []).forEach((row) => { settings[row.key] = row.value; });
-  let companySettings = { name: "אדל אימפורט", legalName: "ADL Import LTD", address: "ישראל", phone: "" };
-  if (settings.company_settings) {
-    try { companySettings = { ...companySettings, ...JSON.parse(settings.company_settings) }; } catch (e) {}
-  }
-
-  return {
-    items: itemsRes.data.map(mapItem),
-    locations: locationsRes.data.map(mapLocation),
-    customers: customersRes.data.map(mapCustomer),
-    stock,
-    transactions: txRes.data.map(mapTransaction),
-    suppliers: (suppliersRes.data || []).map(mapSupplier),
-    purchaseOrders: (posRes.data || []).map(mapPO),
-    logoUrl: settings.logo_url || null,
-    companySettings,
-  };
-}
-
-// ---------- Items ----------
-async function addItem(item) {
-  const { error } = await supabase.from("items").insert({
-    name: item.name, category: item.category, unit: item.unit, min_threshold: item.minThreshold,
-  });
-  if (error) throw error;
-}
-async function deleteItem(id) {
-  const { error } = await supabase.from("items").delete().eq("id", id);
-  if (error) throw error;
-}
-
-// ---------- Locations ----------
-async function addLocation(location) {
-  const { error } = await supabase.from("locations").insert({ name: location.name, type: location.type });
-  if (error) throw error;
-}
-
-// ---------- Customers ----------
-async function addCustomer(customer) {
-  const { error } = await supabase.from("customers").insert({
-    name: customer.name, address: customer.address, contact: customer.contact,
-  });
-  if (error) throw error;
-}
-
-// ---------- Transactions ----------
-// שים לב: אין צורך לעדכן מלאי ידנית - טריגר ב-DB (apply_transaction_to_stock)
-// מעדכן את stock_levels אוטומטית עם כל שורה חדשה בטבלת transactions.
-async function insertTransaction(tx) {
-  const { error } = await supabase.from("transactions").insert({
-    type: tx.type,
-    item_id: tx.itemId,
-    qty: tx.qty,
-    from_location_id: tx.fromLocationId || null,
-    to_location_id: tx.toLocationId || null,
-    customer_id: tx.customerId || null,
-    condition: tx.condition || null,
-    note: tx.note || null,
-  });
-  if (error) throw error;
-}
-
-// ---------- Realtime ----------
-// מאזין לשינויים במלאי ובתנועות מכל משתמש אחר, כדי לרענן את הדשבורד בזמן אמת
-function subscribeToChanges(onChange) {
-  const channel = supabase
-    .channel("inventory-changes")
-    .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "stock_levels" }, onChange)
-    .subscribe();
-  return () => supabase.removeChannel(channel);
-}
-
-// ---------- Landed cost ----------
-async function updateItemUnitCost(itemId, unitCost) {
-  const { error } = await supabase.from("items").update({ unit_cost: unitCost }).eq("id", itemId);
-  if (error) throw error;
-}
-async function updateItemsUnitCosts(updates) {
-  // updates: [{ itemId, unitCost }]
-  await Promise.all(updates.map((u) => updateItemUnitCost(u.itemId, u.unitCost)));
-}
-
-// ---------- Purchase Orders ----------
-async function createPurchaseOrder(supplierId, lines) {
-  const poNumber = `ADL-PO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 900 + 100)}`;
-  const { data: po, error } = await supabase
-    .from("purchase_orders")
-    .insert({ po_number: poNumber, supplier_id: supplierId, status: "draft" })
-    .select()
-    .single();
-  if (error) throw error;
-  const { error: linesError } = await supabase.from("po_lines").insert(
-    lines.map((l) => ({ po_id: po.id, item_id: l.itemId, qty: l.qty, unit_price: l.unitPrice }))
-  );
-  if (linesError) throw linesError;
-  return po.id;
-}
-
-// ---------- Settings / Logo ----------
-async function updateLogoUrl(dataUrl) {
-  const { error } = await supabase.from("app_settings").upsert({ key: "logo_url", value: dataUrl });
-  if (error) throw error;
-}
-async function fetchPublicLogo() {
-  const { data, error } = await supabase.from("app_settings").select("value").eq("key", "logo_url").maybeSingle();
-  if (error) return null;
-  return data?.value || null;
-}
-
-// ---------- Settings / Company profile ----------
-async function updateCompanySettings(settings) {
-  const { error } = await supabase.from("app_settings").upsert({ key: "company_settings", value: JSON.stringify(settings) });
-  if (error) throw error;
-}
-
-// ---------- Account: email + password ----------
-async function updateAccountEmail(newEmail) {
-  const { error } = await supabase.auth.updateUser({ email: newEmail });
-  if (error) throw error;
-  // שים לב: שינוי דוא"ל ב-Supabase דורש כברירת מחדל אישור בקישור שנשלח לכתובת החדשה (ולעיתים גם לישנה)
-}
-async function changePassword(currentEmail, currentPassword, newPassword) {
-  // מאמת את הסיסמה הנוכחית ע"י ניסיון התחברות מחדש, ורק אז מעדכן לסיסמה החדשה
-  const { error: verifyError } = await supabase.auth.signInWithPassword({ email: currentEmail, password: currentPassword });
-  if (verifyError) throw new Error("הסיסמה הנוכחית שגויה");
-  const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw error;
-}
-
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
-
-
-const fmtDate = (iso) =>
-  new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const uid = () => Math.random().toString(36).slice(2, 10);
+const nowISO = () => new Date().toISOString();
+const fmtDate = (iso) => new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 const CATEGORIES = { device: "מכשירים", consumable: "נוזלים ומתכלים" };
 const TX_TYPES = {
@@ -239,15 +20,84 @@ const TX_TYPES = {
   writeoff: { label: "פחת / גריעה", icon: Trash2, color: "rose" },
 };
 
-function Badge({ children, tone = "gray" }) {
-  const tones = {
-    gray: "bg-gray-100 text-gray-700", emerald: "bg-emerald-100 text-emerald-800",
-    sky: "bg-sky-100 text-sky-800", amber: "bg-amber-100 text-amber-800",
-    violet: "bg-violet-100 text-violet-800", rose: "bg-rose-100 text-rose-800",
+const daysAgoISO = (d) => new Date(Date.now() - d * 86400000).toISOString();
+
+// ==================== נתוני Demo מקומיים (בזיכרון בלבד) ====================
+const seedData = () => {
+  const wh = { id: "wh-main", name: "מחסן מרכזי", type: "warehouse" };
+  const v1 = { id: uid(), name: "רכב טכנאי - צפון", type: "vehicle" };
+  const v2 = { id: uid(), name: "רכב טכנאי - מרכז", type: "vehicle" };
+
+  const deviceModels = [
+    { model: "A car", colors: ["לבן", "שחור"] },
+    { model: "A pro car", colors: ["שחור", "כסוף", "זהב"] },
+    { model: "A 70", colors: ["לבן", "שחור"] },
+    { model: "A 90", colors: ["לבן", "אפור"] },
+    { model: "A 400", colors: ["שחור", "לבן"] },
+    { model: "A 700", colors: ["לבן", "אפור"] },
+  ];
+  const deviceItems = deviceModels.flatMap((m) =>
+    m.colors.map((color) => ({ id: uid(), name: `${m.model} - ${color}`, category: "device", unit: "יחידה", minThreshold: 3, unitCost: 340 + Math.round(Math.random() * 120) }))
+  );
+
+  const fragranceNames = [
+    "בראשית", "פתאל", "כרמים", "אסטוריה", "רויאל ביץ", "הילטון", "בלאק ונילה", "בלאק יסמין",
+    "דולצ׳ה", "גרין תה", "דיור", "דלתא", "ויקטוריה סיקרט", "וניל מוסטנג", "וניל קוקוס", "וויט מאסק",
+    "וניל פצ׳ולי", "טום פורד", "לבנדר", "לטינו", "לנור", "מלון בוטיק דובאי", "נאוטיקה", "ספורט",
+    "סרג׳וף", "קדמא", "קומבי", "קסטרו", "קריד", "תומס 4", "סקסי",
+  ];
+  const fragranceItems = fragranceNames.map((name) => ({
+    id: uid(), name: `תמצית ריח - ${name}`, category: "consumable", unit: 'ק"ג', minThreshold: 5, unitCost: 60 + Math.round(Math.random() * 40),
+  }));
+
+  const items = [...deviceItems, ...fragranceItems];
+  const locations = [wh, v1, v2];
+  const customers = [
+    { id: uid(), name: "מלון דן תל אביב", address: "רח' הירקון 99, תל אביב", contact: "אבי לוי, 050-1234567" },
+  ];
+  const suppliers = [
+    { id: uid(), name: "Guangzhou Icon Electronics Co., Ltd.", country: "China", contact: "Mr. Li Wei", phone: "+86 20 1234 5678", email: "sales@iconelectronics.cn" },
+    { id: uid(), name: "Paris Essence Import SARL", country: "France", contact: "Mme. Claire Dubois", phone: "+33 1 23 45 67 89", email: "contact@parisessence.fr" },
+  ];
+
+  const stock = {};
+  items.forEach((item, idx) => {
+    stock[`${item.id}|${wh.id}`] = item.category === "device" ? 6 : 12;
+    if (idx % 5 === 0) stock[`${item.id}|${v1.id}`] = item.category === "device" ? 1 : 2;
+    if (idx % 7 === 0) stock[`${item.id}|${v2.id}`] = item.category === "device" ? 1 : 2;
+  });
+
+  const transactions = [
+    { id: uid(), type: "receive", itemId: deviceItems[0].id, qty: 10, toLocationId: wh.id, date: nowISO(), note: "אספקה שוטפת" },
+  ];
+
+  // היסטוריית תנועות סינתטית ל-60 הימים האחרונים, כדי שדוח קצב הצריכה יהיה מבוסס נתונים אמיתיים
+  const sampleForBurn = [...deviceItems.slice(0, 4), ...fragranceItems.slice(0, 6)];
+  sampleForBurn.forEach((item) => {
+    const eventsCount = item.category === "device" ? 2 + Math.floor(Math.random() * 3) : 4 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < eventsCount; i++) {
+      const daysBack = Math.floor(Math.random() * 58) + 1;
+      const qty = item.category === "device" ? 1 : 1 + Math.floor(Math.random() * 2);
+      transactions.push({
+        id: uid(), type: "install", itemId: item.id, qty,
+        fromLocationId: Math.random() > 0.5 ? v1.id : v2.id,
+        customerId: customers[0].id, date: daysAgoISO(daysBack), note: "",
+      });
+    }
+  });
+
+  const companySettings = {
+    name: "אדל אימפורט", legalName: "ADL Import LTD", address: "ישראל",
+    phone: "", userDisplayName: "",
   };
+
+  return { items, locations, customers, suppliers, stock, transactions, purchaseOrders: [], companySettings };
+};
+
+function Badge({ children, tone = "gray" }) {
+  const tones = { gray: "bg-gray-100 text-gray-700", emerald: "bg-emerald-100 text-emerald-800", sky: "bg-sky-100 text-sky-800", amber: "bg-amber-100 text-amber-800", violet: "bg-violet-100 text-violet-800", rose: "bg-rose-100 text-rose-800" };
   return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tones[tone]}`}>{children}</span>;
 }
-
 function Modal({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
@@ -261,21 +111,14 @@ function Modal({ title, onClose, children }) {
     </div>
   );
 }
-
 function Field({ label, children }) {
-  return (
-    <div className="mb-4">
-      <label className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
-      {children}
-    </div>
-  );
+  return <div className="mb-4"><label className="block text-sm font-medium text-slate-600 mb-1">{label}</label>{children}</div>;
 }
-
 const inputCls = "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400";
 const btnPrimary = "bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl px-4 py-3 text-[15px] transition disabled:opacity-40 disabled:cursor-not-allowed";
 const btnGhost = "bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 font-medium rounded-xl px-4 py-2.5 text-[15px] transition";
 
-// לוגו החברה: תמונה שהועלתה (נשמרת ב-app_settings) אם קיימת, אחרת התג "A"
+// לוגו החברה: תמונה שהועלתה (base64) אם קיימת, אחרת התג "A" כברירת מחדל
 function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
   const inputRef = React.useRef(null);
   const pick = () => inputRef.current?.click();
@@ -289,7 +132,11 @@ function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
     e.target.value = "";
   };
   return (
-    <div className="relative shrink-0 rounded-lg overflow-hidden bg-amber-500 text-slate-900 font-bold flex items-center justify-center group" style={{ width: size, height: size }} onClick={editable ? pick : undefined}>
+    <div
+      className="relative shrink-0 rounded-lg overflow-hidden bg-amber-500 text-slate-900 font-bold flex items-center justify-center group"
+      style={{ width: size, height: size }}
+      onClick={editable ? pick : undefined}
+    >
       {logoUrl ? <img src={logoUrl} alt="ADL Import" className="w-full h-full object-cover" /> : "A"}
       {editable && (
         <>
@@ -303,80 +150,17 @@ function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
   );
 }
 
-// ==================== Login ====================
-const ALLOWED_EMAIL = "adlimportltd25@gmail.com";
-const ALLOWED_PASSWORD = "123456";
-
-function LoginScreen({ onSuccess, logoUrl, initialError }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState(initialError || "");
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    setError(""); setBusy(true);
-    try {
-      if (email.trim().toLowerCase() !== ALLOWED_EMAIL) {
-        setError('גישה נדחתה. משתמש זה אינו מורשה להיכנס למערכת.');
-        return;
-      }
-      if (password !== ALLOWED_PASSWORD) {
-        setError('סיסמה שגויה, גישה נדחתה.');
-        return;
-      }
-      await api.signIn(email.trim(), password);
-      onSuccess();
-    } catch (e) {
-      setError(e.message || "שגיאת התחברות");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const onKeyDown = (e) => { if (e.key === "Enter") submit(); };
-
-  return (
-    <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <LogoBadge logoUrl={logoUrl} size={40} />
-          <div>
-            <div className="font-bold text-slate-900 leading-tight">אדל אימפורט</div>
-            <div className="text-xs text-slate-500">ניהול מלאי</div>
-          </div>
-        </div>
-
-        <Field label='דוא"ל'>
-          <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} autoFocus />
-        </Field>
-        <Field label="סיסמה">
-          <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} />
-        </Field>
-
-        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
-
-        <button onClick={submit} disabled={busy || !email || !password} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
-          {busy && <Loader2 size={16} className="animate-spin" />}
-          התחברות
-        </button>
-        <p className="text-xs text-slate-400 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
-      </div>
-    </div>
-  );
-}
-
 // ==================== Dashboard ====================
 function Dashboard({ data, onExport }) {
   const { items, locations, stock } = data;
   const warehouse = locations.find((l) => l.type === "warehouse");
   const vehicles = locations.filter((l) => l.type === "vehicle");
-
   const rows = items.map((item) => {
     const whQty = stock[`${item.id}|${warehouse?.id}`] || 0;
     const vehicleQty = vehicles.reduce((s, v) => s + (stock[`${item.id}|${v.id}`] || 0), 0);
     const total = whQty + vehicleQty;
     return { item, whQty, vehicleQty, total, low: total < item.minThreshold };
   });
-
   const lowStock = rows.filter((r) => r.low);
   const totalUnits = rows.reduce((s, r) => s + r.total, 0);
 
@@ -384,26 +168,18 @@ function Dashboard({ data, onExport }) {
     <div className="space-y-5">
       {lowStock.length > 0 && (
         <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-rose-700 font-bold mb-2">
-            <TriangleAlert size={18} /><span>{lowStock.length} פריטים מתחת לסף המלאי המינימלי</span>
-          </div>
+          <div className="flex items-center gap-2 text-rose-700 font-bold mb-2"><TriangleAlert size={18} /><span>{lowStock.length} פריטים מתחת לסף המלאי המינימלי</span></div>
           <div className="flex flex-wrap gap-2">
-            {lowStock.map((r) => (
-              <span key={r.item.id} className="bg-white border border-rose-200 rounded-lg px-3 py-1.5 text-sm text-rose-700">
-                {r.item.name}: <b>{r.total}</b> / סף {r.item.minThreshold}
-              </span>
-            ))}
+            {lowStock.map((r) => <span key={r.item.id} className="bg-white border border-rose-200 rounded-lg px-3 py-1.5 text-sm text-rose-700">{r.item.name}: <b>{r.total}</b> / סף {r.item.minThreshold}</span>)}
           </div>
         </div>
       )}
-
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">סה"כ יחידות במלאי</div><div className="text-2xl font-bold text-slate-800">{totalUnits}</div></div>
         <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">פריטים בקטלוג</div><div className="text-2xl font-bold text-slate-800">{items.length}</div></div>
         <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">מיקומים פעילים</div><div className="text-2xl font-bold text-slate-800">{locations.length}</div></div>
         <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">מתחת לסף</div><div className="text-2xl font-bold text-rose-600">{lowStock.length}</div></div>
       </div>
-
       <div className="bg-white rounded-2xl border overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h3 className="font-bold text-slate-800">מבט-על מלאי לפי פריט ומיקום</h3>
@@ -411,13 +187,7 @@ function Dashboard({ data, onExport }) {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-slate-500 text-right">
-                <th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">קטגוריה</th>
-                <th className="px-4 py-2 font-medium">מחסן מרכזי</th><th className="px-4 py-2 font-medium">ברכבים</th>
-                <th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th>
-              </tr>
-            </thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">קטגוריה</th><th className="px-4 py-2 font-medium">מחסן מרכזי</th><th className="px-4 py-2 font-medium">ברכבים</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.item.id} className="border-t">
@@ -438,39 +208,26 @@ function Dashboard({ data, onExport }) {
 }
 
 // ==================== Items ====================
-function ItemsScreen({ data, refresh, isAdmin }) {
+function ItemsScreen({ data, persist }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", category: "device", unit: "", minThreshold: 0 });
-  const [error, setError] = useState("");
-
-  const submit = async () => {
+  const submit = () => {
     if (!form.name.trim() || !form.unit.trim()) return;
-    try {
-      await api.addItem({ ...form, minThreshold: Number(form.minThreshold) || 0 });
-      setForm({ name: "", category: "device", unit: "", minThreshold: 0 });
-      setOpen(false);
-      await refresh();
-    } catch (e) { setError(e.message); }
+    persist({ ...data, items: [...data.items, { id: uid(), ...form, minThreshold: Number(form.minThreshold) || 0 }] });
+    setForm({ name: "", category: "device", unit: "", minThreshold: 0 });
+    setOpen(false);
   };
-
-  const removeItem = async (id) => {
-    try { await api.deleteItem(id); await refresh(); } catch (e) { alert(e.message); }
-  };
+  const removeItem = (id) => persist({ ...data, items: data.items.filter((i) => i.id !== id) });
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-xl text-slate-800">פריטים</h2>
-        {isAdmin && <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> פריט חדש</button>}
+        <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> פריט חדש</button>
       </div>
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">שם פריט</th><th className="px-4 py-2 font-medium">קטגוריה</th>
-              <th className="px-4 py-2 font-medium">יחידת מידה</th><th className="px-4 py-2 font-medium">סף מינימום</th><th className="px-4 py-2"></th>
-            </tr>
-          </thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">שם פריט</th><th className="px-4 py-2 font-medium">קטגוריה</th><th className="px-4 py-2 font-medium">יחידת מידה</th><th className="px-4 py-2 font-medium">סף מינימום</th><th className="px-4 py-2 font-medium">עלות נחיתה ליח'</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.items.map((it) => (
               <tr key={it.id} className="border-t">
@@ -478,27 +235,20 @@ function ItemsScreen({ data, refresh, isAdmin }) {
                 <td className="px-4 py-2.5"><Badge tone={it.category === "device" ? "sky" : "violet"}>{CATEGORIES[it.category]}</Badge></td>
                 <td className="px-4 py-2.5">{it.unit}</td>
                 <td className="px-4 py-2.5">{it.minThreshold}</td>
-                <td className="px-4 py-2.5 text-left">
-                  {isAdmin && <button onClick={() => removeItem(it.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={16} /></button>}
-                </td>
+                <td className="px-4 py-2.5">{it.unitCost ? `₪${it.unitCost.toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
+                <td className="px-4 py-2.5 text-left"><button onClick={() => removeItem(it.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={16} /></button></td>
               </tr>
             ))}
-            {data.items.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">אין פריטים עדיין</td></tr>}
+            {data.items.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">אין פריטים עדיין</td></tr>}
           </tbody>
         </table>
       </div>
-
       {open && (
         <Modal title="הוספת פריט חדש" onClose={() => setOpen(false)}>
           <Field label="שם פריט"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-          <Field label="קטגוריה">
-            <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              <option value="device">מכשירים</option><option value="consumable">נוזלים ומתכלים</option>
-            </select>
-          </Field>
+          <Field label="קטגוריה"><select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option value="device">מכשירים</option><option value="consumable">נוזלים ומתכלים</option></select></Field>
           <Field label="יחידת מידה"><input className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: e.target.value })} /></Field>
-          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} className={btnPrimary + " w-full"}>שמירת פריט</button>
         </Modal>
       )}
@@ -507,52 +257,35 @@ function ItemsScreen({ data, refresh, isAdmin }) {
 }
 
 // ==================== Locations ====================
-function LocationsScreen({ data, refresh, isAdmin }) {
+function LocationsScreen({ data, persist }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", type: "vehicle" });
-  const [error, setError] = useState("");
-
-  const submit = async () => {
+  const submit = () => {
     if (!form.name.trim()) return;
-    try {
-      await api.addLocation(form);
-      setForm({ name: "", type: "vehicle" });
-      setOpen(false);
-      await refresh();
-    } catch (e) { setError(e.message); }
+    persist({ ...data, locations: [...data.locations, { id: uid(), ...form }] });
+    setForm({ name: "", type: "vehicle" });
+    setOpen(false);
   };
-
   const stockAt = (locId) => data.items.reduce((sum, it) => sum + (data.stock[`${it.id}|${locId}`] || 0), 0);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-xl text-slate-800">מיקומים</h2>
-        {isAdmin && <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> מיקום חדש</button>}
+        <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> מיקום חדש</button>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {data.locations.map((loc) => (
           <div key={loc.id} className="bg-white rounded-2xl border p-4 flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${loc.type === "warehouse" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"}`}>
-              {loc.type === "warehouse" ? <Building2 size={20} /> : <Truck size={20} />}
-            </div>
-            <div className="flex-1">
-              <div className="font-bold text-slate-800">{loc.name}</div>
-              <div className="text-sm text-slate-500">{loc.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {stockAt(loc.id)} יח' סה"כ</div>
-            </div>
+            <div className={`p-2.5 rounded-xl ${loc.type === "warehouse" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"}`}>{loc.type === "warehouse" ? <Building2 size={20} /> : <Truck size={20} />}</div>
+            <div className="flex-1"><div className="font-bold text-slate-800">{loc.name}</div><div className="text-sm text-slate-500">{loc.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {stockAt(loc.id)} יח' סה"כ</div></div>
           </div>
         ))}
       </div>
-
       {open && (
         <Modal title="הוספת מיקום" onClose={() => setOpen(false)}>
-          <Field label="סוג מיקום">
-            <select className={inputCls} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              <option value="vehicle">רכב טכנאי</option><option value="warehouse">מחסן</option>
-            </select>
-          </Field>
+          <Field label="סוג מיקום"><select className={inputCls} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="vehicle">רכב טכנאי</option><option value="warehouse">מחסן</option></select></Field>
           <Field label="שם המיקום"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} className={btnPrimary + " w-full"}>שמירת מיקום</button>
         </Modal>
       )}
@@ -561,35 +294,25 @@ function LocationsScreen({ data, refresh, isAdmin }) {
 }
 
 // ==================== Customers ====================
-function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
+function CustomersScreen({ data, persist, onOpenFile }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", address: "", contact: "" });
-  const [error, setError] = useState("");
-
-  const submit = async () => {
+  const submit = () => {
     if (!form.name.trim()) return;
-    try {
-      await api.addCustomer(form);
-      setForm({ name: "", address: "", contact: "" });
-      setOpen(false);
-      await refresh();
-    } catch (e) { setError(e.message); }
+    persist({ ...data, customers: [...data.customers, { id: uid(), ...form }] });
+    setForm({ name: "", address: "", contact: "" });
+    setOpen(false);
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-xl text-slate-800">לקוחות</h2>
-        {isAdmin && <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> לקוח חדש</button>}
+        <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> לקוח חדש</button>
       </div>
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">שם לקוח / עסק</th><th className="px-4 py-2 font-medium">כתובת</th>
-              <th className="px-4 py-2 font-medium">איש קשר</th><th className="px-4 py-2"></th>
-            </tr>
-          </thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">שם לקוח / עסק</th><th className="px-4 py-2 font-medium">כתובת</th><th className="px-4 py-2 font-medium">איש קשר</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.customers.map((c) => (
               <tr key={c.id} className="border-t">
@@ -603,13 +326,11 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
           </tbody>
         </table>
       </div>
-
       {open && (
         <Modal title="הוספת לקוח" onClose={() => setOpen(false)}>
           <Field label="שם לקוח / עסק"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           <Field label="כתובת"><input className={inputCls} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
           <Field label="איש קשר"><input className={inputCls} value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} /></Field>
-          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} className={btnPrimary + " w-full"}>שמירת לקוח</button>
         </Modal>
       )}
@@ -621,7 +342,6 @@ function CustomerFile({ data, customerId, onBack }) {
   const customer = data.customers.find((c) => c.id === customerId);
   const history = data.transactions.filter((t) => t.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
   if (!customer) return null;
-
   return (
     <div>
       <button onClick={onBack} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת לקוחות</button>
@@ -633,12 +353,7 @@ function CustomerFile({ data, customerId, onBack }) {
       <h3 className="font-bold text-slate-800 mb-2">היסטוריית התקנות וציוד</h3>
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">פריט</th>
-              <th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">סוג</th><th className="px-4 py-2 font-medium">הערה</th>
-            </tr>
-          </thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">סוג</th><th className="px-4 py-2 font-medium">הערה</th></tr></thead>
           <tbody>
             {history.map((t) => {
               const item = data.items.find((i) => i.id === t.itemId);
@@ -661,18 +376,14 @@ function CustomerFile({ data, customerId, onBack }) {
 }
 
 // ==================== Transaction ====================
-function TransactionScreen({ data, refresh, quickTx }) {
+function TransactionScreen({ data, persist, quickTx }) {
   const [type, setType] = useState(null);
   const [form, setForm] = useState({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "" });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [busy, setBusy] = useState(false);
-
   const warehouse = data.locations.find((l) => l.type === "warehouse");
   const vehicles = data.locations.filter((l) => l.type === "vehicle");
-
   const resetForm = () => setForm({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "" });
-
   const chooseType = (t) => {
     setType(t); setError(""); setSuccess("");
     const base = { itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "" };
@@ -680,59 +391,54 @@ function TransactionScreen({ data, refresh, quickTx }) {
     if (t === "transfer") base.fromLocationId = warehouse?.id || "";
     setForm(base);
   };
-
-  useEffect(() => {
-    if (quickTx) chooseType(quickTx.type);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (quickTx) chooseType(quickTx.type); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickTx?.nonce]);
-
   const stockOf = (itemId, locId) => data.stock[`${itemId}|${locId}`] || 0;
 
-  const submit = async () => {
+  const submit = () => {
     setError(""); setSuccess("");
     const qty = Number(form.qty);
     if (!form.itemId || !qty || qty <= 0) { setError("יש לבחור פריט ולהזין כמות תקינה"); return; }
+    const stock = { ...data.stock };
+    const key = (loc) => `${form.itemId}|${loc}`;
 
-    if (type === "receive" && !form.toLocationId) { setError("יש לבחור מיקום יעד"); return; }
-    if (type === "transfer") {
+    if (type === "receive") {
+      if (!form.toLocationId) { setError("יש לבחור מיקום יעד"); return; }
+      stock[key(form.toLocationId)] = (stock[key(form.toLocationId)] || 0) + qty;
+    } else if (type === "transfer") {
       if (!form.fromLocationId || !form.toLocationId) { setError("יש לבחור מיקום מקור ויעד"); return; }
       if (form.fromLocationId === form.toLocationId) { setError("מקור ויעד לא יכולים להיות זהים"); return; }
       const avail = stockOf(form.itemId, form.fromLocationId);
       if (avail < qty) { setError(`אין מספיק מלאי במקור (זמין: ${avail})`); return; }
-    }
-    if (type === "install") {
+      stock[key(form.fromLocationId)] = avail - qty;
+      stock[key(form.toLocationId)] = (stock[key(form.toLocationId)] || 0) + qty;
+    } else if (type === "install") {
       if (!form.fromLocationId) { setError("יש לבחור רכב מקור"); return; }
       if (!form.customerId) { setError("יש לבחור לקוח"); return; }
       const avail = stockOf(form.itemId, form.fromLocationId);
       if (avail < qty) { setError(`אין מספיק מלאי ברכב (זמין: ${avail})`); return; }
-    }
-    if (type === "return" && !form.toLocationId) { setError("יש לבחור מיקום יעד להחזרה"); return; }
-    if (type === "writeoff") {
+      stock[key(form.fromLocationId)] = avail - qty;
+    } else if (type === "return") {
+      if (!form.toLocationId) { setError("יש לבחור מיקום יעד להחזרה"); return; }
+      if (form.condition === "ok") stock[key(form.toLocationId)] = (stock[key(form.toLocationId)] || 0) + qty;
+    } else if (type === "writeoff") {
       if (!form.fromLocationId) { setError("יש לבחור מיקום"); return; }
       const avail = stockOf(form.itemId, form.fromLocationId);
       if (avail < qty) { setError(`אין מספיק מלאי לגריעה (זמין: ${avail})`); return; }
+      stock[key(form.fromLocationId)] = avail - qty;
     }
 
-    setBusy(true);
-    try {
-      await api.insertTransaction({
-        type, itemId: form.itemId, qty,
-        fromLocationId: form.fromLocationId || null,
-        toLocationId: form.toLocationId || null,
-        customerId: form.customerId || null,
-        condition: type === "return" ? form.condition : null,
-        note: form.note || "",
-      });
-      await refresh();
-      setSuccess("התנועה נרשמה בהצלחה");
-      resetForm();
-      if (type === "receive") setForm((f) => ({ ...f, toLocationId: warehouse?.id || "" }));
-      if (type === "transfer") setForm((f) => ({ ...f, fromLocationId: warehouse?.id || "" }));
-    } catch (e) {
-      setError(e.message || "שגיאה בביצוע התנועה - ייתכן שאין לך הרשאה למיקום זה");
-    } finally {
-      setBusy(false);
-    }
+    const tx = {
+      id: uid(), type, itemId: form.itemId, qty,
+      fromLocationId: form.fromLocationId || null, toLocationId: form.toLocationId || null,
+      customerId: form.customerId || null, condition: type === "return" ? form.condition : null,
+      note: form.note || "", date: nowISO(),
+    };
+    persist({ ...data, stock, transactions: [tx, ...data.transactions] });
+    setSuccess("התנועה נרשמה בהצלחה");
+    resetForm();
+    if (type === "receive") setForm((f) => ({ ...f, toLocationId: warehouse?.id || "" }));
+    if (type === "transfer") setForm((f) => ({ ...f, fromLocationId: warehouse?.id || "" }));
   };
 
   if (!type) {
@@ -753,61 +459,18 @@ function TransactionScreen({ data, refresh, quickTx }) {
       </div>
     );
   }
-
   const cfg = TX_TYPES[type];
   return (
     <div>
       <button onClick={() => setType(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> בחירת סוג תנועה אחרת</button>
       <div className={`bg-${cfg.color}-50 border border-${cfg.color}-200 rounded-2xl p-4 sm:p-6 max-w-lg`}>
         <h2 className="font-bold text-xl text-slate-800 mb-4">{cfg.label}</h2>
-
-        <Field label="פריט">
-          <select className={inputCls} value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value })}>
-            <option value="">בחר פריט...</option>
-            {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
-          </select>
-        </Field>
-
-        <Field label={`כמות${form.itemId ? " (" + (data.items.find((i) => i.id === form.itemId)?.unit || "") + ")" : ""}`}>
-          <input type="number" min="1" className={inputCls} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
-        </Field>
-
-        {type === "transfer" && (
-          <Field label="ממיקום">
-            <select className={inputCls} value={form.fromLocationId} onChange={(e) => setForm({ ...form, fromLocationId: e.target.value })}>
-              <option value="">בחר מיקום...</option>
-              {data.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </Field>
-        )}
-
-        {(type === "install" || type === "writeoff") && (
-          <Field label={type === "install" ? "מרכב טכנאי" : "ממיקום"}>
-            <select className={inputCls} value={form.fromLocationId} onChange={(e) => setForm({ ...form, fromLocationId: e.target.value })}>
-              <option value="">בחר מיקום...</option>
-              {(type === "install" ? vehicles : data.locations).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </Field>
-        )}
-
-        {(type === "transfer" || type === "receive" || type === "return") && (
-          <Field label={type === "receive" ? "אל מיקום (מחסן)" : "אל מיקום"}>
-            <select className={inputCls} value={form.toLocationId} onChange={(e) => setForm({ ...form, toLocationId: e.target.value })}>
-              <option value="">בחר מיקום...</option>
-              {data.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </Field>
-        )}
-
-        {(type === "install" || type === "return") && (
-          <Field label="לקוח">
-            <select className={inputCls} value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })}>
-              <option value="">בחר לקוח...</option>
-              {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </Field>
-        )}
-
+        <Field label="פריט"><select className={inputCls} value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value })}><option value="">בחר פריט...</option>{data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}</select></Field>
+        <Field label={`כמות${form.itemId ? " (" + (data.items.find((i) => i.id === form.itemId)?.unit || "") + ")" : ""}`}><input type="number" min="1" className={inputCls} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} /></Field>
+        {type === "transfer" && <Field label="ממיקום"><select className={inputCls} value={form.fromLocationId} onChange={(e) => setForm({ ...form, fromLocationId: e.target.value })}><option value="">בחר מיקום...</option>{data.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>}
+        {(type === "install" || type === "writeoff") && <Field label={type === "install" ? "מרכב טכנאי" : "ממיקום"}><select className={inputCls} value={form.fromLocationId} onChange={(e) => setForm({ ...form, fromLocationId: e.target.value })}><option value="">בחר מיקום...</option>{(type === "install" ? vehicles : data.locations).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>}
+        {(type === "transfer" || type === "receive" || type === "return") && <Field label={type === "receive" ? "אל מיקום (מחסן)" : "אל מיקום"}><select className={inputCls} value={form.toLocationId} onChange={(e) => setForm({ ...form, toLocationId: e.target.value })}><option value="">בחר מיקום...</option>{data.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>}
+        {(type === "install" || type === "return") && <Field label="לקוח"><select className={inputCls} value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })}><option value="">בחר לקוח...</option>{data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>}
         {type === "return" && (
           <Field label="מצב הפריט המוחזר">
             <div className="flex gap-2">
@@ -816,15 +479,10 @@ function TransactionScreen({ data, refresh, quickTx }) {
             </div>
           </Field>
         )}
-
         <Field label="הערה (לא חובה)"><textarea className={inputCls} rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
-
         {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
         {success && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">{success}</div>}
-
-        <button onClick={submit} disabled={busy} className={btnPrimary + " w-full text-lg py-3.5 flex items-center justify-center gap-2"}>
-          {busy && <Loader2 size={18} className="animate-spin" />} אישור וביצוע
-        </button>
+        <button onClick={submit} className={btnPrimary + " w-full text-lg py-3.5"}>אישור וביצוע</button>
       </div>
     </div>
   );
@@ -836,26 +494,15 @@ function AuditLog({ data }) {
   const rows = data.transactions.filter((t) => filter === "all" || t.type === filter);
   const locName = (id) => data.locations.find((l) => l.id === id)?.name || "-";
   const custName = (id) => data.customers.find((c) => c.id === id)?.name || "-";
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 className="font-bold text-xl text-slate-800">יומן אירועים (Audit Log)</h2>
-        <select className={inputCls + " w-auto"} value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="all">כל התנועות</option>
-          {Object.entries(TX_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
+        <select className={inputCls + " w-auto"} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">כל התנועות</option>{Object.entries(TX_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
       </div>
       <div className="bg-white rounded-2xl border overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">סוג</th>
-              <th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th>
-              <th className="px-4 py-2 font-medium">ממיקום</th><th className="px-4 py-2 font-medium">אל מיקום</th>
-              <th className="px-4 py-2 font-medium">לקוח</th><th className="px-4 py-2 font-medium">הערה</th>
-            </tr>
-          </thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">סוג</th><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">ממיקום</th><th className="px-4 py-2 font-medium">אל מיקום</th><th className="px-4 py-2 font-medium">לקוח</th><th className="px-4 py-2 font-medium">הערה</th></tr></thead>
           <tbody>
             {rows.map((t) => {
               const item = data.items.find((i) => i.id === t.itemId);
@@ -880,17 +527,15 @@ function AuditLog({ data }) {
   );
 }
 
-// ==================== Nav ====================
 // ==================== מחשבון יבוא ועלויות נחיתה (Landed Cost) ====================
-function LandedCostScreen({ data, refresh }) {
+function LandedCostScreen({ data, persist }) {
   const [overhead, setOverhead] = useState({ shipping: "", customs: "", brokerage: "", inland: "" });
-  const [method, setMethod] = useState("value");
-  const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "" }]);
-  const [busy, setBusy] = useState(false);
+  const [method, setMethod] = useState("value"); // 'value' | 'volume'
+  const [lines, setLines] = useState([{ id: uid(), itemId: "", qty: "", unitPrice: "", unitVolume: "" }]);
   const [updated, setUpdated] = useState(false);
 
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "" }]);
+  const addLine = () => setLines([...lines, { id: uid(), itemId: "", qty: "", unitPrice: "", unitVolume: "" }]);
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
 
   const totalOverhead = ["shipping", "customs", "brokerage", "inland"].reduce((s, k) => s + (Number(overhead[k]) || 0), 0);
@@ -899,6 +544,7 @@ function LandedCostScreen({ data, refresh }) {
     const qty = Number(l.qty);
     return s + (method === "value" ? qty * Number(l.unitPrice) : qty * (Number(l.unitVolume) || 0));
   }, 0);
+
   const results = validLines.map((l) => {
     const qty = Number(l.qty);
     const unitPrice = Number(l.unitPrice);
@@ -907,24 +553,25 @@ function LandedCostScreen({ data, refresh }) {
     const allocatedOverhead = totalOverhead * share;
     const landedPerUnit = unitPrice + allocatedOverhead / qty;
     const item = data.items.find((i) => i.id === l.itemId);
-    return { ...l, item, qty, unitPrice, share, allocatedOverhead, landedPerUnit };
+    return { ...l, item, qty, unitPrice, basis, share, allocatedOverhead, landedPerUnit };
   });
-  const canCompute = validLines.length > 0 && totalBasis > 0;
 
-  const applyToInventory = async () => {
-    setBusy(true);
-    try {
-      await api.updateItemsUnitCosts(results.map((r) => ({ itemId: r.itemId, unitCost: Math.round(r.landedPerUnit * 100) / 100 })));
-      await refresh();
-      setUpdated(true);
-      setTimeout(() => setUpdated(false), 3000);
-    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  const canCompute = validLines.length > 0 && totalBasis > 0 && totalOverhead >= 0;
+
+  const applyToInventory = () => {
+    const updates = {};
+    results.forEach((r) => { updates[r.itemId] = Math.round(r.landedPerUnit * 100) / 100; });
+    const items = data.items.map((it) => (updates[it.id] !== undefined ? { ...it, unitCost: updates[it.id] } : it));
+    persist({ ...data, items });
+    setUpdated(true);
+    setTimeout(() => setUpdated(false), 3000);
   };
 
   return (
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-1 flex items-center gap-2"><Ship size={22} className="text-amber-600" /> מחשבון יבוא ועלויות נחיתה (Landed Cost)</h2>
       <p className="text-slate-500 text-sm mb-4">חשב את מחיר הנחיתה הסופי ליחידה עבור משלוח, וחלק את עלויות המשלוח בין הפריטים לפי נפח או לפי ערך.</p>
+
       <div className="grid md:grid-cols-2 gap-4 mb-4">
         <div className="bg-white rounded-2xl border p-4">
           <h3 className="font-bold text-slate-800 mb-3">עלויות המשלוח (₪)</h3>
@@ -932,41 +579,67 @@ function LandedCostScreen({ data, refresh }) {
           <Field label="מכס"><input type="number" min="0" className={inputCls} value={overhead.customs} onChange={(e) => setOverhead({ ...overhead, customs: e.target.value })} /></Field>
           <Field label="עמילות מכס"><input type="number" min="0" className={inputCls} value={overhead.brokerage} onChange={(e) => setOverhead({ ...overhead, brokerage: e.target.value })} /></Field>
           <Field label="הובלה יבשתית"><input type="number" min="0" className={inputCls} value={overhead.inland} onChange={(e) => setOverhead({ ...overhead, inland: e.target.value })} /></Field>
-          <div className="border-t pt-3 mt-1 flex items-center justify-between"><span className="text-slate-600 font-medium">סה"כ עלויות משלוח</span><span className="font-bold text-slate-800">₪{totalOverhead.toLocaleString()}</span></div>
+          <div className="border-t pt-3 mt-1 flex items-center justify-between">
+            <span className="text-slate-600 font-medium">סה"כ עלויות משלוח</span>
+            <span className="font-bold text-slate-800">₪{totalOverhead.toLocaleString()}</span>
+          </div>
         </div>
+
         <div className="bg-white rounded-2xl border p-4">
           <h3 className="font-bold text-slate-800 mb-3">שיטת חלוקת העלויות</h3>
           <div className="flex gap-2 mb-4">
             <button onClick={() => setMethod("value")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "value" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי ערך הפריט</button>
             <button onClick={() => setMethod("volume")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "volume" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי נפח</button>
           </div>
-          <p className="text-sm text-slate-500">{method === "value" ? "עלויות המשלוח יחולקו ביחס לערך הכולל של כל שורה." : "עלויות המשלוח יחולקו ביחס לנפח הכולל שלהן במכולה."}</p>
+          <p className="text-sm text-slate-500">
+            {method === "value"
+              ? 'עלויות המשלוח יחולקו בין הפריטים ביחס לערך הכולל של כל שורה (כמות × מחיר ליחידה).'
+              : "עלויות המשלוח יחולקו בין הפריטים ביחס לנפח הכולל שלהם במכולה (כמות × נפח ליחידה)."}
+          </p>
         </div>
       </div>
+
       <div className="bg-white rounded-2xl border p-4 mb-4">
-        <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-slate-800">פריטים במשלוח</h3><button onClick={addLine} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={16} /> הוספת שורה</button></div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-slate-800">פריטים במשלוח</h3>
+          <button onClick={addLine} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={16} /> הוספת שורה</button>
+        </div>
         <div className="space-y-3">
           {lines.map((l) => (
             <div key={l.id} className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end border-b pb-3 last:border-0 last:pb-0">
-              <div className="col-span-2"><label className="block text-xs font-medium text-slate-500 mb-1">פריט</label>
-                <select className={inputCls} value={l.itemId} onChange={(e) => setLine(l.id, { itemId: e.target.value })}><option value="">בחר פריט...</option>{data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}</select>
+              <div className="col-span-2 sm:col-span-2">
+                <label className="block text-xs font-medium text-slate-500 mb-1">פריט</label>
+                <select className={inputCls} value={l.itemId} onChange={(e) => setLine(l.id, { itemId: e.target.value })}>
+                  <option value="">בחר פריט...</option>
+                  {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                </select>
               </div>
               <div><label className="block text-xs font-medium text-slate-500 mb-1">כמות</label><input type="number" min="1" className={inputCls} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} /></div>
               <div><label className="block text-xs font-medium text-slate-500 mb-1">מחיר ליח' (₪)</label><input type="number" min="0" step="0.01" className={inputCls} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} /></div>
               <div className="flex gap-2 items-end">
-                <div className="flex-1"><label className="block text-xs font-medium text-slate-500 mb-1">נפח ליח' (CBM)</label><input type="number" min="0" step="0.001" className={inputCls} value={l.unitVolume} onChange={(e) => setLine(l.id, { unitVolume: e.target.value })} disabled={method !== "volume"} /></div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">נפח ליח' (CBM)</label>
+                  <input type="number" min="0" step="0.001" className={inputCls} value={l.unitVolume} onChange={(e) => setLine(l.id, { unitVolume: e.target.value })} disabled={method !== "volume"} />
+                </div>
                 {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 mb-2.5"><Trash2 size={16} /></button>}
               </div>
             </div>
           ))}
         </div>
       </div>
+
       {canCompute && (
         <div className="bg-white rounded-2xl border overflow-hidden mb-4">
           <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">תוצאת חישוב עלות הנחיתה</h3></div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">מחיר בסיס</th><th className="px-4 py-2 font-medium">חלק יחסי</th><th className="px-4 py-2 font-medium">Landed Cost ליח'</th></tr></thead>
+              <thead>
+                <tr className="bg-gray-50 text-slate-500 text-right">
+                  <th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th>
+                  <th className="px-4 py-2 font-medium">מחיר בסיס ליח'</th><th className="px-4 py-2 font-medium">חלק יחסי</th>
+                  <th className="px-4 py-2 font-medium">עלות משלוח מוקצית</th><th className="px-4 py-2 font-medium">Landed Cost ליח'</th>
+                </tr>
+              </thead>
               <tbody>
                 {results.map((r) => (
                   <tr key={r.id} className="border-t">
@@ -974,6 +647,7 @@ function LandedCostScreen({ data, refresh }) {
                     <td className="px-4 py-2.5">{r.qty}</td>
                     <td className="px-4 py-2.5">₪{r.unitPrice.toFixed(2)}</td>
                     <td className="px-4 py-2.5">{(r.share * 100).toFixed(1)}%</td>
+                    <td className="px-4 py-2.5">₪{r.allocatedOverhead.toFixed(2)}</td>
                     <td className="px-4 py-2.5 font-bold text-amber-700">₪{r.landedPerUnit.toFixed(2)}</td>
                   </tr>
                 ))}
@@ -981,14 +655,15 @@ function LandedCostScreen({ data, refresh }) {
             </table>
           </div>
           <div className="p-4 border-t flex items-center justify-between flex-wrap gap-2">
-            {updated && <span className="text-emerald-600 text-sm font-medium flex items-center gap-1.5"><CircleCheck size={16} /> ערכי המלאי עודכנו ב-DB</span>}
-            <button onClick={applyToInventory} disabled={busy} className={btnPrimary + " flex items-center gap-2 mr-auto"}>{busy && <Loader2 size={16} className="animate-spin" />}<Package size={18} /> עדכון ערך הציוד בטבלת המלאי</button>
+            {updated && <span className="text-emerald-600 text-sm font-medium flex items-center gap-1.5"><CircleCheck size={16} /> ערכי המלאי עודכנו בהצלחה</span>}
+            <button onClick={applyToInventory} className={btnPrimary + " flex items-center gap-2 mr-auto"}><Package size={18} /> עדכון ערך הציוד בטבלת המלאי</button>
           </div>
         </div>
       )}
     </div>
   );
 }
+
 
 // ==================== דוחות: ערך מלאי + חיזוי וקצב צריכה ====================
 function ReportsScreen({ data }) {
@@ -997,8 +672,8 @@ function ReportsScreen({ data }) {
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-4">דוחות וערך מלאי</h2>
       <div className="flex gap-2 mb-5">
-        <button onClick={() => setSub("valuation")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "valuation" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><BarChart3 size={16} /> שווי מלאי</button>
-        <button onClick={() => setSub("forecast")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "forecast" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><Gauge size={16} /> חיזוי מלאי</button>
+        <button onClick={() => setSub("valuation")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "valuation" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><BarChart3 size={16} /> שווי מלאי ורווחיות</button>
+        <button onClick={() => setSub("forecast")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "forecast" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><Gauge size={16} /> חיזוי מלאי וקצב צריכה</button>
       </div>
       {sub === "valuation" ? <ValuationReport data={data} /> : <ForecastReport data={data} />}
     </div>
@@ -1010,6 +685,7 @@ function ValuationReport({ data }) {
   const warehouse = locations.find((l) => l.type === "warehouse");
   const vehicles = locations.filter((l) => l.type === "vehicle");
   const missingCost = items.some((it) => !it.unitCost);
+
   const rows = items.map((item) => {
     const whQty = stock[`${item.id}|${warehouse?.id}`] || 0;
     const vehQty = vehicles.reduce((s, v) => s + (stock[`${item.id}|${v.id}`] || 0), 0);
@@ -1017,32 +693,45 @@ function ValuationReport({ data }) {
     const unitCost = item.unitCost || 0;
     return { item, totalQty, unitCost, value: totalQty * unitCost };
   });
+
   const totalValue = rows.reduce((s, r) => s + r.value, 0);
-  const byCategory = ["device", "consumable"].map((cat) => ({ cat, value: rows.filter((r) => r.item.category === cat).reduce((s, r) => s + r.value, 0) }));
+  const byCategory = ["device", "consumable"].map((cat) => ({
+    cat, value: rows.filter((r) => r.item.category === cat).reduce((s, r) => s + r.value, 0),
+    qty: rows.filter((r) => r.item.category === cat).reduce((s, r) => s + r.totalQty, 0),
+  }));
   const topProducts = [...rows].sort((a, b) => b.value - a.value).filter((r) => r.value > 0).slice(0, 10);
 
   return (
     <div className="space-y-5">
-      {missingCost && <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-sm text-amber-800 flex items-center gap-2"><TriangleAlert size={16} /> חלק מהפריטים ללא עלות נחיתה - השווי שלהם לא נכלל.</div>}
+      {missingCost && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-sm text-amber-800 flex items-center gap-2">
+          <TriangleAlert size={16} /> חלק מהפריטים עדיין ללא עלות נחיתה (Landed Cost) - השווי שלהם לא נכלל בחישוב. חשב עבורם ב"מחשבון יבוא ועליות נחיתה".
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">שווי מלאי כולל</div><div className="text-2xl font-bold text-slate-800">₪{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
-        {byCategory.map((c) => <div key={c.cat} className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">שווי {CATEGORIES[c.cat]}</div><div className="text-2xl font-bold text-slate-800">₪{c.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>)}
+        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">שווי מלאי כולל (לפי Landed Cost)</div><div className="text-2xl font-bold text-slate-800">₪{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
+        {byCategory.map((c) => (
+          <div key={c.cat} className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">שווי {CATEGORIES[c.cat]}</div><div className="text-2xl font-bold text-slate-800">₪{c.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div><div className="text-xs text-slate-400 mt-0.5">{c.qty} יח'</div></div>
+        ))}
       </div>
+
       <div className="bg-white rounded-2xl border overflow-hidden">
         <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">שווי לפי מוצר (Top 10)</h3></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">עלות ליח'</th><th className="px-4 py-2 font-medium">שווי כולל</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">קטגוריה</th><th className="px-4 py-2 font-medium">כמות במלאי</th><th className="px-4 py-2 font-medium">עלות ליח'</th><th className="px-4 py-2 font-medium">שווי כולל</th><th className="px-4 py-2 font-medium">נתח משווי המלאי</th></tr></thead>
             <tbody>
               {topProducts.map((r) => (
                 <tr key={r.item.id} className="border-t">
                   <td className="px-4 py-2.5 font-medium text-slate-800">{r.item.name}</td>
+                  <td className="px-4 py-2.5"><Badge tone={r.item.category === "device" ? "sky" : "violet"}>{CATEGORIES[r.item.category]}</Badge></td>
                   <td className="px-4 py-2.5">{r.totalQty}</td>
                   <td className="px-4 py-2.5">₪{r.unitCost.toFixed(2)}</td>
                   <td className="px-4 py-2.5 font-bold">₪{r.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td className="px-4 py-2.5">{totalValue > 0 ? ((r.value / totalValue) * 100).toFixed(1) : "0"}%</td>
                 </tr>
               ))}
-              {topProducts.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">אין עדיין שווי מחושב</td></tr>}
+              {topProducts.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">אין עדיין שווי מחושב - הזן עלויות נחיתה לפריטים</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1055,6 +744,7 @@ function ForecastReport({ data }) {
   const [leadTime, setLeadTime] = useState(60);
   const { items, locations, stock, transactions } = data;
   const now = Date.now();
+
   const rows = items.map((item) => {
     const currentStock = locations.reduce((s, l) => s + (stock[`${item.id}|${l.id}`] || 0), 0);
     const consumedTx = transactions.filter((t) => t.itemId === item.id && (t.type === "install" || t.type === "writeoff"));
@@ -1062,28 +752,49 @@ function ForecastReport({ data }) {
     let dailyRate = 0;
     if (consumedTx.length > 0) {
       const earliest = Math.min(...consumedTx.map((t) => new Date(t.date).getTime()));
-      dailyRate = consumedQty / Math.max(1, (now - earliest) / 86400000);
+      const daysElapsed = Math.max(1, (now - earliest) / 86400000);
+      dailyRate = consumedQty / daysElapsed;
     }
     const monthlyRate = dailyRate * 30;
     const daysRemaining = dailyRate > 0 ? currentStock / dailyRate : null;
     let status = "no-data";
-    if (dailyRate > 0) status = daysRemaining < leadTime ? "urgent" : daysRemaining < leadTime * 1.3 ? "soon" : "ok";
-    return { item, currentStock, monthlyRate, daysRemaining, status };
+    if (dailyRate > 0) {
+      if (daysRemaining < leadTime) status = "urgent";
+      else if (daysRemaining < leadTime * 1.3) status = "soon";
+      else status = "ok";
+    }
+    return { item, currentStock, dailyRate, monthlyRate, daysRemaining, status };
   });
-  const statusMeta = { urgent: { label: "דחוף - להזמין מיד", tone: "rose" }, soon: { label: "להזמין בקרוב", tone: "amber" }, ok: { label: "תקין", tone: "emerald" }, "no-data": { label: "אין מספיק היסטוריה", tone: "gray" } };
+
+  const statusMeta = {
+    urgent: { label: "דחוף - להזמין מיד", tone: "rose" },
+    soon: { label: "להזמין בקרוב", tone: "amber" },
+    ok: { label: "תקין", tone: "emerald" },
+    "no-data": { label: "אין מספיק היסטוריה", tone: "gray" },
+  };
+
   const sorted = [...rows].sort((a, b) => {
     const rank = { urgent: 0, soon: 1, ok: 2, "no-data": 3 };
-    return rank[a.status] !== rank[b.status] ? rank[a.status] - rank[b.status] : (a.daysRemaining ?? 9999) - (b.daysRemaining ?? 9999);
+    if (rank[a.status] !== rank[b.status]) return rank[a.status] - rank[b.status];
+    return (a.daysRemaining ?? 9999) - (b.daysRemaining ?? 9999);
   });
   const urgentCount = rows.filter((r) => r.status === "urgent").length;
 
   return (
     <div className="space-y-5">
-      <div className="bg-white rounded-2xl border p-4">
-        <Field label="זמן אספקה (Lead Time) בימים - יבוא מסין/צרפת"><input type="number" min="1" className={inputCls + " w-32"} value={leadTime} onChange={(e) => setLeadTime(Number(e.target.value) || 60)} /></Field>
-        <p className="text-sm text-slate-500">טווח מקובל: 45-60 יום. פריט עם פחות ימי מלאי מזמן האספקה מסומן דחוף.</p>
+      <div className="bg-white rounded-2xl border p-4 flex flex-wrap items-end gap-4">
+        <Field label="זמן אספקה (Lead Time) בימים - יבוא מסין/צרפת">
+          <input type="number" min="1" className={inputCls + " w-32"} value={leadTime} onChange={(e) => setLeadTime(Number(e.target.value) || 60)} />
+        </Field>
+        <p className="text-sm text-slate-500 mb-4">טווח מקובל בייבוא: 45-60 יום. פריט שכמות הימים שנותרו לו מתחת לזמן האספקה מסומן כדחוף להזמנה עכשיו, כדי שהמשלוח יגיע לפני שהמלאי אוזל.</p>
       </div>
-      {urgentCount > 0 && <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4"><div className="flex items-center gap-2 text-rose-700 font-bold"><TriangleAlert size={18} /><span>{urgentCount} פריטים דחופים להזמנת רכש</span></div></div>}
+
+      {urgentCount > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 text-rose-700 font-bold"><TriangleAlert size={18} /><span>{urgentCount} פריטים דחופים להזמנת רכש - צפויים להיגמר לפני שהזמנה חדשה תגיע</span></div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border overflow-hidden">
         <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">קצב צריכה וימי מלאי נותרים</h3></div>
         <div className="overflow-x-auto">
@@ -1108,38 +819,50 @@ function ForecastReport({ data }) {
 }
 
 // ==================== הזמנות רכש (Purchase Orders) ====================
-function POsScreen({ data, refresh, onPrint }) {
+function POsScreen({ data, persist, onPrint }) {
   const [open, setOpen] = useState(false);
   const [supplierId, setSupplierId] = useState("");
-  const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
+  const [lines, setLines] = useState([{ id: uid(), itemId: "", qty: "", unitPrice: "" }]);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
 
-  const openNew = () => { setSupplierId(data.suppliers[0]?.id || ""); setLines([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]); setError(""); setOpen(true); };
+  const openNew = () => {
+    setSupplierId(data.suppliers[0]?.id || "");
+    setLines([{ id: uid(), itemId: "", qty: "", unitPrice: "" }]);
+    setError(""); setOpen(true);
+  };
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
+  const addLine = () => setLines([...lines, { id: uid(), itemId: "", qty: "", unitPrice: "" }]);
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
-  const onPickItem = (id, itemId) => { const it = data.items.find((i) => i.id === itemId); setLine(id, { itemId, unitPrice: it?.unitCost ? String(it.unitCost) : "" }); };
+  const onPickItem = (id, itemId) => {
+    const it = data.items.find((i) => i.id === itemId);
+    setLine(id, { itemId, unitPrice: it?.unitCost ? String(it.unitCost) : "" });
+  };
 
-  const submit = async () => {
+  const submit = () => {
     setError("");
     const valid = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
     if (!supplierId) { setError("יש לבחור ספק"); return; }
-    if (valid.length === 0) { setError("יש להוסיף לפחות שורת פריט אחת"); return; }
-    setBusy(true);
-    try {
-      const poId = await api.createPurchaseOrder(supplierId, valid.map((l) => ({ itemId: l.itemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })));
-      await refresh();
-      setOpen(false);
-      onPrint(poId);
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
+    if (valid.length === 0) { setError("יש להוסיף לפחות שורת פריט אחת עם כמות ומחיר"); return; }
+    const po = {
+      id: uid(),
+      poNumber: `ADL-PO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 900 + 100)}`,
+      supplierId, date: nowISO(),
+      lines: valid.map((l) => ({ itemId: l.itemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })),
+      status: "draft",
+    };
+    persist({ ...data, purchaseOrders: [po, ...data.purchaseOrders] });
+    setOpen(false);
+    onPrint(po.id);
   };
 
   const poTotal = (po) => po.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-xl text-slate-800">הזמנות רכש (Purchase Orders)</h2><button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> PO חדש</button></div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-xl text-slate-800">הזמנות רכש (Purchase Orders)</h2>
+        <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> PO חדש</button>
+      </div>
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2"></th></tr></thead>
@@ -1161,14 +884,25 @@ function POsScreen({ data, refresh, onPrint }) {
           </tbody>
         </table>
       </div>
+
       {open && (
         <Modal title="הזמנת רכש חדשה" onClose={() => setOpen(false)}>
-          <Field label="ספק"><select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>{data.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.country})</option>)}</select></Field>
-          <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-slate-600">פריטים</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
+          <Field label="ספק">
+            <select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+              {data.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.country})</option>)}
+            </select>
+          </Field>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-600">פריטים</span>
+            <button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button>
+          </div>
           <div className="space-y-2 mb-4">
             {lines.map((l) => (
               <div key={l.id} className="grid grid-cols-6 gap-1.5 items-center">
-                <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}><option value="">פריט...</option>{data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}</select>
+                <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
+                  <option value="">פריט...</option>
+                  {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                </select>
                 <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
                 <input type="number" min="0" step="0.01" placeholder="מחיר" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
                 {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
@@ -1176,19 +910,24 @@ function POsScreen({ data, refresh, onPrint }) {
             ))}
           </div>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
-          <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}יצירת הזמנה והפקת מסמך</button>
+          <button onClick={submit} className={btnPrimary + " w-full"}>יצירת הזמנה והפקת מסמך</button>
         </Modal>
       )}
     </div>
   );
 }
 
+// מסמך PO להדפסה / שמירה כ-PDF דרך תיבת ההדפסה של הדפדפן
 function POPrintView({ data, poId, onClose }) {
   const po = data.purchaseOrders.find((p) => p.id === poId);
   if (!po) return null;
   const supplier = data.suppliers.find((s) => s.id === po.supplierId);
-  const lineRows = po.lines.map((l) => { const item = data.items.find((i) => i.id === l.itemId); return { ...l, name: item?.name || "-", unit: item?.unit || "", lineTotal: l.qty * l.unitPrice }; });
+  const lineRows = po.lines.map((l) => {
+    const item = data.items.find((i) => i.id === l.itemId);
+    return { ...l, name: item?.name || "-", unit: item?.unit || "", lineTotal: l.qty * l.unitPrice };
+  });
   const grandTotal = lineRows.reduce((s, l) => s + l.lineTotal, 0);
+
   return (
     <div className="fixed inset-0 bg-slate-800/60 z-50 overflow-y-auto py-8 px-4">
       <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl">
@@ -1198,9 +937,18 @@ function POPrintView({ data, poId, onClose }) {
         </div>
         <div dir="ltr" lang="en" className="p-8" style={{ fontFamily: "Arial, sans-serif" }}>
           <div className="flex items-start justify-between mb-8">
-            <div><div className="text-2xl font-bold text-slate-900">ADL Import LTD</div><div className="text-sm text-slate-500 mt-1">אדל אימפורט</div><div className="text-sm text-slate-500">Israel</div></div>
-            <div className="text-left"><div className="text-xl font-bold text-amber-600">PURCHASE ORDER</div><div className="text-sm text-slate-600 mt-1">PO #: {po.poNumber}</div><div className="text-sm text-slate-600">Date: {new Date(po.date).toLocaleDateString("en-GB")}</div></div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900">ADL Import LTD</div>
+              <div className="text-sm text-slate-500 mt-1">אדל אימפורט</div>
+              <div className="text-sm text-slate-500">Israel</div>
+            </div>
+            <div className="text-left">
+              <div className="text-xl font-bold text-amber-600">PURCHASE ORDER</div>
+              <div className="text-sm text-slate-600 mt-1">PO #: {po.poNumber}</div>
+              <div className="text-sm text-slate-600">Date: {new Date(po.date).toLocaleDateString("en-GB")}</div>
+            </div>
           </div>
+
           <div className="mb-6 bg-gray-50 rounded-xl p-4">
             <div className="text-xs uppercase text-slate-400 font-bold mb-1">Supplier</div>
             <div className="font-bold text-slate-800">{supplier?.name}</div>
@@ -1208,72 +956,92 @@ function POPrintView({ data, poId, onClose }) {
             <div className="text-sm text-slate-600">Attn: {supplier?.contact}</div>
             <div className="text-sm text-slate-600">{supplier?.phone} · {supplier?.email}</div>
           </div>
+
           <table className="w-full text-sm mb-6 border-collapse">
-            <thead><tr className="border-b-2 border-slate-800 text-left"><th className="py-2 font-bold">SKU / Item</th><th className="py-2 font-bold">Qty</th><th className="py-2 font-bold">Unit Price</th><th className="py-2 font-bold text-right">Line Total</th></tr></thead>
-            <tbody>{lineRows.map((l, i) => (<tr key={i} className="border-b border-slate-200"><td className="py-2">{l.name}</td><td className="py-2">{l.qty} {l.unit}</td><td className="py-2">${l.unitPrice.toFixed(2)}</td><td className="py-2 text-right">${l.lineTotal.toFixed(2)}</td></tr>))}</tbody>
-            <tfoot><tr><td colSpan={3} className="pt-3 text-right font-bold">Grand Total</td><td className="pt-3 text-right font-bold">${grandTotal.toFixed(2)}</td></tr></tfoot>
+            <thead>
+              <tr className="border-b-2 border-slate-800 text-left">
+                <th className="py-2 font-bold">SKU / Item</th><th className="py-2 font-bold">Qty</th>
+                <th className="py-2 font-bold">Unit Price</th><th className="py-2 font-bold text-right">Line Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lineRows.map((l, i) => (
+                <tr key={i} className="border-b border-slate-200">
+                  <td className="py-2">{l.name}</td>
+                  <td className="py-2">{l.qty} {l.unit}</td>
+                  <td className="py-2">${l.unitPrice.toFixed(2)}</td>
+                  <td className="py-2 text-right">${l.lineTotal.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={3} className="pt-3 text-right font-bold">Grand Total</td>
+                <td className="pt-3 text-right font-bold">${grandTotal.toFixed(2)}</td>
+              </tr>
+            </tfoot>
           </table>
-          <div className="text-xs text-slate-400 border-t pt-4">This purchase order was generated by ADL Import LTD inventory management system.</div>
+
+          <div className="text-xs text-slate-400 border-t pt-4">
+            This purchase order was generated by ADL Import LTD inventory management system.
+            Please confirm receipt and estimated shipping date.
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+
 // ==================== הגדרות: פרופיל, אבטחה, חיבור מסד נתונים ====================
-function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdmin }) {
+function SettingsScreen({ data, persist, userEmail, onUpdateCredentials, logoUrl, onLogoChange }) {
   const [company, setCompany] = useState(data.companySettings);
   const [companySaved, setCompanySaved] = useState(false);
-  const [companyBusy, setCompanyBusy] = useState(false);
 
+  const [displayName, setDisplayName] = useState(data.companySettings.userDisplayName || "");
   const [newEmail, setNewEmail] = useState(userEmail);
   const [profileError, setProfileError] = useState("");
   const [profileSaved, setProfileSaved] = useState(false);
-  const [profileBusy, setProfileBusy] = useState(false);
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [pwError, setPwError] = useState("");
   const [pwSaved, setPwSaved] = useState(false);
-  const [pwBusy, setPwBusy] = useState(false);
 
   const [logoFileName, setLogoFileName] = useState("");
   const [logoSaved, setLogoSaved] = useState(false);
   const [logoError, setLogoError] = useState("");
-  const [logoBusy, setLogoBusy] = useState(false);
   const logoInputRef = React.useRef(null);
 
-  const saveCompany = async () => {
-    setCompanyBusy(true);
-    try { await api.updateCompanySettings(company); await refresh(); setCompanySaved(true); setTimeout(() => setCompanySaved(false), 2500); }
-    catch (e) { alert(e.message); } finally { setCompanyBusy(false); }
+  const saveCompany = () => {
+    persist({ ...data, companySettings: company });
+    setCompanySaved(true);
+    setTimeout(() => setCompanySaved(false), 2500);
   };
 
-  const saveProfile = async () => {
+  const saveProfile = () => {
     setProfileError(""); setProfileSaved(false);
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim());
     if (!emailOk) { setProfileError('כתובת דוא"ל לא תקינה'); return; }
-    setProfileBusy(true);
-    try {
-      await api.updateAccountEmail(newEmail.trim());
-      setProfileSaved(true);
-      setTimeout(() => setProfileSaved(false), 4000);
-    } catch (e) { setProfileError(e.message); } finally { setProfileBusy(false); }
+    const updated = { ...company, userDisplayName: displayName };
+    setCompany(updated);
+    persist({ ...data, companySettings: updated });
+    onUpdateCredentials({ newEmail: newEmail.trim() });
+    setProfileSaved(true);
+    setTimeout(() => setProfileSaved(false), 2500);
   };
 
-  const changePassword = async () => {
+  const changePassword = () => {
     setPwError(""); setPwSaved(false);
     if (!currentPw || !newPw || !confirmPw) { setPwError("יש למלא את כל השדות"); return; }
     if (newPw.length < 6) { setPwError("סיסמה חדשה חייבת להכיל לפחות 6 תווים"); return; }
     if (newPw !== confirmPw) { setPwError("אימות הסיסמה אינו תואם לסיסמה החדשה"); return; }
-    setPwBusy(true);
-    try {
-      await api.changePassword(userEmail, currentPw, newPw);
-      setCurrentPw(""); setNewPw(""); setConfirmPw("");
-      setPwSaved(true);
-      setTimeout(() => setPwSaved(false), 2500);
-    } catch (e) { setPwError(e.message); } finally { setPwBusy(false); }
+    const ok = onUpdateCredentials({ currentPassword: currentPw, newPassword: newPw });
+    if (ok === false) { setPwError("הסיסמה הנוכחית שגויה"); return; }
+    setCurrentPw(""); setNewPw(""); setConfirmPw("");
+    setPwSaved(true);
+    setTimeout(() => setPwSaved(false), 2500);
   };
 
   const pickLogoFile = () => logoInputRef.current?.click();
@@ -1284,18 +1052,11 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
     if (!file.type.startsWith("image/")) { setLogoError("יש לבחור קובץ תמונה (PNG / JPG / SVG)"); e.target.value = ""; return; }
     if (file.size > 3 * 1024 * 1024) { setLogoError("קובץ הלוגו גדול מדי (מקסימום 3MB)"); e.target.value = ""; return; }
     const reader = new FileReader();
-    reader.onload = async () => {
-      setLogoBusy(true);
-      try {
-        await onLogoChange(reader.result);
-        setLogoFileName(file.name);
-        setLogoSaved(true);
-        setTimeout(() => setLogoSaved(false), 3000);
-      } catch (err) {
-        setLogoError(err.message);
-      } finally {
-        setLogoBusy(false);
-      }
+    reader.onload = () => {
+      onLogoChange(reader.result);
+      setLogoFileName(file.name);
+      setLogoSaved(true);
+      setTimeout(() => setLogoSaved(false), 3000);
     };
     reader.readAsDataURL(file);
     e.target.value = "";
@@ -1305,45 +1066,46 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
     <div className="space-y-5 max-w-2xl">
       <h2 className="font-bold text-xl text-slate-800 flex items-center gap-2"><Settings size={22} className="text-amber-600" /> הגדרות</h2>
 
-      {isAdmin && (
-        <div className="bg-white rounded-2xl border p-5">
-          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Upload size={18} /> לוגו העסק</h3>
-          <p className="text-slate-500 text-sm mb-4">התמונה תוצג בסרגל הניווט ובמסך ההתחברות, ותישמר ב-Supabase (טבלת app_settings) לכל המשתמשים.</p>
-          <div className="flex items-center gap-4">
-            <LogoBadge logoUrl={logoUrl} size={64} />
-            <div className="flex-1">
-              <button onClick={pickLogoFile} disabled={logoBusy} className={btnPrimary + " flex items-center gap-2"}>{logoBusy && <Loader2 size={16} className="animate-spin" />}<Upload size={16} /> העלה לוגו עסק</button>
-              <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoFile} />
-              {logoFileName && <div className="text-xs text-slate-400 mt-2">קובץ אחרון שהועלה: {logoFileName}</div>}
-            </div>
-          </div>
-          {logoError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mt-3">{logoError}</div>}
-          {logoSaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mt-3 flex items-center gap-2"><CircleCheck size={16} /> הלוגו הוחלף ונשמר בהצלחה ב-DB</div>}
-        </div>
-      )}
-
+      {/* לוגו העסק */}
       <div className="bg-white rounded-2xl border p-5">
-        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><User size={18} /> ניהול פרופיל</h3>
-        <p className="text-slate-500 text-sm mb-4">כתובת הדוא"ל להתחברות.</p>
-        <Field label='כתובת דוא"ל להתחברות'><input type="email" className={inputCls} value={newEmail} onChange={(e) => setNewEmail(e.target.value)} /></Field>
-        {profileError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{profileError}</div>}
-        {profileSaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">נשלח קישור אישור לדוא"ל. השינוי ייכנס לתוקף לאחר האישור.</div>}
-        <button onClick={saveProfile} disabled={profileBusy} className={btnPrimary + " flex items-center gap-2"}>{profileBusy && <Loader2 size={16} className="animate-spin" />}שמירת פרופיל</button>
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Upload size={18} /> לוגו העסק</h3>
+        <p className="text-slate-500 text-sm mb-4">התמונה תוצג בסרגל הניווט ובמסך ההתחברות. נשמרת מקומית בזיכרון המערכת של הדגמה זו.</p>
+        <div className="flex items-center gap-4">
+          <LogoBadge logoUrl={logoUrl} size={64} />
+          <div className="flex-1">
+            <button onClick={pickLogoFile} className={btnPrimary + " flex items-center gap-2"}><Upload size={16} /> העלה לוגו עסק</button>
+            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoFile} />
+            {logoFileName && <div className="text-xs text-slate-400 mt-2">קובץ אחרון שהועלה: {logoFileName}</div>}
+          </div>
+        </div>
+        {logoError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mt-3">{logoError}</div>}
+        {logoSaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mt-3 flex items-center gap-2"><CircleCheck size={16} /> הלוגו הוחלף ונשמר בהצלחה</div>}
       </div>
 
-      {isAdmin && (
-        <div className="bg-white rounded-2xl border p-5">
-          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Building2 size={18} /> פרטי העסק</h3>
-          <p className="text-slate-500 text-sm mb-4">מוצג בכותרת המערכת ובמסמכי PO.</p>
-          <Field label="שם החברה (עברית)"><input className={inputCls} value={company.name} onChange={(e) => setCompany({ ...company, name: e.target.value })} /></Field>
-          <Field label="שם משפטי (אנגלית)"><input className={inputCls} value={company.legalName} onChange={(e) => setCompany({ ...company, legalName: e.target.value })} /></Field>
-          <Field label="כתובת"><input className={inputCls} value={company.address} onChange={(e) => setCompany({ ...company, address: e.target.value })} /></Field>
-          <Field label="טלפון"><input className={inputCls} value={company.phone} onChange={(e) => setCompany({ ...company, phone: e.target.value })} /></Field>
-          {companySaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">פרטי העסק עודכנו</div>}
-          <button onClick={saveCompany} disabled={companyBusy} className={btnPrimary + " flex items-center gap-2"}>{companyBusy && <Loader2 size={16} className="animate-spin" />}שמירת פרטי עסק</button>
-        </div>
-      )}
+      {/* ניהול פרופיל */}
+      <div className="bg-white rounded-2xl border p-5">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><User size={18} /> ניהול פרופיל</h3>
+        <p className="text-slate-500 text-sm mb-4">שם המשתמש וכתובת הדוא"ל להתחברות.</p>
+        <Field label="שם מלא / שם משתמש"><input className={inputCls} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="לדוגמה: דני כהן" /></Field>
+        <Field label='כתובת דוא"ל להתחברות'><input type="email" className={inputCls} value={newEmail} onChange={(e) => setNewEmail(e.target.value)} /></Field>
+        {profileError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{profileError}</div>}
+        {profileSaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">הפרופיל עודכן. הדוא"ל החדש ישמש להתחברות הבאה.</div>}
+        <button onClick={saveProfile} className={btnPrimary}>שמירת פרופיל</button>
+      </div>
 
+      {/* פרטי העסק */}
+      <div className="bg-white rounded-2xl border p-5">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Building2 size={18} /> פרטי העסק</h3>
+        <p className="text-slate-500 text-sm mb-4">מוצג בכותרת המערכת ובמסמכי PO.</p>
+        <Field label="שם החברה (עברית)"><input className={inputCls} value={company.name} onChange={(e) => setCompany({ ...company, name: e.target.value })} /></Field>
+        <Field label="שם משפטי (אנגלית)"><input className={inputCls} value={company.legalName} onChange={(e) => setCompany({ ...company, legalName: e.target.value })} /></Field>
+        <Field label="כתובת"><input className={inputCls} value={company.address} onChange={(e) => setCompany({ ...company, address: e.target.value })} /></Field>
+        <Field label="טלפון"><input className={inputCls} value={company.phone} onChange={(e) => setCompany({ ...company, phone: e.target.value })} /></Field>
+        {companySaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">פרטי העסק עודכנו</div>}
+        <button onClick={saveCompany} className={btnPrimary}>שמירת פרטי עסק</button>
+      </div>
+
+      {/* אבטחה ושינוי סיסמה */}
       <div className="bg-white rounded-2xl border p-5">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><KeyRound size={18} /> אבטחה - שינוי סיסמה</h3>
         <p className="text-slate-500 text-sm mb-4">יש להזין את הסיסמה הנוכחית לאימות, ולאחר מכן את הסיסמה החדשה פעמיים.</p>
@@ -1352,102 +1114,114 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
         <Field label="אימות סיסמה חדשה"><input type="password" className={inputCls} value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} /></Field>
         {pwError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{pwError}</div>}
         {pwSaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3 flex items-center gap-2"><CircleCheck size={16} /> הסיסמה עודכנה בהצלחה</div>}
-        <button onClick={changePassword} disabled={pwBusy} className={btnPrimary + " flex items-center gap-2"}>{pwBusy && <Loader2 size={16} className="animate-spin" />}עדכון סיסמה</button>
+        <button onClick={changePassword} className={btnPrimary}>עדכון סיסמה</button>
       </div>
 
+      {/* חיבור מסד נתונים */}
       <div className="bg-white rounded-2xl border p-5">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Database size={18} /> חיבור מסד נתונים</h3>
         <div className="flex items-center gap-2 mt-2 mb-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-          <span className="font-medium text-slate-700">מחובר בלייב ל-Supabase</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+          <span className="font-medium text-slate-700">מצב הדגמה מקומי - אין חיבור חי ל-Supabase</span>
         </div>
-        <p className="text-slate-500 text-sm">Realtime פעיל על טבלאות המלאי והתנועות. עדכוני RLS ומפתחות ה-API מנוהלים דרך קובץ ה-.env והגדרות הפרויקט ב-Supabase Dashboard.</p>
+        <p className="text-slate-500 text-sm">
+          כל הנתונים במסך זה נשמרים בזיכרון הדפדפן בלבד לצורך הדגמה, ולא בבסיס נתונים אמיתי.
+          החיבור החי ל-Supabase (כולל סטטוס חיבור בזמן אמת, RLS ומפתחות API) פעיל בפרויקט ה-Vite/React
+          שנמסר לכם כ-ZIP להרצה מקומית או פריסה ל-Vercel.
+        </p>
       </div>
     </div>
   );
 }
 
-const FULL_NAV = [
+const NAV = [
   { key: "dashboard", label: "לוח בקרה", icon: LayoutDashboard },
   { key: "transaction", label: "תנועת מלאי", icon: ArrowLeftRight },
-  { key: "items", label: "פריטים", icon: Package, adminOnly: true },
-  { key: "locations", label: "מיקומים", icon: Warehouse, adminOnly: true },
+  { key: "items", label: "פריטים", icon: Package },
+  { key: "locations", label: "מיקומים", icon: Warehouse },
   { key: "customers", label: "לקוחות", icon: Users },
-  { key: "landedCost", label: "מחשבון יבוא ועליות נחיתה", icon: Calculator, adminOnly: true },
+  { key: "landedCost", label: "מחשבון יבוא ועליות נחיתה", icon: Calculator },
   { key: "reports", label: "דוחות וערך מלאי", icon: BarChart3 },
-  { key: "po", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
+  { key: "po", label: "הזמנות רכש PO", icon: FileText },
   { key: "log", label: "יומן אירועים", icon: ScrollText },
   { key: "settings", label: "הגדרות", icon: Settings },
 ];
 const MOBILE_NAV = ["dashboard", "transaction", "customers", "log"];
 
-// ==================== App ====================
-export default function App() {
-  const [session, setSession] = useState(undefined); // undefined = loading, null = auto-login failed
-  const [profile, setProfile] = useState(null);
-  const [data, setData] = useState(null);
-  const [dataError, setDataError] = useState("");
+// ==================== App (Demo - נתונים מקומיים בזיכרון) ====================
+// ==================== מסך התחברות ====================
+const ALLOWED_EMAIL = "adlimportltd25@gmail.com";
+const ALLOWED_PASSWORD = "123456";
+
+function LoginScreen({ logoUrl, onSignIn, allowedEmail, allowedPassword }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState("");
+
+  const submit = () => {
+    setError("");
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    if (!emailOk) { setError('כתובת דוא"ל לא תקינה'); return; }
+    if (email.trim().toLowerCase() !== (allowedEmail || ALLOWED_EMAIL)) {
+      setError('גישה נדחתה. משתמש זה אינו מורשה להיכנס למערכת.');
+      return;
+    }
+    if (password !== (allowedPassword || ALLOWED_PASSWORD)) {
+      setError('סיסמה שגויה, גישה נדחתה.');
+      return;
+    }
+    onSignIn(email.trim(), remember);
+  };
+  const onKeyDown = (e) => { if (e.key === "Enter") submit(); };
+
+  return (
+    <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <div className="flex flex-col items-center text-center mb-6">
+          <LogoBadge logoUrl={logoUrl} size={56} />
+          <div className="font-bold text-slate-900 text-lg mt-3">אדל אימפורט</div>
+          <div className="text-xs text-slate-500">ניהול מלאי · כניסה למערכת</div>
+        </div>
+
+        <Field label='דוא"ל'>
+          <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} placeholder="name@adlimport.co.il" autoFocus />
+        </Field>
+        <Field label="סיסמה">
+          <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} placeholder="••••••••" />
+        </Field>
+
+        <label className="flex items-center gap-2 text-sm text-slate-600 mb-4 cursor-pointer select-none">
+          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="w-4 h-4 accent-amber-500" />
+          הישאר מחובר במכשיר זה
+        </label>
+
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3 flex items-center gap-2"><Lock size={14} className="shrink-0" /> {error}</div>}
+
+        <button onClick={submit} disabled={!email || !password} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
+          <Lock size={16} /> התחברות
+        </button>
+        <p className="text-xs text-slate-400 mt-4 text-center flex items-center justify-center gap-1">
+          <Lock size={12} /> גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function InventoryApp({ userEmail, logoUrl, onLogoChange, onLogout, onUpdateCredentials }) {
+  const [data, setData] = useState(() => seedData());
   const [tab, setTab] = useState("dashboard");
   const [customerFileId, setCustomerFileId] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [quickTx, setQuickTx] = useState(null);
   const [printPOId, setPrintPOId] = useState(null);
-  const [autoLoginError, setAutoLoginError] = useState("");
 
-  const loadEverything = useCallback(async (userId) => {
-    try {
-      const [prof, all] = await Promise.all([api.fetchMyProfile(userId), api.fetchAllData()]);
-      setProfile(prof);
-      setData(all);
-      setDataError("");
-    } catch (e) {
-      setDataError(e.message || "שגיאה בטעינת נתונים");
-    }
-  }, []);
-
-  const refresh = useCallback(async () => {
-    try {
-      const all = await api.fetchAllData();
-      setData(all);
-    } catch (e) {
-      setDataError(e.message || "שגיאה בטעינת נתונים");
-    }
-  }, []);
-
-  // אין יותר מסך התחברות: המערכת מתחברת אוטומטית ברקע עם המשתמש המורשה היחיד,
-  // כך שהאפליקציה נפתחת ישירות ללוח הבקרה.
-  useEffect(() => {
-    (async () => {
-      try {
-        const existing = await api.getSession();
-        if (existing) { setSession(existing); return; }
-        const result = await api.signIn(ALLOWED_EMAIL, ALLOWED_PASSWORD);
-        setSession(result.session);
-      } catch (e) {
-        setAutoLoginError(e.message || "ההתחברות האוטומטית נכשלה");
-        setSession(null);
-      }
-    })();
-    const unsubscribe = api.onAuthChange((s) => setSession(s));
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    if (session?.user?.id) loadEverything(session.user.id);
-  }, [session?.user?.id, loadEverything]);
-
-  useEffect(() => {
-    if (!session) return;
-    const unsubscribe = api.subscribeToChanges(() => refresh());
-    return unsubscribe;
-  }, [session, refresh]);
-
-  const runQuickAction = (type) => {
-    setCustomerFileId(null); setTab("transaction"); setQuickTx({ type, nonce: Math.random().toString(36).slice(2) });
-  };
+  const persist = (next) => setData(next);
+  const runQuickAction = (type) => { setCustomerFileId(null); setTab("transaction"); setQuickTx({ type, nonce: uid() }); };
+  const goTab = (key) => { setTab(key); setCustomerFileId(null); setMobileMenuOpen(false); };
 
   const exportCSV = () => {
-    if (!data) return;
     const warehouse = data.locations.find((l) => l.type === "warehouse");
     const vehicles = data.locations.filter((l) => l.type === "vehicle");
     const header = ["שם פריט", "קטגוריה", "יחידת מידה", "מלאי במחסן", "מלאי ברכבים", 'סה"כ', "סף מינימום", "סטטוס"];
@@ -1456,112 +1230,74 @@ export default function App() {
       const whQty = data.stock[`${item.id}|${warehouse?.id}`] || 0;
       const vehQty = vehicles.reduce((s, v) => s + (data.stock[`${item.id}|${v.id}`] || 0), 0);
       const total = whQty + vehQty;
-      const status = total < item.minThreshold ? "מתחת לסף" : "תקין";
-      lines.push([item.name, CATEGORIES[item.category], item.unit, whQty, vehQty, total, item.minThreshold, status].join(","));
+      lines.push([item.name, CATEGORIES[item.category], item.unit, whQty, vehQty, total, item.minThreshold, total < item.minThreshold ? "מתחת לסף" : "תקין"].join(","));
     });
     const csv = "\uFEFF" + lines.join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `דוח-מלאי-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `דוח-מלאי-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
-
-  if (session === undefined) {
-    return <div dir="rtl" className="min-h-screen flex items-center justify-center text-slate-400 bg-slate-900">טוען...</div>;
-  }
-  if (!session) {
-    return (
-      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-slate-900 p-6">
-        <div className="bg-white rounded-2xl shadow-xl max-w-sm p-6 text-center">
-          <div className="text-rose-600 font-bold mb-2">ההתחברות האוטומטית נכשלה</div>
-          <p className="text-slate-500 text-sm">{autoLoginError}</p>
-          <p className="text-slate-400 text-xs mt-3">בדקו שהמשתמש המורשה קיים ב-Supabase Authentication עם הסיסמה הנכונה, ושהמייל מאושר (Confirmed).</p>
-        </div>
-      </div>
-    );
-  }
-  if (!data || !profile) {
-    return (
-      <div dir="rtl" className="min-h-screen flex items-center justify-center text-slate-400 gap-2">
-        <Loader2 className="animate-spin" size={18} /> טוען נתונים...
-        {dataError && <div className="text-rose-600 text-sm mr-2">{dataError}</div>}
-      </div>
-    );
-  }
-
-  const isAdmin = profile.role === "admin";
-  const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
-  const goTab = (key) => { setTab(key); setCustomerFileId(null); setMobileMenuOpen(false); };
 
   return (
     <div dir="rtl" lang="he" className="min-h-screen bg-gray-50 text-slate-800" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
       <div className="flex">
         <aside className="hidden md:flex flex-col w-60 shrink-0 bg-slate-900 text-slate-200 min-h-screen p-4 sticky top-0 h-screen">
           <div className="flex items-center gap-2 px-2 py-3 mb-4">
-            <LogoBadge logoUrl={data.logoUrl} size={36} editable={isAdmin} onChange={async (dataUrl) => { try { await api.updateLogoUrl(dataUrl); await refresh(); } catch (e) { alert(e.message); } }} />
-            <div>
-              <div className="font-bold text-white leading-tight">אדל אימפורט</div>
-              <div className="text-xs text-slate-400">ניהול מלאי</div>
-            </div>
+            <LogoBadge logoUrl={logoUrl} size={36} editable onChange={onLogoChange} />
+            <div><div className="font-bold text-white leading-tight">אדל אימפורט</div><div className="text-xs text-slate-400">ניהול מלאי</div></div>
           </div>
-          <nav className="flex flex-col gap-1 flex-1">
-            {nav.map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition ${tab === key && !customerFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
-                <Icon size={18} /> {label}
-              </button>
+          <nav className="flex flex-col gap-1">
+            {NAV.map(({ key, label, icon: Icon }) => (
+              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition ${tab === key && !customerFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}><Icon size={18} /> {label}</button>
             ))}
           </nav>
-          <div className="border-t border-slate-800 pt-3 px-2">
-            <div className="text-sm text-slate-300 font-medium">{profile.fullName || session.user.email}</div>
-            <div className="text-xs text-slate-500">{isAdmin ? "מנהל" : "טכנאי"}</div>
+          <div className="mt-auto pt-3 px-2 border-t border-slate-800">
+            <div className="text-xs text-slate-400 truncate">{userEmail}</div>
           </div>
         </aside>
 
         <main className="flex-1 min-w-0">
           <div className="md:hidden flex items-center justify-between bg-slate-900 text-white px-4 py-3 sticky top-0 z-30">
             <div className="flex items-center gap-2">
-              <LogoBadge logoUrl={data.logoUrl} size={32} />
+              <LogoBadge logoUrl={logoUrl} size={32} />
               <span className="font-bold">אדל אימפורט - ניהול מלאי</span>
             </div>
             <button onClick={() => setMobileMenuOpen(true)} className="p-1.5"><Menu size={22} /></button>
           </div>
+
 
           {mobileMenuOpen && (
             <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileMenuOpen(false)}>
               <div className="bg-white w-64 h-full p-4 flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5"><X size={20} /></button>
                 <nav className="flex flex-col gap-1 flex-1">
-                  {nav.map(({ key, label, icon: Icon }) => (
-                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-medium ${tab === key && !customerFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
-                      <Icon size={18} /> {label}
-                    </button>
+                  {NAV.map(({ key, label, icon: Icon }) => (
+                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-medium ${tab === key && !customerFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}><Icon size={18} /> {label}</button>
                   ))}
                 </nav>
                 <div className="border-t pt-3">
-                  <div className="text-sm text-slate-700 font-medium">{profile.fullName || session.user.email}</div>
-                  <div className="text-xs text-slate-400">{isAdmin ? "מנהל" : "טכנאי"}</div>
+                  <div className="text-xs text-slate-400 truncate">{userEmail}</div>
                 </div>
               </div>
             </div>
           )}
 
           <div className="p-4 sm:p-6 pb-24 md:pb-6 max-w-6xl mx-auto">
-            {dataError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-4">{dataError}</div>}
             {customerFileId ? (
               <CustomerFile data={data} customerId={customerFileId} onBack={() => setCustomerFileId(null)} />
             ) : (
               <>
                 {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} />}
-                {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
-                {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
-                {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
-                {tab === "transaction" && <TransactionScreen data={data} refresh={refresh} quickTx={quickTx} />}
-                {tab === "landedCost" && isAdmin && <LandedCostScreen data={data} refresh={refresh} />}
+                {tab === "items" && <ItemsScreen data={data} persist={persist} />}
+                {tab === "locations" && <LocationsScreen data={data} persist={persist} />}
+                {tab === "customers" && <CustomersScreen data={data} persist={persist} onOpenFile={setCustomerFileId} />}
+                {tab === "landedCost" && <LandedCostScreen data={data} persist={persist} />}
                 {tab === "reports" && <ReportsScreen data={data} />}
-                {tab === "po" && isAdmin && <POsScreen data={data} refresh={refresh} onPrint={setPrintPOId} />}
+                {tab === "po" && <POsScreen data={data} persist={persist} onPrint={setPrintPOId} />}
+                {tab === "transaction" && <TransactionScreen data={data} persist={persist} quickTx={quickTx} />}
                 {tab === "log" && <AuditLog data={data} />}
-                {tab === "settings" && <SettingsScreen data={data} refresh={refresh} userEmail={session.user.email} logoUrl={data.logoUrl} isAdmin={isAdmin} onLogoChange={async (dataUrl) => { try { await api.updateLogoUrl(dataUrl); await refresh(); } catch (e) { alert(e.message); } }} />}
+                {tab === "settings" && <SettingsScreen data={data} persist={persist} userEmail={userEmail} onUpdateCredentials={onUpdateCredentials} logoUrl={logoUrl} onLogoChange={onLogoChange} />}
               </>
             )}
           </div>
@@ -1575,13 +1311,11 @@ export default function App() {
 
           <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t flex justify-around py-1.5 z-30">
             {MOBILE_NAV.map((key) => {
-              const item = FULL_NAV.find((n) => n.key === key);
+              const item = NAV.find((n) => n.key === key);
               const Icon = item.icon;
               const active = tab === key && !customerFileId;
               return (
-                <button key={key} onClick={() => goTab(key)} className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl ${active ? "text-amber-600" : "text-slate-400"}`}>
-                  <Icon size={22} /><span className="text-[11px] font-medium">{item.label}</span>
-                </button>
+                <button key={key} onClick={() => goTab(key)} className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl ${active ? "text-amber-600" : "text-slate-400"}`}><Icon size={22} /><span className="text-[11px] font-medium">{item.label}</span></button>
               );
             })}
           </nav>
@@ -1590,4 +1324,63 @@ export default function App() {
       {printPOId && <POPrintView data={data} poId={printPOId} onClose={() => setPrintPOId(null)} />}
     </div>
   );
+}
+
+// ==================== App (שער אימות + טעינת לוגו) ====================
+const LOGO_KEY = "adl-logo";
+const CREDS_KEY = "adl-auth-creds";
+
+export default function App() {
+  const [checking, setChecking] = useState(true);
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [creds, setCreds] = useState({ email: ALLOWED_EMAIL, password: ALLOWED_PASSWORD });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [logoRes, credsRes] = await Promise.all([
+          window.storage.get(LOGO_KEY, true).catch(() => null),
+          window.storage.get(CREDS_KEY, false).catch(() => null),
+        ]);
+        if (logoRes?.value) setLogoUrl(logoRes.value);
+        if (credsRes?.value) {
+          const parsed = JSON.parse(credsRes.value);
+          if (parsed?.email && parsed?.password) setCreds(parsed);
+        }
+      } catch (e) {
+        // אחסון לא זמין - נמשיך עם ברירות המחדל בלי מצב שמור
+      } finally {
+        setChecking(false);
+      }
+    })();
+  }, []);
+
+  const handleLogoChange = async (dataUrl) => {
+    setLogoUrl(dataUrl);
+    try { await window.storage.set(LOGO_KEY, dataUrl, true); } catch (e) {}
+  };
+
+  // מטפל גם בעדכון דוא"ל (מסך פרופיל) וגם בעדכון סיסמה (מסך אבטחה) - נשמר להצגה/עדכון בלבד,
+  // מסך ההתחברות עצמו הוסר לפי בקשה מפורשת ואין יותר שער כניסה שנבדק מולו
+  const handleUpdateCredentials = ({ newEmail, currentPassword, newPassword }) => {
+    if (currentPassword !== undefined) {
+      if (currentPassword !== creds.password) return false; // סיסמה נוכחית שגויה
+      const next = { ...creds, password: newPassword };
+      setCreds(next);
+      window.storage.set(CREDS_KEY, JSON.stringify(next), false).catch(() => {});
+      return true;
+    }
+    if (newEmail) {
+      const next = { ...creds, email: newEmail.toLowerCase() };
+      setCreds(next);
+      window.storage.set(CREDS_KEY, JSON.stringify(next), false).catch(() => {});
+      return true;
+    }
+    return true;
+  };
+
+  if (checking) {
+    return <div dir="rtl" className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400 text-sm">טוען...</div>;
+  }
+  return <InventoryApp userEmail={creds.email} logoUrl={logoUrl} onLogoChange={handleLogoChange} onLogout={() => {}} onUpdateCredentials={handleUpdateCredentials} />;
 }
