@@ -9,6 +9,7 @@ import {
 import { supabase } from "./lib/supabaseClient";
 
 // ==================== API layer (merged inline - single file) ====================
+// ---------- מיפוי snake_case (DB) <-> camelCase (UI) ----------
 const mapItem = (r) => ({
   id: r.id, name: r.name, category: r.category, model: r.model,
   color: r.color, unit: r.unit, minThreshold: Number(r.min_threshold),
@@ -28,6 +29,7 @@ const mapPO = (r) => ({
   lines: (r.po_lines || []).map((l) => ({ itemId: l.item_id, qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
 });
 
+// ---------- Auth ----------
 async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
@@ -57,6 +59,8 @@ async function fetchMyProfile(userId) {
   if (data) {
     return { id: data.id, fullName: data.full_name, role: data.role, locationId: data.location_id };
   }
+  // אין עדיין שורת פרופיל למשתמש הזה (למשל: המשתמש נוצר ידנית ב-Dashboard ולא דרך הטריגר האוטומטי).
+  // יוצרים אותה עכשיו - RLS מגביל יצירה עצמית לתפקיד 'technician' בלבד, קידום למנהל נעשה רק דרך SQL מפורש.
   const { data: created, error: insertError } = await supabase
     .from("profiles")
     .insert({ id: userId, role: "technician" })
@@ -67,6 +71,7 @@ async function fetchMyProfile(userId) {
   return { id: created.id, fullName: created.full_name, role: created.role, locationId: created.location_id };
 }
 
+// ---------- Fetch everything needed for the app ----------
 async function fetchAllData() {
   const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, posRes, settingsRes] = await Promise.all([
     supabase.from("items").select("*").order("category").order("name"),
@@ -108,6 +113,7 @@ async function fetchAllData() {
   };
 }
 
+// ---------- Items ----------
 async function addItem(item) {
   const { error } = await supabase.from("items").insert({
     name: item.name, category: item.category, unit: item.unit, min_threshold: item.minThreshold,
@@ -119,11 +125,13 @@ async function deleteItem(id) {
   if (error) throw error;
 }
 
+// ---------- Locations ----------
 async function addLocation(location) {
   const { error } = await supabase.from("locations").insert({ name: location.name, type: location.type });
   if (error) throw error;
 }
 
+// ---------- Customers ----------
 async function addCustomer(customer) {
   const { error } = await supabase.from("customers").insert({
     name: customer.name, address: customer.address, contact: customer.contact,
@@ -131,6 +139,9 @@ async function addCustomer(customer) {
   if (error) throw error;
 }
 
+// ---------- Transactions ----------
+// שים לב: אין צורך לעדכן מלאי ידנית - טריגר ב-DB (apply_transaction_to_stock)
+// מעדכן את stock_levels אוטומטית עם כל שורה חדשה בטבלת transactions.
 async function insertTransaction(tx) {
   const { error } = await supabase.from("transactions").insert({
     type: tx.type,
@@ -145,6 +156,8 @@ async function insertTransaction(tx) {
   if (error) throw error;
 }
 
+// ---------- Realtime ----------
+// מאזין לשינויים במלאי ובתנועות מכל משתמש אחר, כדי לרענן את הדשבורד בזמן אמת
 function subscribeToChanges(onChange) {
   const channel = supabase
     .channel("inventory-changes")
@@ -154,14 +167,17 @@ function subscribeToChanges(onChange) {
   return () => supabase.removeChannel(channel);
 }
 
+// ---------- Landed cost ----------
 async function updateItemUnitCost(itemId, unitCost) {
   const { error } = await supabase.from("items").update({ unit_cost: unitCost }).eq("id", itemId);
   if (error) throw error;
 }
 async function updateItemsUnitCosts(updates) {
+  // updates: [{ itemId, unitCost }]
   await Promise.all(updates.map((u) => updateItemUnitCost(u.itemId, u.unitCost)));
 }
 
+// ---------- Purchase Orders ----------
 async function createPurchaseOrder(supplierId, lines) {
   const poNumber = `ADL-PO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 900 + 100)}`;
   const { data: po, error } = await supabase
@@ -177,6 +193,7 @@ async function createPurchaseOrder(supplierId, lines) {
   return po.id;
 }
 
+// ---------- Settings / Logo ----------
 async function updateLogoUrl(dataUrl) {
   const { error } = await supabase.from("app_settings").upsert({ key: "logo_url", value: dataUrl });
   if (error) throw error;
@@ -187,16 +204,20 @@ async function fetchPublicLogo() {
   return data?.value || null;
 }
 
+// ---------- Settings / Company profile ----------
 async function updateCompanySettings(settings) {
   const { error } = await supabase.from("app_settings").upsert({ key: "company_settings", value: JSON.stringify(settings) });
   if (error) throw error;
 }
 
+// ---------- Account: email + password ----------
 async function updateAccountEmail(newEmail) {
   const { error } = await supabase.auth.updateUser({ email: newEmail });
   if (error) throw error;
+  // שים לב: שינוי דוא"ל ב-Supabase דורש כברירת מחדל אישור בקישור שנשלח לכתובת החדשה (ולעיתים גם לישנה)
 }
 async function changePassword(currentEmail, currentPassword, newPassword) {
+  // מאמת את הסיסמה הנוכחית ע"י ניסיון התחברות מחדש, ורק אז מעדכן לסיסמה החדשה
   const { error: verifyError } = await supabase.auth.signInWithPassword({ email: currentEmail, password: currentPassword });
   if (verifyError) throw new Error("הסיסמה הנוכחית שגויה");
   const { error } = await supabase.auth.updateUser({ password: newPassword });
@@ -204,6 +225,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
 }
 
 const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+
 
 const fmtDate = (iso) =>
   new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -253,6 +275,7 @@ const inputCls = "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-[15p
 const btnPrimary = "bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl px-4 py-3 text-[15px] transition disabled:opacity-40 disabled:cursor-not-allowed";
 const btnGhost = "bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 font-medium rounded-xl px-4 py-2.5 text-[15px] transition";
 
+// לוגו החברה: תמונה שהועלתה (נשמרת ב-app_settings) אם קיימת, אחרת התג "A"
 function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
   const inputRef = React.useRef(null);
   const pick = () => inputRef.current?.click();
@@ -280,9 +303,68 @@ function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
   );
 }
 
+// ==================== Login ====================
 const ALLOWED_EMAIL = "adlimportltd25@gmail.com";
 const ALLOWED_PASSWORD = "123456";
 
+function LoginScreen({ onSuccess, logoUrl, initialError }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(initialError || "");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setError(""); setBusy(true);
+    try {
+      if (email.trim().toLowerCase() !== ALLOWED_EMAIL) {
+        setError('גישה נדחתה. משתמש זה אינו מורשה להיכנס למערכת.');
+        return;
+      }
+      if (password !== ALLOWED_PASSWORD) {
+        setError('סיסמה שגויה, גישה נדחתה.');
+        return;
+      }
+      await api.signIn(email.trim(), password);
+      onSuccess();
+    } catch (e) {
+      setError(e.message || "שגיאת התחברות");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const onKeyDown = (e) => { if (e.key === "Enter") submit(); };
+
+  return (
+    <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <div className="flex items-center gap-2 mb-6">
+          <LogoBadge logoUrl={logoUrl} size={40} />
+          <div>
+            <div className="font-bold text-slate-900 leading-tight">אדל אימפורט</div>
+            <div className="text-xs text-slate-500">ניהול מלאי</div>
+          </div>
+        </div>
+
+        <Field label='דוא"ל'>
+          <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} autoFocus />
+        </Field>
+        <Field label="סיסמה">
+          <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} />
+        </Field>
+
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+
+        <button onClick={submit} disabled={busy || !email || !password} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
+          {busy && <Loader2 size={16} className="animate-spin" />}
+          התחברות
+        </button>
+        <p className="text-xs text-slate-400 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
+      </div>
+    </div>
+  );
+}
+
+// ==================== Dashboard ====================
 function Dashboard({ data, onExport }) {
   const { items, locations, stock } = data;
   const warehouse = locations.find((l) => l.type === "warehouse");
@@ -355,6 +437,7 @@ function Dashboard({ data, onExport }) {
   );
 }
 
+// ==================== Items ====================
 function ItemsScreen({ data, refresh, isAdmin }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", category: "device", unit: "", minThreshold: 0 });
@@ -423,6 +506,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   );
 }
 
+// ==================== Locations ====================
 function LocationsScreen({ data, refresh, isAdmin }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", type: "vehicle" });
@@ -476,6 +560,7 @@ function LocationsScreen({ data, refresh, isAdmin }) {
   );
 }
 
+// ==================== Customers ====================
 function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", address: "", contact: "" });
@@ -575,6 +660,7 @@ function CustomerFile({ data, customerId, onBack }) {
   );
 }
 
+// ==================== Transaction ====================
 function TransactionScreen({ data, refresh, quickTx }) {
   const [type, setType] = useState(null);
   const [form, setForm] = useState({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "" });
@@ -744,6 +830,7 @@ function TransactionScreen({ data, refresh, quickTx }) {
   );
 }
 
+// ==================== Audit log ====================
 function AuditLog({ data }) {
   const [filter, setFilter] = useState("all");
   const rows = data.transactions.filter((t) => filter === "all" || t.type === filter);
@@ -793,6 +880,8 @@ function AuditLog({ data }) {
   );
 }
 
+// ==================== Nav ====================
+// ==================== מחשבון יבוא ועלויות נחיתה (Landed Cost) ====================
 function LandedCostScreen({ data, refresh }) {
   const [overhead, setOverhead] = useState({ shipping: "", customs: "", brokerage: "", inland: "" });
   const [method, setMethod] = useState("value");
@@ -901,6 +990,7 @@ function LandedCostScreen({ data, refresh }) {
   );
 }
 
+// ==================== דוחות: ערך מלאי + חיזוי וקצב צריכה ====================
 function ReportsScreen({ data }) {
   const [sub, setSub] = useState("valuation");
   return (
@@ -1017,6 +1107,7 @@ function ForecastReport({ data }) {
   );
 }
 
+// ==================== הזמנות רכש (Purchase Orders) ====================
 function POsScreen({ data, refresh, onPrint }) {
   const [open, setOpen] = useState(false);
   const [supplierId, setSupplierId] = useState("");
@@ -1129,6 +1220,7 @@ function POPrintView({ data, poId, onClose }) {
   );
 }
 
+// ==================== הגדרות: פרופיל, אבטחה, חיבור מסד נתונים ====================
 function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdmin }) {
   const [company, setCompany] = useState(data.companySettings);
   const [companySaved, setCompanySaved] = useState(false);
@@ -1289,8 +1381,9 @@ const FULL_NAV = [
 ];
 const MOBILE_NAV = ["dashboard", "transaction", "customers", "log"];
 
+// ==================== App ====================
 export default function App() {
-  const [session, setSession] = useState(undefined);
+  const [session, setSession] = useState(undefined); // undefined = loading, null = auto-login failed
   const [profile, setProfile] = useState(null);
   const [data, setData] = useState(null);
   const [dataError, setDataError] = useState("");
@@ -1321,6 +1414,8 @@ export default function App() {
     }
   }, []);
 
+  // אין יותר מסך התחברות: המערכת מתחברת אוטומטית ברקע עם המשתמש המורשה היחיד,
+  // כך שהאפליקציה נפתחת ישירות ללוח הבקרה.
   useEffect(() => {
     (async () => {
       try {
