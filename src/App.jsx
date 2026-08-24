@@ -32,6 +32,7 @@ const mapSupplier = (r) => ({
 const mapPO = (r) => ({
   id: r.id, poNumber: r.po_number, supplierId: r.supplier_id, status: r.status, date: r.created_at,
   currency: r.currency || "USD", shippingTerms: r.shipping_terms || "", notes: r.notes || "",
+  shipmentId: r.shipment_id || "",
   lines: (r.po_lines || []).map((l) => ({ itemId: l.item_id, qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
 });
 
@@ -213,6 +214,7 @@ async function createPurchaseOrder(supplierId, lines, extra = {}) {
     .insert({
       po_number: poNumber, supplier_id: supplierId, status: extra.status || "draft",
       currency: extra.currency || "USD", shipping_terms: extra.shippingTerms || null, notes: extra.notes || null,
+      shipment_id: extra.shipmentId || null,
     })
     .select()
     .single();
@@ -223,9 +225,30 @@ async function createPurchaseOrder(supplierId, lines, extra = {}) {
   if (linesError) throw linesError;
   return po.id;
 }
+async function updatePOShipment(poId, shipmentId) {
+  const { error } = await supabase.from("purchase_orders").update({ shipment_id: shipmentId || null }).eq("id", poId);
+  if (error) throw error;
+}
 async function updatePOStatus(poId, status) {
   const { error } = await supabase.from("purchase_orders").update({ status }).eq("id", poId);
   if (error) throw error;
+}
+async function updatePurchaseOrder(poId, supplierId, lines, extra = {}) {
+  const { error } = await supabase
+    .from("purchase_orders")
+    .update({
+      supplier_id: supplierId, status: extra.status || "draft",
+      currency: extra.currency || "USD", shipping_terms: extra.shippingTerms || null, notes: extra.notes || null,
+      shipment_id: extra.shipmentId || null,
+    })
+    .eq("id", poId);
+  if (error) throw error;
+  const { error: deleteError } = await supabase.from("po_lines").delete().eq("po_id", poId);
+  if (deleteError) throw deleteError;
+  const { error: insertError } = await supabase.from("po_lines").insert(
+    lines.map((l) => ({ po_id: poId, item_id: l.itemId, qty: l.qty, unit_price: l.unitPrice }))
+  );
+  if (insertError) throw insertError;
 }
 
 // ---------- Suppliers ----------
@@ -284,7 +307,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePOStatus, addSupplier, updateSupplier, deleteSupplier, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addSupplier, updateSupplier, deleteSupplier, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -1091,19 +1114,52 @@ function AuditLog({ data }) {
 
 // ==================== Nav ====================
 // ==================== מחשבון יבוא ועלויות נחיתה (Landed Cost) ====================
+const DEFAULT_FX_RATES = { USD: 3.7, EUR: 4.0, GBP: 4.6, ILS: 1 };
+
 function LandedCostScreen({ data, refresh }) {
   const [overhead, setOverhead] = useState({ shipping: "", customs: "", brokerage: "", inland: "", wireFee: "", fxFeeValue: "", fxFeeMode: "percent" });
   const [method, setMethod] = useState("value");
-  const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "" }]);
+  const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "", currency: "ILS" }]);
   const [busy, setBusy] = useState(false);
   const [updated, setUpdated] = useState(false);
+  const [selectedShipment, setSelectedShipment] = useState("");
+  const [exchangeRates, setExchangeRates] = useState({});
+
+  const shipmentIds = [...new Set(data.purchaseOrders.map((p) => p.shipmentId).filter(Boolean))];
 
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "" }]);
+  const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "", currency: "ILS" }]);
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
 
+  const loadShipment = (shipmentId) => {
+    setSelectedShipment(shipmentId);
+    if (!shipmentId) return;
+    const posInShipment = data.purchaseOrders.filter((p) => p.shipmentId === shipmentId);
+    const newLines = [];
+    posInShipment.forEach((po) => {
+      po.lines.forEach((l) => {
+        newLines.push({
+          id: Math.random().toString(36).slice(2),
+          itemId: l.itemId, qty: String(l.qty), unitPrice: String(l.unitPrice),
+          unitVolume: "", currency: po.currency,
+        });
+      });
+    });
+    if (newLines.length > 0) setLines(newLines);
+    const currenciesUsed = [...new Set(posInShipment.map((p) => p.currency))];
+    setExchangeRates((prev) => {
+      const next = { ...prev };
+      currenciesUsed.forEach((c) => { if (next[c] === undefined) next[c] = DEFAULT_FX_RATES[c] ?? 1; });
+      return next;
+    });
+  };
+
+  const rateFor = (currency) => currency === "ILS" ? 1 : Number(exchangeRates[currency] ?? DEFAULT_FX_RATES[currency] ?? 1);
+  const priceILS = (l) => (Number(l.unitPrice) || 0) * rateFor(l.currency || "ILS");
+  const currenciesInUse = [...new Set(lines.map((l) => l.currency || "ILS"))].filter((c) => c !== "ILS");
+
   const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
-  const totalGoodsValue = validLines.reduce((s, l) => s + Number(l.qty) * Number(l.unitPrice), 0);
+  const totalGoodsValue = validLines.reduce((s, l) => s + Number(l.qty) * priceILS(l), 0);
   const fixedOverhead = ["shipping", "customs", "brokerage", "inland", "wireFee"].reduce((s, k) => s + (Number(overhead[k]) || 0), 0);
   const fxFeeAmount = overhead.fxFeeMode === "percent"
     ? totalGoodsValue * ((Number(overhead.fxFeeValue) || 0) / 100)
@@ -1112,17 +1168,17 @@ function LandedCostScreen({ data, refresh }) {
 
   const totalBasis = validLines.reduce((s, l) => {
     const qty = Number(l.qty);
-    return s + (method === "value" ? qty * Number(l.unitPrice) : qty * (Number(l.unitVolume) || 0));
+    return s + (method === "value" ? qty * priceILS(l) : qty * (Number(l.unitVolume) || 0));
   }, 0);
   const results = validLines.map((l) => {
     const qty = Number(l.qty);
-    const unitPrice = Number(l.unitPrice);
-    const basis = method === "value" ? qty * unitPrice : qty * (Number(l.unitVolume) || 0);
+    const unitPriceILS = priceILS(l);
+    const basis = method === "value" ? qty * unitPriceILS : qty * (Number(l.unitVolume) || 0);
     const share = totalBasis > 0 ? basis / totalBasis : 0;
     const allocatedOverhead = totalOverhead * share;
-    const landedPerUnit = unitPrice + allocatedOverhead / qty;
+    const landedPerUnit = unitPriceILS + allocatedOverhead / qty;
     const item = data.items.find((i) => i.id === l.itemId);
-    return { ...l, item, qty, unitPrice, share, allocatedOverhead, landedPerUnit };
+    return { ...l, item, qty, unitPriceILS, share, allocatedOverhead, landedPerUnit };
   });
   const canCompute = validLines.length > 0 && totalBasis > 0;
 
@@ -1140,6 +1196,35 @@ function LandedCostScreen({ data, refresh }) {
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-1 flex items-center gap-2"><Ship size={22} className="text-amber-600" /> מחשבון יבוא ועלויות נחיתה (Landed Cost)</h2>
       <p className="text-slate-500 text-sm mb-4">חשב את מחיר הנחיתה הסופי ליחידה עבור משלוח, וחלק את עלויות המשלוח בין הפריטים לפי נפח או לפי ערך.</p>
+
+      {shipmentIds.length > 0 && (
+        <div className="bg-white rounded-2xl border p-4 mb-4">
+          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Ship size={16} /> טעינה ממכולה/משלוח משותף</h3>
+          <p className="text-slate-500 text-sm mb-3">בחירת מספר מכולה תטען אוטומטית את כל הפריטים והכמויות מכל הזמנות הרכש (מכל הספקים) שמשויכות אליה.</p>
+          <select className={inputCls} value={selectedShipment} onChange={(e) => loadShipment(e.target.value)}>
+            <option value="">בחירה ידנית (בלי טעינה)...</option>
+            {shipmentIds.map((id) => {
+              const posCount = data.purchaseOrders.filter((p) => p.shipmentId === id).length;
+              return <option key={id} value={id}>{id} ({posCount} הזמנות)</option>;
+            })}
+          </select>
+        </div>
+      )}
+
+      {currenciesInUse.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Calculator size={16} /> שערי המרה ל-₪</h3>
+          <p className="text-slate-500 text-sm mb-3">חלק מהפריטים שנטענו הם במטבע ספק שאינו ₪. עדכנו את השער הנוכחי כדי שהחישוב יהיה מדויק.</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {currenciesInUse.map((c) => (
+              <Field key={c} label={`1 ${c} = ? ₪`}>
+                <input type="number" min="0" step="0.001" className={inputCls} value={exchangeRates[c] ?? DEFAULT_FX_RATES[c] ?? 1} onChange={(e) => setExchangeRates({ ...exchangeRates, [c]: e.target.value })} />
+              </Field>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-2 gap-4 mb-4">
         <div className="bg-white rounded-2xl border p-4">
           <h3 className="font-bold text-slate-800 mb-3">עלויות המשלוח (₪)</h3>
@@ -1168,19 +1253,24 @@ function LandedCostScreen({ data, refresh }) {
             <button onClick={() => setMethod("value")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "value" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי ערך הפריט</button>
             <button onClick={() => setMethod("volume")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "volume" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי נפח</button>
           </div>
-          <p className="text-sm text-slate-500">{method === "value" ? "עלויות המשלוח יחולקו ביחס לערך הכולל של כל שורה." : "עלויות המשלוח יחולקו ביחס לנפח הכולל שלהן במכולה."}</p>
+          <p className="text-sm text-slate-500">{method === "value" ? "עלויות המשלוח יחולקו ביחס לערך הכולל של כל שורה (בש\"ח, אחרי המרה)." : "עלויות המשלוח יחולקו ביחס לנפח הכולל שלהן במכולה."}</p>
         </div>
       </div>
       <div className="bg-white rounded-2xl border p-4 mb-4">
         <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-slate-800">פריטים במשלוח</h3><button onClick={addLine} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={16} /> הוספת שורה</button></div>
         <div className="space-y-3">
           {lines.map((l) => (
-            <div key={l.id} className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end border-b pb-3 last:border-0 last:pb-0">
+            <div key={l.id} className="grid grid-cols-2 sm:grid-cols-6 gap-2 items-end border-b pb-3 last:border-0 last:pb-0">
               <div className="col-span-2"><label className="block text-xs font-medium text-slate-500 mb-1">פריט</label>
                 <select className={inputCls} value={l.itemId} onChange={(e) => setLine(l.id, { itemId: e.target.value })}><option value="">בחר פריט...</option>{data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}</select>
               </div>
               <div><label className="block text-xs font-medium text-slate-500 mb-1">כמות</label><input type="number" min="1" className={inputCls} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} /></div>
-              <div><label className="block text-xs font-medium text-slate-500 mb-1">מחיר ליח' (₪)</label><input type="number" min="0" step="0.01" className={inputCls} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} /></div>
+              <div><label className="block text-xs font-medium text-slate-500 mb-1">מטבע</label>
+                <select className={inputCls} value={l.currency || "ILS"} onChange={(e) => setLine(l.id, { currency: e.target.value })}>
+                  {["ILS", ...CURRENCIES].filter((c, i, arr) => arr.indexOf(c) === i).map((c) => <option key={c} value={c}>{CURRENCY_SYMBOLS[c] || c} {c}</option>)}
+                </select>
+              </div>
+              <div><label className="block text-xs font-medium text-slate-500 mb-1">מחיר ליח' ({CURRENCY_SYMBOLS[l.currency || "ILS"]})</label><input type="number" min="0" step="0.01" className={inputCls} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} /></div>
               <div className="flex gap-2 items-end">
                 <div className="flex-1"><label className="block text-xs font-medium text-slate-500 mb-1">נפח ליח' (CBM)</label><input type="number" min="0" step="0.001" className={inputCls} value={l.unitVolume} onChange={(e) => setLine(l.id, { unitVolume: e.target.value })} disabled={method !== "volume"} /></div>
                 {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 mb-2.5"><Trash2 size={16} /></button>}
@@ -1194,13 +1284,13 @@ function LandedCostScreen({ data, refresh }) {
           <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">תוצאת חישוב עלות הנחיתה</h3></div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">מחיר בסיס</th><th className="px-4 py-2 font-medium">חלק יחסי</th><th className="px-4 py-2 font-medium">Landed Cost ליח'</th></tr></thead>
+              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">מחיר בסיס (₪)</th><th className="px-4 py-2 font-medium">חלק יחסי</th><th className="px-4 py-2 font-medium">Landed Cost ליח'</th></tr></thead>
               <tbody>
                 {results.map((r) => (
                   <tr key={r.id} className="border-t">
                     <td className="px-4 py-2.5 font-medium text-slate-800">{r.item?.name || "-"}</td>
                     <td className="px-4 py-2.5">{r.qty}</td>
-                    <td className="px-4 py-2.5">₪{r.unitPrice.toFixed(2)}</td>
+                    <td className="px-4 py-2.5">₪{r.unitPriceILS.toFixed(2)}{r.currency !== "ILS" && <span className="text-slate-400 text-xs"> ({CURRENCY_SYMBOLS[r.currency]}{Number(r.unitPrice).toFixed(2)})</span>}</td>
                     <td className="px-4 py-2.5">{(r.share * 100).toFixed(1)}%</td>
                     <td className="px-4 py-2.5 font-bold text-amber-700">₪{r.landedPerUnit.toFixed(2)}</td>
                   </tr>
@@ -1461,8 +1551,10 @@ function SuppliersScreen({ data, refresh }) {
 // ==================== הזמנות רכש (Purchase Orders) ====================
 function POsScreen({ data, refresh, onPrint }) {
   const [open, setOpen] = useState(false);
+  const [editingPOId, setEditingPOId] = useState(null);
   const [supplierId, setSupplierId] = useState("");
   const [status, setStatus] = useState("draft");
+  const [shipmentId, setShipmentId] = useState("");
   const [shippingTerms, setShippingTerms] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
@@ -1473,11 +1565,24 @@ function POsScreen({ data, refresh, onPrint }) {
   const selectedSupplier = data.suppliers.find((s) => s.id === supplierId);
   const currency = selectedSupplier?.currency || "USD";
   const currencySymbol = CURRENCY_SYMBOLS[currency] || currency;
+  const existingShipmentIds = [...new Set(data.purchaseOrders.map((p) => p.shipmentId).filter(Boolean))];
 
   const openNew = () => {
+    setEditingPOId(null);
     setSupplierId(data.suppliers[0]?.id || "");
-    setStatus("draft"); setShippingTerms(""); setNotes("");
+    setStatus("draft"); setShipmentId(""); setShippingTerms(""); setNotes("");
     setLines([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
+    setError(""); setOpen(true);
+  };
+  const openEditPO = (po) => {
+    setEditingPOId(po.id);
+    setSupplierId(po.supplierId);
+    setStatus(po.status); setShipmentId(po.shipmentId || ""); setShippingTerms(po.shippingTerms || ""); setNotes(po.notes || "");
+    setLines(
+      po.lines.length > 0
+        ? po.lines.map((l) => ({ id: Math.random().toString(36).slice(2), itemId: l.itemId, qty: String(l.qty), unitPrice: String(l.unitPrice) }))
+        : [{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]
+    );
     setError(""); setOpen(true);
   };
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -1496,14 +1601,18 @@ function POsScreen({ data, refresh, onPrint }) {
     if (valid.length === 0) { setError("יש להוסיף לפחות שורת פריט אחת"); return; }
     setBusy(true);
     try {
-      const poId = await api.createPurchaseOrder(
-        supplierId,
-        valid.map((l) => ({ itemId: l.itemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })),
-        { status, currency, shippingTerms, notes }
-      );
-      await refresh();
-      setOpen(false);
-      onPrint(poId);
+      const linesPayload = valid.map((l) => ({ itemId: l.itemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) }));
+      if (editingPOId) {
+        await api.updatePurchaseOrder(editingPOId, supplierId, linesPayload, { status, currency, shippingTerms, notes, shipmentId });
+        await refresh();
+        setOpen(false);
+        onPrint(editingPOId);
+      } else {
+        const poId = await api.createPurchaseOrder(supplierId, linesPayload, { status, currency, shippingTerms, notes, shipmentId });
+        await refresh();
+        setOpen(false);
+        onPrint(poId);
+      }
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
@@ -1520,7 +1629,7 @@ function POsScreen({ data, refresh, onPrint }) {
       <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-xl text-slate-800">הזמנות רכש (Purchase Orders)</h2><button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> PO חדש</button></div>
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
-          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">מכולה/משלוח</th><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.purchaseOrders.map((po) => {
               const supplier = data.suppliers.find((s) => s.id === po.supplierId);
@@ -1528,6 +1637,7 @@ function POsScreen({ data, refresh, onPrint }) {
               return (
                 <tr key={po.id} className="border-t">
                   <td className="px-4 py-2.5 font-medium text-slate-800">{po.poNumber}</td>
+                  <td className="px-4 py-2.5">{po.shipmentId ? <Badge tone="violet">{po.shipmentId}</Badge> : <span className="text-slate-300">-</span>}</td>
                   <td className="px-4 py-2.5 text-slate-500">{fmtDate(po.date)}</td>
                   <td className="px-4 py-2.5 text-slate-500">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
                   <td className="px-4 py-2.5">{po.lines.length}</td>
@@ -1542,16 +1652,21 @@ function POsScreen({ data, refresh, onPrint }) {
                       {Object.entries(PO_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
                     </select>
                   </td>
-                  <td className="px-4 py-2.5 text-left"><button onClick={() => onPrint(po.id)} className="text-amber-600 hover:underline font-medium flex items-center gap-1"><Printer size={14} /> צפייה/הדפסה</button></td>
+                  <td className="px-4 py-2.5 text-left">
+                    <div className="flex items-center gap-3 justify-end">
+                      <button onClick={() => openEditPO(po)} className="text-slate-500 hover:text-amber-600 font-medium flex items-center gap-1"><Pencil size={14} /> עריכה</button>
+                      <button onClick={() => onPrint(po.id)} className="text-amber-600 hover:underline font-medium flex items-center gap-1"><Printer size={14} /> צפייה/הדפסה</button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
-            {data.purchaseOrders.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">עדיין לא נוצרו הזמנות רכש</td></tr>}
+            {data.purchaseOrders.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">עדיין לא נוצרו הזמנות רכש</td></tr>}
           </tbody>
         </table>
       </div>
       {open && (
-        <Modal title="הזמנת רכש חדשה" onClose={() => setOpen(false)}>
+        <Modal title={editingPOId ? "עריכת הזמנת רכש" : "הזמנת רכש חדשה"} onClose={() => setOpen(false)}>
           <Field label="ספק">
             <select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
               <option value="">בחר ספק...</option>
@@ -1562,6 +1677,11 @@ function POsScreen({ data, refresh, onPrint }) {
             <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>
               {Object.entries(PO_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
             </select>
+          </Field>
+          <Field label="מספר מכולה / משלוח (לא חובה)">
+            <input className={inputCls} value={shipmentId} onChange={(e) => setShipmentId(e.target.value)} placeholder="לדוגמה: CONT-2026-08" list="shipment-ids-list" />
+            <datalist id="shipment-ids-list">{existingShipmentIds.map((id) => <option key={id} value={id} />)}</datalist>
+            <div className="text-xs text-slate-400 mt-1">הזמנות עם אותו מספר מכולה ייטענו יחד במחשבון היבוא ועלויות הנחיתה.</div>
           </Field>
           <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-slate-600">פריטים (מחירים ב-{currencySymbol}{currency})</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
           <div className="space-y-2 mb-2">
@@ -1584,7 +1704,7 @@ function POsScreen({ data, refresh, onPrint }) {
           <Field label="תנאי משלוח"><input className={inputCls} value={shippingTerms} onChange={(e) => setShippingTerms(e.target.value)} placeholder="לדוגמה: FOB Shanghai, 45 ימי אספקה" /></Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
-          <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}יצירת הזמנה והפקת מסמך</button>
+          <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}{editingPOId ? "שמירת שינויים" : "יצירת הזמנה והפקת מסמך"}</button>
         </Modal>
       )}
     </div>
