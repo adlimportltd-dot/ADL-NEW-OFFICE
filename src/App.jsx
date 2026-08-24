@@ -1904,6 +1904,10 @@ function POsScreen({ data, refresh, onPrint }) {
   const [busy, setBusy] = useState(false);
   const [statusBusyId, setStatusBusyId] = useState(null);
   const [paymentsPO, setPaymentsPO] = useState(null);
+  const [newItemForLineId, setNewItemForLineId] = useState(null);
+  const [newItemForm, setNewItemForm] = useState({ name: "", category: "device", unit: "" });
+  const [newItemError, setNewItemError] = useState("");
+  const [newItemBusy, setNewItemBusy] = useState(false);
 
   const selectedSupplier = data.suppliers.find((s) => s.id === supplierId);
   const currency = selectedSupplier?.currency || "USD";
@@ -1938,6 +1942,24 @@ function POsScreen({ data, refresh, onPrint }) {
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
   const onPickItem = (id, itemId) => { const it = data.items.find((i) => i.id === itemId); setLine(id, { itemId, unitPrice: it?.unitCost ? String(it.unitCost) : "" }); };
   const itemLabel = (it) => it.supplierSku ? `${it.name} (${it.supplierSku})` : it.name;
+
+  const openNewItemFor = (lineId) => {
+    setNewItemForLineId(lineId);
+    setNewItemForm({ name: "", category: "device", unit: "" });
+    setNewItemError("");
+  };
+  const submitNewItem = async () => {
+    setNewItemError("");
+    if (!newItemForm.name.trim()) { setNewItemError("שם הפריט הוא שדה חובה"); return; }
+    if (!newItemForm.unit.trim()) { setNewItemError("יחידת מידה היא שדה חובה"); return; }
+    setNewItemBusy(true);
+    try {
+      const newItemId = await api.addItem({ ...newItemForm, minThreshold: 0 });
+      setLine(newItemForLineId, { itemId: newItemId });
+      await refresh();
+      setNewItemForLineId(null);
+    } catch (e) { setNewItemError(e.message); } finally { setNewItemBusy(false); }
+  };
 
   const lineTotal = (l) => (Number(l.qty) || 0) * (Number(l.unitPrice) || 0);
   const orderTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
@@ -2059,16 +2081,20 @@ function POsScreen({ data, refresh, onPrint }) {
           <div className="space-y-2 mb-2">
             {lines.map((l) => (
               <div key={l.id} className="grid grid-cols-6 gap-1.5 items-center">
-                <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
-                  <option value="">פריט...</option>
-                  {data.items.map((it) => <option key={it.id} value={it.id}>{itemLabel(it)}</option>)}
-                </select>
+                <div className="col-span-3 flex gap-1">
+                  <select className={inputCls + " !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
+                    <option value="">פריט...</option>
+                    {data.items.map((it) => <option key={it.id} value={it.id}>{itemLabel(it)}</option>)}
+                  </select>
+                  <button type="button" onClick={() => openNewItemFor(l.id)} className="shrink-0 rounded-xl border border-dashed border-amber-400 text-amber-600 hover:bg-amber-50 px-2.5" title="הוספת פריט חדש למאגר"><Plus size={16} /></button>
+                </div>
                 <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
                 <input type="number" min="0" step="0.01" placeholder={`מחיר (${currencySymbol})`} className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
                 {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
               </div>
             ))}
           </div>
+          <p className="text-xs text-slate-400 mb-2">לא מוצאים את הפריט ברשימה? לחצו על <Plus size={11} className="inline" /> ליצירת פריט חדש ישירות מכאן - הוא יישמר במאגר הפריטים הכללי ויתמלא אוטומטית בשורה.</p>
           <div className="flex items-center justify-between text-sm mb-4 px-1">
             <span className="text-slate-500">סה"כ הזמנה</span>
             <span className="font-bold text-slate-800">{currencySymbol}{orderTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
@@ -2105,6 +2131,36 @@ function POsScreen({ data, refresh, onPrint }) {
         </Modal>
       )}
       {paymentsPO && <POPaymentsModal data={data} po={paymentsPO} refresh={refresh} onClose={() => setPaymentsPO(null)} />}
+      {newItemForLineId && (
+        <Modal title="פריט חדש למאגר" onClose={() => setNewItemForLineId(null)}>
+          <Field label="שם פריט"><input className={inputCls} value={newItemForm.name} onChange={(e) => setNewItemForm({ ...newItemForm, name: e.target.value })} autoFocus /></Field>
+          <Field label="קטגוריה">
+            <select
+              className={inputCls}
+              value={newItemForm.category}
+              onChange={(e) => {
+                const category = e.target.value;
+                const unit = category === "consumable" && !PACKAGE_SIZES.includes(newItemForm.unit) ? PACKAGE_SIZES[2] : newItemForm.unit;
+                setNewItemForm({ ...newItemForm, category, unit });
+              }}
+            >
+              <option value="device">מכשירים</option><option value="consumable">נוזלים ומתכלים</option>
+            </select>
+          </Field>
+          {newItemForm.category === "consumable" ? (
+            <Field label="גודל אריזה / נפח">
+              <select className={inputCls} value={newItemForm.unit} onChange={(e) => setNewItemForm({ ...newItemForm, unit: e.target.value })}>
+                <option value="">בחר גודל...</option>
+                {PACKAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </Field>
+          ) : (
+            <Field label="יחידת מידה"><input className={inputCls} value={newItemForm.unit} onChange={(e) => setNewItemForm({ ...newItemForm, unit: e.target.value })} placeholder="יחידה" /></Field>
+          )}
+          {newItemError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{newItemError}</div>}
+          <button onClick={submitNewItem} disabled={newItemBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{newItemBusy && <Loader2 size={16} className="animate-spin" />}יצירה והוספה להזמנה</button>
+        </Modal>
+      )}
     </div>
   );
 }
