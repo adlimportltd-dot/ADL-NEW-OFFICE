@@ -115,10 +115,11 @@ async function fetchAllData() {
 
 // ---------- Items ----------
 async function addItem(item) {
-  const { error } = await supabase.from("items").insert({
+  const { data, error } = await supabase.from("items").insert({
     name: item.name, category: item.category, unit: item.unit, min_threshold: item.minThreshold,
-  });
+  }).select().single();
   if (error) throw error;
+  return data.id;
 }
 async function updateItem(id, patch) {
   const payload = {};
@@ -128,6 +129,13 @@ async function updateItem(id, patch) {
   if (patch.minThreshold !== undefined) payload.min_threshold = patch.minThreshold;
   if (patch.unitCost !== undefined) payload.unit_cost = patch.unitCost;
   const { error } = await supabase.from("items").update(payload).eq("id", id);
+  if (error) throw error;
+}
+async function setItemStock(itemId, locationId, quantity) {
+  const { error } = await supabase.from("stock_levels").upsert(
+    { item_id: itemId, location_id: locationId, quantity, updated_at: new Date().toISOString() },
+    { onConflict: "item_id,location_id" }
+  );
   if (error) throw error;
 }
 async function deleteItem(id) {
@@ -235,7 +243,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -452,7 +460,7 @@ function Dashboard({ data, onExport }) {
 // ==================== Items ====================
 function ItemsScreen({ data, refresh, isAdmin }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", category: "device", unit: "", minThreshold: 0 });
+  const [form, setForm] = useState({ name: "", category: "device", unit: "", minThreshold: 0, quantity: 0 });
   const [error, setError] = useState("");
 
   const [editItem, setEditItem] = useState(null);
@@ -460,11 +468,17 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   const [editError, setEditError] = useState("");
   const [editBusy, setEditBusy] = useState(false);
 
+  const warehouse = data.locations.find((l) => l.type === "warehouse");
+
   const submit = async () => {
     if (!form.name.trim() || !form.unit.trim()) return;
     try {
-      await api.addItem({ ...form, minThreshold: Number(form.minThreshold) || 0 });
-      setForm({ name: "", category: "device", unit: "", minThreshold: 0 });
+      const newItemId = await api.addItem({ ...form, minThreshold: Number(form.minThreshold) || 0 });
+      const qty = Number(form.quantity) || 0;
+      if (qty > 0 && warehouse) {
+        await api.setItemStock(newItemId, warehouse.id, qty);
+      }
+      setForm({ name: "", category: "device", unit: "", minThreshold: 0, quantity: 0 });
       setOpen(false);
       await refresh();
     } catch (e) { setError(e.message); }
@@ -475,8 +489,9 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   };
 
   const openEdit = (it) => {
+    const currentQty = warehouse ? (data.stock[`${it.id}|${warehouse.id}`] || 0) : 0;
     setEditItem(it);
-    setEditForm({ name: it.name, category: it.category, unit: it.unit, minThreshold: it.minThreshold, unitCost: it.unitCost ?? "" });
+    setEditForm({ name: it.name, category: it.category, unit: it.unit, minThreshold: it.minThreshold, unitCost: it.unitCost ?? "", quantity: currentQty });
     setEditError("");
   };
 
@@ -491,6 +506,9 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         minThreshold: Number(editForm.minThreshold) || 0,
         unitCost: editForm.unitCost === "" ? null : Number(editForm.unitCost),
       });
+      if (warehouse) {
+        await api.setItemStock(editItem.id, warehouse.id, Number(editForm.quantity) || 0);
+      }
       await refresh();
       setEditItem(null);
     } catch (e) { setEditError(e.message); } finally { setEditBusy(false); }
@@ -559,6 +577,9 @@ function ItemsScreen({ data, refresh, isAdmin }) {
           ) : (
             <Field label="יחידת מידה"><input className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="יחידה" /></Field>
           )}
+          <Field label={`כמות במלאי (מחסן מרכזי)${form.unit ? " - " + form.unit : ""}`}>
+            <input type="number" min="0" className={inputCls} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} placeholder="0" />
+          </Field>
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: e.target.value })} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} className={btnPrimary + " w-full"}>שמירת פריט</button>
@@ -590,6 +611,9 @@ function ItemsScreen({ data, refresh, isAdmin }) {
           ) : (
             <Field label="יחידת מידה"><input className={inputCls} value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} placeholder="יחידה" /></Field>
           )}
+          <Field label={`כמות במלאי (מחסן מרכזי)${editForm.unit ? " - " + editForm.unit : ""}`}>
+            <input type="number" min="0" className={inputCls} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
+          </Field>
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={editForm.minThreshold} onChange={(e) => setEditForm({ ...editForm, minThreshold: e.target.value })} /></Field>
           <Field label="עלות נחיתה ליח' (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={editForm.unitCost} onChange={(e) => setEditForm({ ...editForm, unitCost: e.target.value })} placeholder="לא הוגדר" /></Field>
           {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
