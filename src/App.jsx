@@ -514,6 +514,27 @@ const PACKAGE_SIZES = ["25 ליטר", "5 ליטר", "1 ליטר", "0.5 ליטר"
 const LARGE_PACKAGES = ["25 ליטר", "5 ליטר"];
 const SMALL_PACKAGES = ["1 ליטר", "0.5 ליטר", '250 מ"ל'];
 const PACKAGE_SIZE_VOLUMES = { "25 ליטר": 25, "5 ליטר": 5, "1 ליטר": 1, "0.5 ליטר": 0.5, '250 מ"ל': 0.25 };
+
+// זיהוי גודל אריזה עמיד - לא תלוי בהתאמת מחרוזת מדויקת. תומך גם בערכים
+// שהוזנו ישירות ב-DB או בניסוח שונה מהרשימה הסגורה (למשל "25 ק"ג" במקום "25 ליטר").
+const parsePackageSizeNumber = (text) => {
+  if (!text) return null;
+  const m = String(text).replace(/,/g, ".").match(/[\d]+(\.[\d]+)?/);
+  return m ? parseFloat(m[0]) : null;
+};
+const packageVolumeOf = (item) => {
+  if (item?.unit && PACKAGE_SIZE_VOLUMES[item.unit] !== undefined) return PACKAGE_SIZE_VOLUMES[item.unit];
+  const text = `${item?.unit || ""} ${item?.name || ""}`;
+  const n = parsePackageSizeNumber(item?.unit) ?? parsePackageSizeNumber(item?.name);
+  if (n === null) return 0;
+  const isMilliliters = /מ["׳]?ל|ml/i.test(text);
+  return isMilliliters ? n / 1000 : n;
+};
+const isLargePackage = (item) => {
+  const vol = packageVolumeOf(item);
+  if (vol > 0) return vol >= 5;
+  return /חבית|גלון/.test(`${item?.unit || ""} ${item?.name || ""}`);
+};
 const guessFragranceName = (item) => {
   if (item.fragranceGroup) return item.fragranceGroup;
   return item.name.replace(/^תמצית ריח - /, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
@@ -913,7 +934,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
     const groupName = guessFragranceName(it) || it.name;
     if (!fragranceGroups[groupName]) fragranceGroups[groupName] = { name: groupName, sizes: [], totalWeighted: 0 };
     const qty = totalStockOf(it.id);
-    const volumePerUnit = PACKAGE_SIZE_VOLUMES[it.unit] || 0;
+    const volumePerUnit = packageVolumeOf(it);
     fragranceGroups[groupName].sizes.push({ itemId: it.id, unit: it.unit, qty });
     fragranceGroups[groupName].totalWeighted += qty * volumePerUnit;
   });
@@ -1106,11 +1127,12 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
 
   const group = fragranceGroupList.find((g) => g.name === fragranceName);
   const existingUnits = group ? group.sizes.map((s) => s.unit) : [];
+  const itemFor = (itemId) => data.items.find((i) => i.id === itemId);
 
   const consumedLines = group
     ? group.sizes
-        .filter((s) => LARGE_PACKAGES.includes(s.unit) && Number(consumedQtys[s.itemId]) > 0)
-        .map((s) => ({ itemId: s.itemId, qty: Number(consumedQtys[s.itemId]), unit: s.unit, available: s.qty }))
+        .filter((s) => isLargePackage(itemFor(s.itemId)) && Number(consumedQtys[s.itemId]) > 0)
+        .map((s) => ({ itemId: s.itemId, qty: Number(consumedQtys[s.itemId]), unit: s.unit, available: s.qty, volume: packageVolumeOf(itemFor(s.itemId)) }))
     : [];
   const producedLines = SMALL_PACKAGES
     .filter((size) => Number(producedQtys[size]) > 0)
@@ -1119,7 +1141,7 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
       return { unit: size, qty: Number(producedQtys[size]), existingItemId: existing?.itemId || null };
     });
 
-  const consumedVolume = consumedLines.reduce((s, l) => s + l.qty * (PACKAGE_SIZE_VOLUMES[l.unit] || 0), 0);
+  const consumedVolume = consumedLines.reduce((s, l) => s + l.qty * l.volume, 0);
   const producedVolume = producedLines.reduce((s, l) => s + l.qty * (PACKAGE_SIZE_VOLUMES[l.unit] || 0), 0);
   const volumeDiff = producedVolume - consumedVolume;
 
@@ -1168,14 +1190,14 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
             <div className="text-sm font-bold text-slate-700 mb-1">אריזות לגריעה מהמחסן (פתיחה)</div>
             <p className="text-xs text-slate-400 mb-2">המערכת בודקת אוטומטית אילו אריזות גדולות (חבית/גלון) קיימות במלאי בכמות גדולה מ-0, ומציגה רק אותן.</p>
             <div className="space-y-2">
-              {group.sizes.filter((s) => LARGE_PACKAGES.includes(s.unit) && s.qty > 0).map((s) => (
+              {group.sizes.filter((s) => isLargePackage(itemFor(s.itemId)) && s.qty > 0).map((s) => (
                 <div key={s.itemId} className="flex items-center gap-2">
                   <span className="text-sm text-slate-600 w-28 shrink-0">{s.unit}</span>
                   <span className="text-xs text-slate-400 w-20 shrink-0">זמין: {s.qty}</span>
                   <input type="number" min="0" max={s.qty} className={inputCls + " !py-1.5"} value={consumedQtys[s.itemId] || ""} onChange={(e) => setConsumedQtys({ ...consumedQtys, [s.itemId]: e.target.value })} placeholder="0" />
                 </div>
               ))}
-              {group.sizes.filter((s) => LARGE_PACKAGES.includes(s.unit) && s.qty > 0).length === 0 && (
+              {group.sizes.filter((s) => isLargePackage(itemFor(s.itemId)) && s.qty > 0).length === 0 && (
                 <div className="text-sm text-slate-400 py-2">אין מלאי חבית/גלון זמין לריח הזה כרגע - אי אפשר לבצע המרה עד שיתקבל מלאי גדול.</div>
               )}
             </div>
