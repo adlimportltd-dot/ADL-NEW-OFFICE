@@ -1125,9 +1125,20 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const group = fragranceGroupList.find((g) => g.name === fragranceName);
-  const existingUnits = group ? group.sizes.map((s) => s.unit) : [];
   const itemFor = (itemId) => data.items.find((i) => i.id === itemId);
+  const totalStockOf = (itemId) => data.locations.reduce((s, l) => s + (data.stock[`${itemId}|${l.id}`] || 0), 0);
+
+  // מחושב ישירות מתוך data.items + data.stock בכל רינדור - בלי להסתמך על אף חישוב מוכן
+  // מראש, כדי שלא יהיה פער בין מה שבאמת קיים במלאי לבין מה שמוצג כאן.
+  const group = fragranceName
+    ? {
+        name: fragranceName,
+        sizes: data.items
+          .filter((it) => it.category === "consumable" && (it.fragranceGroup ? it.fragranceGroup === fragranceName : guessFragranceName(it) === fragranceName))
+          .map((it) => ({ itemId: it.id, unit: it.unit, qty: totalStockOf(it.id) })),
+      }
+    : null;
+  const existingUnits = group ? group.sizes.map((s) => s.unit) : [];
 
   const consumedLines = group
     ? group.sizes
