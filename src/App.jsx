@@ -34,8 +34,11 @@ const mapPO = (r) => ({
   id: r.id, poNumber: r.po_number, supplierId: r.supplier_id, status: r.status, date: r.created_at,
   currency: r.currency || "USD", shippingTerms: r.shipping_terms || "", notes: r.notes || "",
   shipmentId: r.shipment_id || "",
+  paymentTerms: r.payment_terms || "prepaid_100", depositPercent: r.deposit_percent !== null && r.deposit_percent !== undefined ? Number(r.deposit_percent) : null,
+  netDays: r.net_days !== null && r.net_days !== undefined ? Number(r.net_days) : null, dueDate: r.due_date || "",
   lines: (r.po_lines || []).map((l) => ({ itemId: l.item_id, qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
 });
+const mapPOPayment = (r) => ({ id: r.id, poId: r.po_id, amount: Number(r.amount), paidDate: r.paid_date, note: r.note || "" });
 
 // ---------- Auth ----------
 async function signIn(email, password) {
@@ -81,7 +84,7 @@ async function fetchMyProfile(userId) {
 
 // ---------- Fetch everything needed for the app ----------
 async function fetchAllData() {
-  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, posRes, settingsRes] = await Promise.all([
+  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, posRes, paymentsRes, settingsRes] = await Promise.all([
     supabase.from("items").select("*").order("category").order("name"),
     supabase.from("locations").select("*").order("type"),
     supabase.from("customers").select("*").order("name"),
@@ -90,10 +93,11 @@ async function fetchAllData() {
     supabase.from("suppliers").select("*").order("name"),
     supabase.from("shipments").select("*").order("created_at", { ascending: false }),
     supabase.from("purchase_orders").select("*, po_lines(*)").order("created_at", { ascending: false }),
+    supabase.from("po_payments").select("*").order("paid_date", { ascending: false }),
     supabase.from("app_settings").select("*"),
   ]);
 
-  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, posRes, settingsRes]) {
+  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, posRes, paymentsRes, settingsRes]) {
     if (r.error) throw r.error;
   }
 
@@ -118,6 +122,7 @@ async function fetchAllData() {
     suppliers: (suppliersRes.data || []).map(mapSupplier),
     shipments: (shipmentsRes.data || []).map(mapShipment),
     purchaseOrders: (posRes.data || []).map(mapPO),
+    poPayments: (paymentsRes.data || []).map(mapPOPayment),
     logoUrl: settings.logo_url || null,
     companySettings,
   };
@@ -218,6 +223,10 @@ async function createPurchaseOrder(supplierId, lines, extra = {}) {
       po_number: poNumber, supplier_id: supplierId, status: extra.status || "draft",
       currency: extra.currency || "USD", shipping_terms: extra.shippingTerms || null, notes: extra.notes || null,
       shipment_id: extra.shipmentId || null,
+      payment_terms: extra.paymentTerms || "prepaid_100",
+      deposit_percent: extra.paymentTerms === "deposit_balance" ? Number(extra.depositPercent) || null : null,
+      net_days: extra.paymentTerms === "net_x" ? Number(extra.netDays) || null : null,
+      due_date: extra.dueDate || null,
     })
     .select()
     .single();
@@ -243,6 +252,10 @@ async function updatePurchaseOrder(poId, supplierId, lines, extra = {}) {
       supplier_id: supplierId, status: extra.status || "draft",
       currency: extra.currency || "USD", shipping_terms: extra.shippingTerms || null, notes: extra.notes || null,
       shipment_id: extra.shipmentId || null,
+      payment_terms: extra.paymentTerms || "prepaid_100",
+      deposit_percent: extra.paymentTerms === "deposit_balance" ? Number(extra.depositPercent) || null : null,
+      net_days: extra.paymentTerms === "net_x" ? Number(extra.netDays) || null : null,
+      due_date: extra.dueDate || null,
     })
     .eq("id", poId);
   if (error) throw error;
@@ -252,6 +265,18 @@ async function updatePurchaseOrder(poId, supplierId, lines, extra = {}) {
     lines.map((l) => ({ po_id: poId, item_id: l.itemId, qty: l.qty, unit_price: l.unitPrice }))
   );
   if (insertError) throw insertError;
+}
+
+// ---------- PO Payments ----------
+async function addPOPayment(poId, amount, paidDate, note) {
+  const { error } = await supabase.from("po_payments").insert({
+    po_id: poId, amount, paid_date: paidDate, note: note || null,
+  });
+  if (error) throw error;
+}
+async function deletePOPayment(id) {
+  const { error } = await supabase.from("po_payments").delete().eq("id", id);
+  if (error) throw error;
 }
 
 // ---------- Suppliers ----------
@@ -331,7 +356,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -352,6 +377,14 @@ const SHIPMENT_STATUSES = {
   in_transit: { label: "בדרך", tone: "sky" },
   planned: { label: "מתוכנן לחודש הבא", tone: "violet" },
 };
+const PAYMENT_TERMS = {
+  prepaid_100: { label: "100% מראש" },
+  deposit_balance: { label: "מקדמה + יתרה" },
+  net_x: { label: "שוטף + X ימים" },
+};
+const poTotalAmount = (po) => po.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+const poPaidAmount = (data, poId) => (data.poPayments || []).filter((p) => p.poId === poId).reduce((s, p) => s + p.amount, 0);
+const poBalance = (data, po) => poTotalAmount(po) - poPaidAmount(data, po.id);
 const TX_TYPES = {
   receive: { label: "קבלת סחורה מספק", icon: Download, color: "emerald" },
   transfer: { label: "העברה למחסן/רכב", icon: ArrowLeftRight, color: "sky" },
@@ -501,8 +534,69 @@ function Dashboard({ data, onExport }) {
   const lowStock = rows.filter((r) => r.low);
   const totalUnits = rows.reduce((s, r) => s + r.total, 0);
 
+  const now = new Date(new Date().toDateString());
+  const in7 = new Date(now); in7.setDate(in7.getDate() + 7);
+  const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
+
+  const cashflowAlerts = [];
+  data.purchaseOrders.forEach((po) => {
+    const total = poTotalAmount(po);
+    const balance = total - poPaidAmount(data, po.id);
+    if (balance <= 0.01) return;
+    const supplier = data.suppliers.find((s) => s.id === po.supplierId);
+    const sym = CURRENCY_SYMBOLS[po.currency] || po.currency;
+    const balanceLabel = `${sym}${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+    if (po.dueDate) {
+      const due = new Date(po.dueDate);
+      if (due < now) {
+        const daysOverdue = Math.round((now - due) / 86400000);
+        cashflowAlerts.push({ type: "overdue", po, supplier, text: `${supplier?.name || "ספק"} - עברו ${daysOverdue} ימים מיום היעד, יתרה לתשלום ${balanceLabel}` });
+      } else if (due <= in7) {
+        cashflowAlerts.push({ type: "due_week", po, supplier, text: `${supplier?.name || "ספק"} - תשלום ${balanceLabel} מגיע ב-${due.toLocaleDateString("he-IL")}` });
+      } else if (due <= in30) {
+        cashflowAlerts.push({ type: "due_month", po, supplier, text: `${supplier?.name || "ספק"} - תשלום ${balanceLabel} מגיע ב-${due.toLocaleDateString("he-IL")}` });
+      }
+    }
+    if (po.paymentTerms === "deposit_balance" && (po.status === "in_production" || po.status === "in_transit")) {
+      cashflowAlerts.push({ type: "shipping", po, supplier, text: `${supplier?.name || "ספק"} - הסחורה ${PO_STATUSES[po.status]?.label}, יתרה ${balanceLabel} ממתינה לשחרור` });
+    }
+  });
+  const alertOrder = { overdue: 0, shipping: 1, due_week: 2, due_month: 3 };
+  cashflowAlerts.sort((a, b) => alertOrder[a.type] - alertOrder[b.type]);
+  const alertMeta = {
+    overdue: { label: "פג תוקף - חובה לשלם", tone: "rose", icon: TriangleAlert },
+    due_week: { label: "לתשלום השבוע", tone: "amber", icon: Database },
+    due_month: { label: "לתשלום החודש", tone: "sky", icon: Database },
+    shipping: { label: "שחרור יתרה לפני משלוח", tone: "violet", icon: Ship },
+  };
+
   return (
     <div className="space-y-5">
+      {cashflowAlerts.length > 0 && (
+        <div className="bg-white rounded-2xl border overflow-hidden">
+          <div className="px-4 py-3 border-b flex items-center gap-2"><Database size={18} className="text-amber-600" /><h3 className="font-bold text-slate-800">מרכז התראות תזרים</h3></div>
+          <div className="divide-y">
+            {cashflowAlerts.map((a, i) => {
+              const meta = alertMeta[a.type];
+              const Icon = meta.icon;
+              return (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <div className={`p-2 rounded-xl bg-${meta.tone}-100 text-${meta.tone}-700 shrink-0`}><Icon size={16} /></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge tone={meta.tone}>{meta.label}</Badge>
+                      <span className="text-xs text-slate-400">{a.po.poNumber}</span>
+                    </div>
+                    <div className="text-sm text-slate-700 mt-0.5">{a.text}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {lowStock.length > 0 && (
         <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4">
           <div className="flex items-center gap-2 text-rose-700 font-bold mb-2">
@@ -1801,10 +1895,15 @@ function POsScreen({ data, refresh, onPrint }) {
   const [shipmentId, setShipmentId] = useState("");
   const [shippingTerms, setShippingTerms] = useState("");
   const [notes, setNotes] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("prepaid_100");
+  const [depositPercent, setDepositPercent] = useState("30");
+  const [netDays, setNetDays] = useState("60");
+  const [dueDate, setDueDate] = useState("");
   const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [statusBusyId, setStatusBusyId] = useState(null);
+  const [paymentsPO, setPaymentsPO] = useState(null);
 
   const selectedSupplier = data.suppliers.find((s) => s.id === supplierId);
   const currency = selectedSupplier?.currency || "USD";
@@ -1815,6 +1914,7 @@ function POsScreen({ data, refresh, onPrint }) {
     setEditingPOId(null);
     setSupplierId(data.suppliers[0]?.id || "");
     setStatus("draft"); setShipmentId(""); setShippingTerms(""); setNotes("");
+    setPaymentTerms("prepaid_100"); setDepositPercent("30"); setNetDays("60"); setDueDate("");
     setLines([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
     setError(""); setOpen(true);
   };
@@ -1822,6 +1922,10 @@ function POsScreen({ data, refresh, onPrint }) {
     setEditingPOId(po.id);
     setSupplierId(po.supplierId);
     setStatus(po.status); setShipmentId(po.shipmentId || ""); setShippingTerms(po.shippingTerms || ""); setNotes(po.notes || "");
+    setPaymentTerms(po.paymentTerms || "prepaid_100");
+    setDepositPercent(po.depositPercent != null ? String(po.depositPercent) : "30");
+    setNetDays(po.netDays != null ? String(po.netDays) : "60");
+    setDueDate(po.dueDate || "");
     setLines(
       po.lines.length > 0
         ? po.lines.map((l) => ({ id: Math.random().toString(36).slice(2), itemId: l.itemId, qty: String(l.qty), unitPrice: String(l.unitPrice) }))
@@ -1838,21 +1942,30 @@ function POsScreen({ data, refresh, onPrint }) {
   const lineTotal = (l) => (Number(l.qty) || 0) * (Number(l.unitPrice) || 0);
   const orderTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
 
+  const applyNetDaysToDueDate = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() + (Number(days) || 0));
+    setDueDate(d.toISOString().slice(0, 10));
+  };
+
   const submit = async () => {
     setError("");
     const valid = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
     if (!supplierId) { setError("יש לבחור ספק"); return; }
     if (valid.length === 0) { setError("יש להוסיף לפחות שורת פריט אחת"); return; }
+    if (paymentTerms === "deposit_balance" && (!depositPercent || Number(depositPercent) <= 0 || Number(depositPercent) >= 100)) { setError("יש להזין אחוז מקדמה תקין (בין 1 ל-99)"); return; }
+    if (paymentTerms === "net_x" && (!netDays || Number(netDays) <= 0)) { setError("יש להזין מספר ימי שוטף תקין"); return; }
     setBusy(true);
     try {
       const linesPayload = valid.map((l) => ({ itemId: l.itemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) }));
+      const extra = { status, currency, shippingTerms, notes, shipmentId, paymentTerms, depositPercent, netDays, dueDate };
       if (editingPOId) {
-        await api.updatePurchaseOrder(editingPOId, supplierId, linesPayload, { status, currency, shippingTerms, notes, shipmentId });
+        await api.updatePurchaseOrder(editingPOId, supplierId, linesPayload, extra);
         await refresh();
         setOpen(false);
         onPrint(editingPOId);
       } else {
-        const poId = await api.createPurchaseOrder(supplierId, linesPayload, { status, currency, shippingTerms, notes, shipmentId });
+        const poId = await api.createPurchaseOrder(supplierId, linesPayload, extra);
         await refresh();
         setOpen(false);
         onPrint(poId);
@@ -1866,27 +1979,38 @@ function POsScreen({ data, refresh, onPrint }) {
     catch (e) { alert(e.message); } finally { setStatusBusyId(null); }
   };
 
-  const poTotal = (po) => po.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-xl text-slate-800">הזמנות רכש (Purchase Orders)</h2><button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> PO חדש</button></div>
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">מכולה/משלוח</th><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">מכולה/משלוח</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">שולם</th><th className="px-4 py-2 font-medium">יתרה</th><th className="px-4 py-2 font-medium">תנאי תשלום</th><th className="px-4 py-2 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.purchaseOrders.map((po) => {
               const supplier = data.suppliers.find((s) => s.id === po.supplierId);
               const shipment = data.shipments.find((s) => s.id === po.shipmentId);
               const sym = CURRENCY_SYMBOLS[po.currency] || po.currency;
+              const total = poTotalAmount(po);
+              const paid = poPaidAmount(data, po.id);
+              const balance = total - paid;
+              const isOverdue = po.dueDate && balance > 0.01 && new Date(po.dueDate) < new Date(new Date().toDateString());
               return (
                 <tr key={po.id} className="border-t">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{po.poNumber}</td>
+                  <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap">{po.poNumber}</td>
                   <td className="px-4 py-2.5">{shipment ? <Badge tone="violet">{shipment.name}</Badge> : <span className="text-slate-300">-</span>}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{fmtDate(po.date)}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
-                  <td className="px-4 py-2.5">{po.lines.length}</td>
-                  <td className="px-4 py-2.5 font-bold">{sym}{poTotal(po).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
+                  <td className="px-4 py-2.5 font-bold whitespace-nowrap">{sym}{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-4 py-2.5 text-emerald-700 whitespace-nowrap">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className={`px-4 py-2.5 font-medium whitespace-nowrap ${balance > 0.01 ? (isOverdue ? "text-rose-600" : "text-amber-600") : "text-slate-300"}`}>
+                    {sym}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {isOverdue && <span className="block text-xs">פג תוקף!</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
+                    {PAYMENT_TERMS[po.paymentTerms]?.label}
+                    {po.paymentTerms === "deposit_balance" && po.depositPercent ? ` (${po.depositPercent}%)` : ""}
+                    {po.paymentTerms === "net_x" && po.netDays ? ` (${po.netDays} ימים)` : ""}
+                    {po.dueDate && <div className="text-xs">יעד: {new Date(po.dueDate).toLocaleDateString("he-IL")}</div>}
+                  </td>
                   <td className="px-4 py-2.5">
                     <select
                       className="text-xs rounded-lg border border-gray-300 px-2 py-1 bg-white"
@@ -1898,7 +2022,8 @@ function POsScreen({ data, refresh, onPrint }) {
                     </select>
                   </td>
                   <td className="px-4 py-2.5 text-left">
-                    <div className="flex items-center gap-3 justify-end">
+                    <div className="flex items-center gap-3 justify-end whitespace-nowrap">
+                      <button onClick={() => setPaymentsPO(po)} className="text-emerald-600 hover:underline font-medium flex items-center gap-1"><Database size={14} /> תשלומים</button>
                       <button onClick={() => openEditPO(po)} className="text-slate-500 hover:text-amber-600 font-medium flex items-center gap-1"><Pencil size={14} /> עריכה</button>
                       <button onClick={() => onPrint(po.id)} className="text-amber-600 hover:underline font-medium flex items-center gap-1"><Printer size={14} /> צפייה/הדפסה</button>
                     </div>
@@ -1906,7 +2031,7 @@ function POsScreen({ data, refresh, onPrint }) {
                 </tr>
               );
             })}
-            {data.purchaseOrders.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">עדיין לא נוצרו הזמנות רכש</td></tr>}
+            {data.purchaseOrders.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">עדיין לא נוצרו הזמנות רכש</td></tr>}
           </tbody>
         </table>
       </div>
@@ -1948,13 +2073,108 @@ function POsScreen({ data, refresh, onPrint }) {
             <span className="text-slate-500">סה"כ הזמנה</span>
             <span className="font-bold text-slate-800">{currencySymbol}{orderTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </div>
+
+          <div className="border-t pt-3 mb-1"><span className="text-sm font-bold text-slate-700">תנאי תשלום</span></div>
+          <Field label="סוג תנאי תשלום">
+            <select className={inputCls} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
+              {Object.entries(PAYMENT_TERMS).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+            </select>
+          </Field>
+          {paymentTerms === "deposit_balance" && (
+            <Field label="אחוז מקדמה חובה (%)">
+              <input type="number" min="1" max="99" className={inputCls} value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} />
+              {orderTotal > 0 && depositPercent && (
+                <div className="text-xs text-slate-400 mt-1">מקדמה: {currencySymbol}{(orderTotal * Number(depositPercent) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })} · יתרה: {currencySymbol}{(orderTotal * (1 - Number(depositPercent) / 100)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+              )}
+            </Field>
+          )}
+          {paymentTerms === "net_x" && (
+            <Field label="שוטף + כמה ימים">
+              <div className="flex gap-2">
+                <input type="number" min="1" className={inputCls} value={netDays} onChange={(e) => setNetDays(e.target.value)} />
+                <button type="button" onClick={() => applyNetDaysToDueDate(netDays)} className={btnGhost + " !py-2 !px-3 text-sm whitespace-nowrap"}>חשב תאריך יעד</button>
+              </div>
+            </Field>
+          )}
+          <Field label="תאריך יעד לתשלום (לא חובה)"><input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Field>
+
           <Field label="תנאי משלוח"><input className={inputCls} value={shippingTerms} onChange={(e) => setShippingTerms(e.target.value)} placeholder="לדוגמה: FOB Shanghai, 45 ימי אספקה" /></Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}{editingPOId ? "שמירת שינויים" : "יצירת הזמנה והפקת מסמך"}</button>
         </Modal>
       )}
+      {paymentsPO && <POPaymentsModal data={data} po={paymentsPO} refresh={refresh} onClose={() => setPaymentsPO(null)} />}
     </div>
+  );
+}
+
+function POPaymentsModal({ data, po, refresh, onClose }) {
+  const [amount, setAmount] = useState("");
+  const [paidDate, setPaidDate] = useState(new Date().toISOString().slice(0, 10));
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const sym = CURRENCY_SYMBOLS[po.currency] || po.currency;
+  const total = poTotalAmount(po);
+  const payments = (data.poPayments || []).filter((p) => p.poId === po.id).sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate));
+  const paid = payments.reduce((s, p) => s + p.amount, 0);
+  const balance = total - paid;
+  const depositAmount = po.paymentTerms === "deposit_balance" && po.depositPercent ? total * po.depositPercent / 100 : null;
+
+  const addPayment = async () => {
+    setError("");
+    if (!amount || Number(amount) <= 0) { setError("יש להזין סכום תקין"); return; }
+    setBusy(true);
+    try {
+      await api.addPOPayment(po.id, Number(amount), paidDate, note);
+      await refresh();
+      setAmount(""); setNote("");
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const removePayment = async (id) => {
+    if (!confirm("למחוק את רישום התשלום?")) return;
+    try { await api.deletePOPayment(id); await refresh(); } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <Modal title={`תשלומים - ${po.poNumber}`} onClose={onClose}>
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ הזמנה</div><div className="font-bold text-slate-800">{sym}{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-emerald-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שולם</div><div className="font-bold text-emerald-700">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-amber-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">יתרה</div><div className="font-bold text-amber-700">{sym}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+      </div>
+      {depositAmount != null && (
+        <div className="text-xs text-slate-500 mb-4 bg-sky-50 rounded-xl p-2.5">תנאי תשלום: מקדמה {po.depositPercent}% ({sym}{depositAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}) + יתרה {sym}{(total - depositAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+      )}
+
+      <div className="mb-4">
+        <div className="text-sm font-medium text-slate-600 mb-2">היסטוריית תשלומים</div>
+        {payments.length === 0 && <div className="text-sm text-slate-400 text-center py-3">עדיין לא נרשמו תשלומים</div>}
+        {payments.map((p) => (
+          <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
+            <div>
+              <div className="font-medium text-slate-800">{sym}{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+              <div className="text-xs text-slate-500">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
+            </div>
+            <button onClick={() => removePayment(p.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={15} /></button>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t pt-3">
+        <div className="text-sm font-bold text-slate-700 mb-2">רישום תשלום חדש</div>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Field label={`סכום (${sym})`}><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+          <Field label="תאריך תשלום"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
+        </div>
+        <Field label="הערה (לדוגמה: מקדמה 30%, יתרה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+        <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום תשלום</button>
+      </div>
+    </Modal>
   );
 }
 
