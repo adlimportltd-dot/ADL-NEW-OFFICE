@@ -242,6 +242,7 @@ const fmtDate = (iso) =>
   new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 const CATEGORIES = { device: "מכשירים", consumable: "נוזלים ומתכלים" };
+const PACKAGE_SIZES = ["25 ליטר", "5 ליטר", "1 ליטר", "0.5 ליטר", '250 מ"ל'];
 const TX_TYPES = {
   receive: { label: "קבלת סחורה מספק", icon: Download, color: "emerald" },
   transfer: { label: "העברה למחסן/רכב", icon: ArrowLeftRight, color: "sky" },
@@ -537,11 +538,27 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         <Modal title="הוספת פריט חדש" onClose={() => setOpen(false)}>
           <Field label="שם פריט"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           <Field label="קטגוריה">
-            <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            <select
+              className={inputCls}
+              value={form.category}
+              onChange={(e) => {
+                const category = e.target.value;
+                const unit = category === "consumable" && !PACKAGE_SIZES.includes(form.unit) ? PACKAGE_SIZES[2] : form.unit;
+                setForm({ ...form, category, unit });
+              }}
+            >
               <option value="device">מכשירים</option><option value="consumable">נוזלים ומתכלים</option>
             </select>
           </Field>
-          <Field label="יחידת מידה"><input className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
+          {form.category === "consumable" ? (
+            <Field label="גודל אריזה / נפח">
+              <select className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
+                {PACKAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </Field>
+          ) : (
+            <Field label="יחידת מידה"><input className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="יחידה" /></Field>
+          )}
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: e.target.value })} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} className={btnPrimary + " w-full"}>שמירת פריט</button>
@@ -552,11 +569,27 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         <Modal title="עריכת פריט" onClose={() => setEditItem(null)}>
           <Field label="שם פריט"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></Field>
           <Field label="קטגוריה">
-            <select className={inputCls} value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+            <select
+              className={inputCls}
+              value={editForm.category}
+              onChange={(e) => {
+                const category = e.target.value;
+                const unit = category === "consumable" && !PACKAGE_SIZES.includes(editForm.unit) ? PACKAGE_SIZES[2] : editForm.unit;
+                setEditForm({ ...editForm, category, unit });
+              }}
+            >
               <option value="device">מכשירים</option><option value="consumable">נוזלים ומתכלים</option>
             </select>
           </Field>
-          <Field label="יחידת מידה"><input className={inputCls} value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} /></Field>
+          {editForm.category === "consumable" ? (
+            <Field label="גודל אריזה / נפח">
+              <select className={inputCls} value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}>
+                {PACKAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </Field>
+          ) : (
+            <Field label="יחידת מידה"><input className={inputCls} value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} placeholder="יחידה" /></Field>
+          )}
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={editForm.minThreshold} onChange={(e) => setEditForm({ ...editForm, minThreshold: e.target.value })} /></Field>
           <Field label="עלות נחיתה ליח' (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={editForm.unitCost} onChange={(e) => setEditForm({ ...editForm, unitCost: e.target.value })} placeholder="לא הוגדר" /></Field>
           {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
