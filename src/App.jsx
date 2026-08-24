@@ -1146,7 +1146,7 @@ function AuditLog({ data }) {
 const DEFAULT_FX_RATES = { USD: 3.7, EUR: 4.0, GBP: 4.6, ILS: 1 };
 
 function LandedCostScreen({ data, refresh }) {
-  const [overhead, setOverhead] = useState({ shipping: "", customs: "", brokerage: "", inland: "", wireFee: "", fxFeeValue: "", fxFeeMode: "percent" });
+  const [overhead, setOverhead] = useState({ shipping: "", customs: "", brokerage: "", inland: "", wireFee: "", bankFee: "", creditCardFee: "", fxFeeValue: "", fxFeeMode: "percent" });
   const [method, setMethod] = useState("value");
   const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "", currency: "ILS" }]);
   const [busy, setBusy] = useState(false);
@@ -1189,7 +1189,7 @@ function LandedCostScreen({ data, refresh }) {
 
   const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
   const totalGoodsValue = validLines.reduce((s, l) => s + Number(l.qty) * priceILS(l), 0);
-  const fixedOverhead = ["shipping", "customs", "brokerage", "inland", "wireFee"].reduce((s, k) => s + (Number(overhead[k]) || 0), 0);
+  const fixedOverhead = ["shipping", "customs", "brokerage", "inland", "wireFee", "bankFee", "creditCardFee"].reduce((s, k) => s + (Number(overhead[k]) || 0), 0);
   const fxFeeAmount = overhead.fxFeeMode === "percent"
     ? totalGoodsValue * ((Number(overhead.fxFeeValue) || 0) / 100)
     : (Number(overhead.fxFeeValue) || 0);
@@ -1221,6 +1221,14 @@ function LandedCostScreen({ data, refresh }) {
     } catch (e) { alert(e.message); } finally { setBusy(false); }
   };
 
+  const currencyBreakdown = currenciesInUse.map((c) => {
+    const goodsInCurrency = validLines.filter((l) => (l.currency || "ILS") === c).reduce((s, l) => s + Number(l.qty) * Number(l.unitPrice), 0);
+    const rate = rateFor(c);
+    return { currency: c, goodsInCurrency, rate, convertedILS: goodsInCurrency * rate };
+  });
+  const totalPaymentFees = ["wireFee", "bankFee", "creditCardFee"].reduce((s, k) => s + (Number(overhead[k]) || 0), 0) + fxFeeAmount;
+  const totalPaidILS = totalGoodsValue + totalPaymentFees;
+
   return (
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-1 flex items-center gap-2"><Ship size={22} className="text-amber-600" /> מחשבון יבוא ועלויות נחיתה (Landed Cost)</h2>
@@ -1243,7 +1251,7 @@ function LandedCostScreen({ data, refresh }) {
       {currenciesInUse.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
           <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Calculator size={16} /> שערי המרה ל-₪</h3>
-          <p className="text-slate-500 text-sm mb-3">חלק מהפריטים שנטענו הם במטבע ספק שאינו ₪. עדכנו את השער הנוכחי כדי שהחישוב יהיה מדויק.</p>
+          <p className="text-slate-500 text-sm mb-3">חלק מהפריטים שנטענו הם במטבע ספק שאינו ₪. עדכנו את השער הנוכחי (השער היציג או השער בפועל שקיבלתם) כדי שהחישוב יהיה מדויק.</p>
           <div className="grid sm:grid-cols-3 gap-3">
             {currenciesInUse.map((c) => (
               <Field key={c} label={`1 ${c} = ? ₪`}>
@@ -1254,6 +1262,29 @@ function LandedCostScreen({ data, refresh }) {
         </div>
       )}
 
+      {(currencyBreakdown.length > 0 || totalPaymentFees > 0) && (
+        <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 mb-4">
+          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><Database size={16} /> סיכום תשלום בפועל (סחורה + עמלות)</h3>
+          {currencyBreakdown.map((cb) => (
+            <div key={cb.currency} className="flex items-center justify-between text-sm py-1 border-b border-sky-100 last:border-0">
+              <span className="text-slate-600">{cb.currency} {cb.goodsInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })} × שער {cb.rate}</span>
+              <span className="font-medium text-slate-800">₪{cb.convertedILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            </div>
+          ))}
+          {totalPaymentFees > 0 && (
+            <div className="flex items-center justify-between text-sm py-1 border-b border-sky-100">
+              <span className="text-slate-600">סה"כ עמלות (SWIFT + בנק + אשראי + מט"ח)</span>
+              <span className="font-medium text-slate-800">₪{totalPaymentFees.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-2 mt-1">
+            <span className="font-bold text-slate-800">סה"כ בפועל בש"ח (סחורה + עמלות)</span>
+            <span className="font-bold text-sky-700 text-lg">₪{totalPaidILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">הסכום הזה, יחד עם עלויות ההובלה והמכס למטה, הוא הבסיס שמתחלק באופן יחסי בין הפריטים בטבלת התוצאה.</p>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-2 gap-4 mb-4">
         <div className="bg-white rounded-2xl border p-4">
           <h3 className="font-bold text-slate-800 mb-3">עלויות המשלוח (₪)</h3>
@@ -1261,8 +1292,12 @@ function LandedCostScreen({ data, refresh }) {
           <Field label="מכס"><input type="number" min="0" className={inputCls} value={overhead.customs} onChange={(e) => setOverhead({ ...overhead, customs: e.target.value })} /></Field>
           <Field label="עמילות מכס"><input type="number" min="0" className={inputCls} value={overhead.brokerage} onChange={(e) => setOverhead({ ...overhead, brokerage: e.target.value })} /></Field>
           <Field label="הובלה יבשתית"><input type="number" min="0" className={inputCls} value={overhead.inland} onChange={(e) => setOverhead({ ...overhead, inland: e.target.value })} /></Field>
-          <Field label="דמי העברה בנקאית (Wire / SWIFT)"><input type="number" min="0" className={inputCls} value={overhead.wireFee} onChange={(e) => setOverhead({ ...overhead, wireFee: e.target.value })} /></Field>
-          <Field label='עמלות מט"ח'>
+
+          <h3 className="font-bold text-slate-800 mb-3 mt-5 pt-4 border-t">עמלות תשלום והמרת מטבע (₪)</h3>
+          <Field label="עמלת SWIFT / העברה בנקאית בינלאומית"><input type="number" min="0" className={inputCls} value={overhead.wireFee} onChange={(e) => setOverhead({ ...overhead, wireFee: e.target.value })} /></Field>
+          <Field label="עמלת המרה בבנק"><input type="number" min="0" className={inputCls} value={overhead.bankFee} onChange={(e) => setOverhead({ ...overhead, bankFee: e.target.value })} /></Field>
+          <Field label="עמלת כרטיס אשראי"><input type="number" min="0" className={inputCls} value={overhead.creditCardFee} onChange={(e) => setOverhead({ ...overhead, creditCardFee: e.target.value })} /></Field>
+          <Field label='עמלת מט"ח כללית (על שווי הסחורה)'>
             <div className="flex gap-2">
               <input type="number" min="0" step="0.01" className={inputCls} value={overhead.fxFeeValue} onChange={(e) => setOverhead({ ...overhead, fxFeeValue: e.target.value })} placeholder={overhead.fxFeeMode === "percent" ? "לדוגמה: 1.5" : "לדוגמה: 350"} />
               <div className="flex shrink-0 rounded-xl border border-gray-300 overflow-hidden">
@@ -1274,7 +1309,7 @@ function LandedCostScreen({ data, refresh }) {
               <div className="text-xs text-slate-400 mt-1">= ₪{fxFeeAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} על שווי סחורה של ₪{totalGoodsValue.toLocaleString()}</div>
             )}
           </Field>
-          <div className="border-t pt-3 mt-1 flex items-center justify-between"><span className="text-slate-600 font-medium">סה"כ עלויות משלוח</span><span className="font-bold text-slate-800">₪{totalOverhead.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+          <div className="border-t pt-3 mt-1 flex items-center justify-between"><span className="text-slate-600 font-medium">סה"כ עלויות משלוח + עמלות</span><span className="font-bold text-slate-800">₪{totalOverhead.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
         </div>
         <div className="bg-white rounded-2xl border p-4">
           <h3 className="font-bold text-slate-800 mb-3">שיטת חלוקת העלויות</h3>
