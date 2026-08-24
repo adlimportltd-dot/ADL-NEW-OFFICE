@@ -21,6 +21,7 @@ const mapTransaction = (r) => ({
   id: r.id, type: r.type, itemId: r.item_id, qty: Number(r.qty),
   fromLocationId: r.from_location_id, toLocationId: r.to_location_id,
   customerId: r.customer_id, condition: r.condition, note: r.note,
+  unitPrice: r.unit_price !== null && r.unit_price !== undefined ? Number(r.unit_price) : null,
   date: r.created_at,
 });
 const mapSupplier = (r) => ({ id: r.id, name: r.name, country: r.country, contact: r.contact, phone: r.phone, email: r.email });
@@ -170,6 +171,7 @@ async function insertTransaction(tx) {
     customer_id: tx.customerId || null,
     condition: tx.condition || null,
     note: tx.note || null,
+    unit_price: tx.unitPrice !== undefined && tx.unitPrice !== null && tx.unitPrice !== "" ? Number(tx.unitPrice) : null,
   });
   if (error) throw error;
 }
@@ -740,6 +742,11 @@ function CustomerFile({ data, customerId, onBack }) {
   const history = data.transactions.filter((t) => t.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
   if (!customer) return null;
 
+  const purchases = history.filter((t) => t.type === "install");
+  const grandTotal = purchases.reduce((s, t) => s + (t.unitPrice != null ? t.unitPrice * t.qty : 0), 0);
+  const deviceCount = purchases.filter((t) => data.items.find((i) => i.id === t.itemId)?.category === "device").reduce((s, t) => s + t.qty, 0);
+  const consumableCount = purchases.filter((t) => data.items.find((i) => i.id === t.itemId)?.category === "consumable").reduce((s, t) => s + t.qty, 0);
+
   return (
     <div>
       <button onClick={onBack} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת לקוחות</button>
@@ -748,30 +755,52 @@ function CustomerFile({ data, customerId, onBack }) {
         <p className="text-slate-500 mt-1">{customer.address}</p>
         <p className="text-slate-500">{customer.contact}</p>
       </div>
-      <h3 className="font-bold text-slate-800 mb-2">היסטוריית התקנות וציוד</h3>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">סה"כ שולם</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">מכשירים שנרכשו</div><div className="text-2xl font-bold text-slate-800">{deviceCount}</div></div>
+        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">תמציות שנרכשו</div><div className="text-2xl font-bold text-slate-800">{consumableCount}</div></div>
+      </div>
+
+      <h3 className="font-bold text-slate-800 mb-2">היסטוריית הזמנות ורכישות</h3>
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">פריט</th>
-              <th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">סוג</th><th className="px-4 py-2 font-medium">הערה</th>
+              <th className="px-4 py-2 font-medium">קטגוריה</th><th className="px-4 py-2 font-medium">יחידה / גודל</th>
+              <th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">מחיר ליח'</th>
+              <th className="px-4 py-2 font-medium">סה"כ שורה</th><th className="px-4 py-2 font-medium">סוג</th><th className="px-4 py-2 font-medium">הערה</th>
             </tr>
           </thead>
           <tbody>
             {history.map((t) => {
               const item = data.items.find((i) => i.id === t.itemId);
+              const lineTotal = t.unitPrice != null ? t.unitPrice * t.qty : null;
               return (
                 <tr key={t.id} className="border-t">
-                  <td className="px-4 py-2.5 text-slate-500">{fmtDate(t.date)}</td>
+                  <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
                   <td className="px-4 py-2.5 font-medium text-slate-800">{item?.name || "-"}</td>
+                  <td className="px-4 py-2.5">{item ? <Badge tone={item.category === "device" ? "sky" : "violet"}>{CATEGORIES[item.category]}</Badge> : "-"}</td>
+                  <td className="px-4 py-2.5 text-slate-500">{item?.unit || "-"}</td>
                   <td className="px-4 py-2.5">{t.qty}</td>
+                  <td className="px-4 py-2.5">{t.unitPrice != null ? `₪${t.unitPrice.toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
+                  <td className="px-4 py-2.5 font-bold">{lineTotal != null ? `₪${lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="text-slate-300">-</span>}</td>
                   <td className="px-4 py-2.5"><Badge tone={TX_TYPES[t.type]?.color}>{TX_TYPES[t.type]?.label}</Badge></td>
                   <td className="px-4 py-2.5 text-slate-500">{t.note || "-"}</td>
                 </tr>
               );
             })}
-            {history.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">אין היסטוריה עדיין ללקוח זה</td></tr>}
+            {history.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">אין היסטוריה עדיין ללקוח זה</td></tr>}
           </tbody>
+          {purchases.length > 0 && (
+            <tfoot>
+              <tr className="border-t bg-gray-50">
+                <td colSpan={6} className="px-4 py-2.5 text-left font-bold text-slate-700">סה"כ שולם על ידי הלקוח</td>
+                <td colSpan={3} className="px-4 py-2.5 font-bold text-amber-700">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
@@ -781,7 +810,7 @@ function CustomerFile({ data, customerId, onBack }) {
 // ==================== Transaction ====================
 function TransactionScreen({ data, refresh, quickTx }) {
   const [type, setType] = useState(null);
-  const [form, setForm] = useState({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "" });
+  const [form, setForm] = useState({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "" });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
@@ -789,11 +818,11 @@ function TransactionScreen({ data, refresh, quickTx }) {
   const warehouse = data.locations.find((l) => l.type === "warehouse");
   const vehicles = data.locations.filter((l) => l.type === "vehicle");
 
-  const resetForm = () => setForm({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "" });
+  const resetForm = () => setForm({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "" });
 
   const chooseType = (t) => {
     setType(t); setError(""); setSuccess("");
-    const base = { itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "" };
+    const base = { itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "" };
     if (t === "receive") base.toLocationId = warehouse?.id || "";
     if (t === "transfer") base.fromLocationId = warehouse?.id || "";
     setForm(base);
@@ -823,6 +852,7 @@ function TransactionScreen({ data, refresh, quickTx }) {
       if (!form.customerId) { setError("יש לבחור לקוח"); return; }
       const avail = stockOf(form.itemId, form.fromLocationId);
       if (avail < qty) { setError(`אין מספיק מלאי ברכב (זמין: ${avail})`); return; }
+      if (form.unitPrice === "" || Number(form.unitPrice) < 0) { setError("יש להזין מחיר ליחידה שנגבה מהלקוח"); return; }
     }
     if (type === "return" && !form.toLocationId) { setError("יש לבחור מיקום יעד להחזרה"); return; }
     if (type === "writeoff") {
@@ -840,6 +870,7 @@ function TransactionScreen({ data, refresh, quickTx }) {
         customerId: form.customerId || null,
         condition: type === "return" ? form.condition : null,
         note: form.note || "",
+        unitPrice: type === "install" ? form.unitPrice : null,
       });
       await refresh();
       setSuccess("התנועה נרשמה בהצלחה");
@@ -923,6 +954,15 @@ function TransactionScreen({ data, refresh, quickTx }) {
               <option value="">בחר לקוח...</option>
               {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+          </Field>
+        )}
+
+        {type === "install" && (
+          <Field label="מחיר ליחידה שנגבה מהלקוח (₪)">
+            <input type="number" min="0" step="0.01" className={inputCls} value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} />
+            {form.qty && form.unitPrice !== "" && (
+              <div className="text-xs text-slate-400 mt-1">סה"כ להזמנה: ₪{(Number(form.qty) * Number(form.unitPrice)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+            )}
           </Field>
         )}
 
