@@ -288,6 +288,24 @@ async function insertTransaction(tx) {
   if (error) throw error;
 }
 
+// ---------- Repackaging (המרת אריזות / מזיגה) ----------
+async function insertRepackLine(itemId, qty, direction, locationId, note) {
+  const { error } = await supabase.from("transactions").insert({
+    type: "repack", item_id: itemId, qty, note: note || null,
+    from_location_id: direction === "consume" ? locationId : null,
+    to_location_id: direction === "produce" ? locationId : null,
+  });
+  if (error) throw error;
+}
+async function performRepackaging(warehouseId, consumedLines, producedLines, batchTag) {
+  for (const line of consumedLines) {
+    await insertRepackLine(line.itemId, line.qty, "consume", warehouseId, `${batchTag} - נצרך: ${line.label}`);
+  }
+  for (const line of producedLines) {
+    await insertRepackLine(line.itemId, line.qty, "produce", warehouseId, `${batchTag} - הופק: ${line.label}`);
+  }
+}
+
 // ---------- Realtime ----------
 // מאזין לשינויים במלאי ובתנועות מכל משתמש אחר, כדי לרענן את הדשבורד בזמן אמת
 function subscribeToChanges(onChange) {
@@ -484,7 +502,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -547,6 +565,9 @@ const TX_TYPES = {
   return: { label: "החזרה מלקוח", icon: CircleCheck, color: "violet" },
   writeoff: { label: "פחת / גריעה", icon: Trash2, color: "rose" },
 };
+// לתצוגה בלבד ביומן האירועים - repack לא מוצג בלוח בחירת סוג התנועה
+// כי הוא דורש מסך ייעודי משלו (כמה פריטים בו-זמנית), לא טופס פריט בודד
+const AUDIT_TX_LABELS = { ...TX_TYPES, repack: { label: "המרת אריזות / מזיגה", color: "violet" } };
 
 function Badge({ children, tone = "gray" }) {
   const tones = {
@@ -895,11 +916,18 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   });
   const fragranceGroupList = Object.values(fragranceGroups).sort((a, b) => a.name.localeCompare(b.name, "he"));
 
+  const [repackFor, setRepackFor] = useState(null); // fragrance name, or "" for open-picker mode
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-xl text-slate-800">פריטים</h2>
-        {isAdmin && <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> פריט חדש</button>}
+        <div className="flex items-center gap-2">
+          {isAdmin && fragranceGroupList.length > 0 && (
+            <button onClick={() => setRepackFor("")} className={btnGhost + " flex items-center gap-1.5 !py-2"}><Calculator size={16} /> המרת אריזות / מזיגה</button>
+          )}
+          {isAdmin && <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> פריט חדש</button>}
+        </div>
       </div>
 
       {fragranceGroupList.length > 0 && (
@@ -920,6 +948,9 @@ function ItemsScreen({ data, refresh, isAdmin }) {
                     </div>
                   ))}
                 </div>
+                {isAdmin && (
+                  <button onClick={() => setRepackFor(g.name)} className="text-xs text-amber-600 hover:underline font-medium mt-2 flex items-center gap-1"><Calculator size={12} /> המרת אריזות לריח זה</button>
+                )}
               </div>
             ))}
           </div>
@@ -1038,7 +1069,131 @@ function ItemsScreen({ data, refresh, isAdmin }) {
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
+      {repackFor !== null && (
+        <RepackagingModal
+          data={data}
+          refresh={refresh}
+          fragranceGroupList={fragranceGroupList}
+          initialFragrance={repackFor}
+          onClose={() => setRepackFor(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance, onClose }) {
+  const warehouse = data.locations.find((l) => l.type === "warehouse");
+  const [fragranceName, setFragranceName] = useState(initialFragrance || "");
+  const [consumedQtys, setConsumedQtys] = useState({}); // itemId -> qty string
+  const [producedQtys, setProducedQtys] = useState({}); // unit -> qty string
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const group = fragranceGroupList.find((g) => g.name === fragranceName);
+  const existingUnits = group ? group.sizes.map((s) => s.unit) : [];
+
+  const consumedLines = group
+    ? group.sizes
+        .filter((s) => Number(consumedQtys[s.itemId]) > 0)
+        .map((s) => ({ itemId: s.itemId, qty: Number(consumedQtys[s.itemId]), unit: s.unit, available: s.qty }))
+    : [];
+  const producedLines = PACKAGE_SIZES
+    .filter((size) => Number(producedQtys[size]) > 0)
+    .map((size) => {
+      const existing = group?.sizes.find((s) => s.unit === size);
+      return { unit: size, qty: Number(producedQtys[size]), existingItemId: existing?.itemId || null };
+    });
+
+  const consumedVolume = consumedLines.reduce((s, l) => s + l.qty * (PACKAGE_SIZE_VOLUMES[l.unit] || 0), 0);
+  const producedVolume = producedLines.reduce((s, l) => s + l.qty * (PACKAGE_SIZE_VOLUMES[l.unit] || 0), 0);
+  const volumeDiff = producedVolume - consumedVolume;
+
+  const overStock = consumedLines.find((l) => l.qty > l.available);
+
+  const submit = async () => {
+    setError("");
+    if (!fragranceName) { setError("יש לבחור ריח"); return; }
+    if (!warehouse) { setError("לא נמצא מחסן מרכזי במערכת"); return; }
+    if (consumedLines.length === 0) { setError("יש לבחור לפחות אריזה אחת לגריעה"); return; }
+    if (producedLines.length === 0) { setError("יש לבחור לפחות אריזה אחת להוספה"); return; }
+    if (overStock) { setError(`אין מספיק מלאי בגודל ${overStock.unit} (זמין: ${overStock.available})`); return; }
+    setBusy(true);
+    try {
+      const batchTag = `המרה - ${fragranceName} (${new Date().toLocaleDateString("he-IL")})`;
+      const resolvedProduced = [];
+      for (const line of producedLines) {
+        let itemId = line.existingItemId;
+        if (!itemId) {
+          itemId = await api.addItem({
+            name: `תמצית ריח - ${fragranceName} (${line.unit})`,
+            category: "consumable", unit: line.unit, minThreshold: 0, fragranceGroup: fragranceName,
+          });
+        }
+        resolvedProduced.push({ itemId, qty: line.qty, label: line.unit });
+      }
+      const resolvedConsumed = consumedLines.map((l) => ({ itemId: l.itemId, qty: l.qty, label: l.unit }));
+      await api.performRepackaging(warehouse.id, resolvedConsumed, resolvedProduced, note ? `${batchTag} - ${note}` : batchTag);
+      await refresh();
+      onClose();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title="המרת אריזות / מזיגה למלאי" onClose={onClose}>
+      <Field label="ריח">
+        <select className={inputCls} value={fragranceName} onChange={(e) => { setFragranceName(e.target.value); setConsumedQtys({}); setProducedQtys({}); }}>
+          <option value="">בחר ריח...</option>
+          {fragranceGroupList.map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
+        </select>
+      </Field>
+
+      {group && (
+        <>
+          <div className="mb-3">
+            <div className="text-sm font-bold text-slate-700 mb-2">אריזות לגריעה מהמחסן</div>
+            <div className="space-y-2">
+              {group.sizes.map((s) => (
+                <div key={s.itemId} className="flex items-center gap-2">
+                  <span className="text-sm text-slate-600 w-28 shrink-0">{s.unit}</span>
+                  <span className="text-xs text-slate-400 w-20 shrink-0">זמין: {s.qty}</span>
+                  <input type="number" min="0" max={s.qty} className={inputCls + " !py-1.5"} value={consumedQtys[s.itemId] || ""} onChange={(e) => setConsumedQtys({ ...consumedQtys, [s.itemId]: e.target.value })} placeholder="0" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <div className="text-sm font-bold text-slate-700 mb-2">אריזות להוספה למלאי</div>
+            <div className="space-y-2">
+              {PACKAGE_SIZES.map((size) => (
+                <div key={size} className="flex items-center gap-2">
+                  <span className="text-sm text-slate-600 w-28 shrink-0">{size}{!existingUnits.includes(size) && <span className="text-xs text-amber-500"> (חדש)</span>}</span>
+                  <input type="number" min="0" className={inputCls + " !py-1.5"} value={producedQtys[size] || ""} onChange={(e) => setProducedQtys({ ...producedQtys, [size]: e.target.value })} placeholder="0" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {(consumedLines.length > 0 || producedLines.length > 0) && (
+            <div className="bg-gray-50 rounded-xl p-3 mb-3 text-sm">
+              <div className="flex items-center justify-between"><span className="text-slate-500">נגרע</span><span className="font-medium">{consumedVolume.toLocaleString()} ל'/ק"ג</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-500">מופק</span><span className="font-medium">{producedVolume.toLocaleString()} ל'/ק"ג</span></div>
+              <div className="flex items-center justify-between border-t mt-1 pt-1">
+                <span className="text-slate-500">הפרש (איבוד/רווח מזיגה)</span>
+                <span className={`font-bold ${Math.abs(volumeDiff) > consumedVolume * 0.05 ? "text-amber-600" : "text-slate-700"}`}>{volumeDiff > 0 ? "+" : ""}{volumeDiff.toLocaleString(undefined, { maximumFractionDigits: 2 })} ל'/ק"ג</span>
+              </div>
+            </div>
+          )}
+
+          <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder="לדוגמה: מזיגה ידנית, אובדן טבעי" /></Field>
+        </>
+      )}
+
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={submit} disabled={busy || !group} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}ביצוע ההמרה</button>
+    </Modal>
   );
 }
 
@@ -1522,7 +1677,7 @@ function AuditLog({ data }) {
         <h2 className="font-bold text-xl text-slate-800">יומן אירועים (Audit Log)</h2>
         <select className={inputCls + " w-auto"} value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">כל התנועות</option>
-          {Object.entries(TX_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          {Object.entries(AUDIT_TX_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
       </div>
       <div className="bg-white rounded-2xl border overflow-hidden overflow-x-auto">
@@ -1541,7 +1696,7 @@ function AuditLog({ data }) {
               return (
                 <tr key={t.id} className="border-t">
                   <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
-                  <td className="px-4 py-2.5"><Badge tone={TX_TYPES[t.type]?.color}>{TX_TYPES[t.type]?.label}</Badge></td>
+                  <td className="px-4 py-2.5"><Badge tone={AUDIT_TX_LABELS[t.type]?.color}>{AUDIT_TX_LABELS[t.type]?.label}</Badge></td>
                   <td className="px-4 py-2.5 font-medium text-slate-800">{item?.name || "-"}</td>
                   <td className="px-4 py-2.5">{t.qty}</td>
                   <td className="px-4 py-2.5 text-slate-500">{t.fromLocationId ? locName(t.fromLocationId) : "-"}</td>
