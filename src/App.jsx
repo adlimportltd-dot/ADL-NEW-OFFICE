@@ -931,10 +931,10 @@ function TransactionScreen({ data, refresh, quickTx }) {
         )}
 
         {(type === "install" || type === "writeoff") && (
-          <Field label={type === "install" ? "מרכב טכנאי" : "ממיקום"}>
+          <Field label={type === "install" ? "ממיקום (מחסן או רכב)" : "ממיקום"}>
             <select className={inputCls} value={form.fromLocationId} onChange={(e) => setForm({ ...form, fromLocationId: e.target.value })}>
               <option value="">בחר מיקום...</option>
-              {(type === "install" ? vehicles : data.locations).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              {(type === "install" ? [...(warehouse ? [warehouse] : []), ...vehicles] : data.locations).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </Field>
         )}
