@@ -188,6 +188,13 @@ async function addLocation(location) {
   const { error } = await supabase.from("locations").insert({ name: location.name, type: location.type });
   if (error) throw error;
 }
+async function updateLocation(id, patch) {
+  const payload = {};
+  if (patch.name !== undefined) payload.name = patch.name;
+  if (patch.type !== undefined) payload.type = patch.type;
+  const { error } = await supabase.from("locations").update(payload).eq("id", id);
+  if (error) throw error;
+}
 
 // ---------- Customers ----------
 async function addCustomer(customer) {
@@ -476,7 +483,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, updateCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -970,15 +977,27 @@ function LocationsScreen({ data, refresh, isAdmin }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", type: "vehicle" });
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
+  const [editLoc, setEditLoc] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editError, setEditError] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+
+  const openNew = () => { setForm({ name: "", type: "vehicle" }); setError(""); setOpen(true); };
   const submit = async () => {
-    if (!form.name.trim()) return;
-    try {
-      await api.addLocation(form);
-      setForm({ name: "", type: "vehicle" });
-      setOpen(false);
-      await refresh();
-    } catch (e) { setError(e.message); }
+    if (!form.name.trim()) { setError("שם המיקום הוא שדה חובה"); return; }
+    setBusy(true);
+    try { await api.addLocation(form); await refresh(); setOpen(false); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const openEdit = (loc) => { setEditLoc(loc); setEditForm({ name: loc.name, type: loc.type }); setEditError(""); };
+  const saveEdit = async () => {
+    if (!editForm.name.trim()) { setEditError("שם המיקום הוא שדה חובה"); return; }
+    setEditBusy(true);
+    try { await api.updateLocation(editLoc.id, editForm); await refresh(); setEditLoc(null); }
+    catch (e) { setEditError(e.message); } finally { setEditBusy(false); }
   };
 
   const stockAt = (locId) => data.items.reduce((sum, it) => sum + (data.stock[`${it.id}|${locId}`] || 0), 0);
@@ -987,11 +1006,11 @@ function LocationsScreen({ data, refresh, isAdmin }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-xl text-slate-800">מיקומים</h2>
-        {isAdmin && <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> מיקום חדש</button>}
+        {isAdmin && <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> מיקום חדש</button>}
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {data.locations.map((loc) => (
-          <div key={loc.id} className="bg-white rounded-2xl border p-4 flex items-center gap-3">
+          <div key={loc.id} className={`bg-white rounded-2xl border p-4 flex items-center gap-3 ${isAdmin ? "cursor-pointer hover:shadow-md transition" : ""}`} onClick={() => isAdmin && openEdit(loc)}>
             <div className={`p-2.5 rounded-xl ${loc.type === "warehouse" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"}`}>
               {loc.type === "warehouse" ? <Building2 size={20} /> : <Truck size={20} />}
             </div>
@@ -999,6 +1018,7 @@ function LocationsScreen({ data, refresh, isAdmin }) {
               <div className="font-bold text-slate-800">{loc.name}</div>
               <div className="text-sm text-slate-500">{loc.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {stockAt(loc.id)} יח' סה"כ</div>
             </div>
+            {isAdmin && <Pencil size={16} className="text-gray-300" />}
           </div>
         ))}
       </div>
@@ -1012,7 +1032,20 @@ function LocationsScreen({ data, refresh, isAdmin }) {
           </Field>
           <Field label="שם המיקום"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
-          <button onClick={submit} className={btnPrimary + " w-full"}>שמירת מיקום</button>
+          <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת מיקום</button>
+        </Modal>
+      )}
+
+      {editLoc && (
+        <Modal title="עריכת מיקום" onClose={() => setEditLoc(null)}>
+          <Field label="סוג מיקום">
+            <select className={inputCls} value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
+              <option value="vehicle">רכב טכנאי</option><option value="warehouse">מחסן</option>
+            </select>
+          </Field>
+          <Field label="שם המיקום"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} autoFocus /></Field>
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
     </div>
