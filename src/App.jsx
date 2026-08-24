@@ -14,7 +14,7 @@ const mapItem = (r) => ({
   id: r.id, name: r.name, category: r.category, model: r.model,
   color: r.color, unit: r.unit, minThreshold: Number(r.min_threshold),
   unitCost: r.unit_cost !== null && r.unit_cost !== undefined ? Number(r.unit_cost) : null,
-  supplierSku: r.supplier_sku || "",
+  supplierSku: r.supplier_sku || "", fragranceGroup: r.fragrance_group || "",
 });
 const mapLocation = (r) => ({ id: r.id, name: r.name, type: r.type });
 const mapCustomer = (r) => ({
@@ -155,7 +155,7 @@ async function fetchAllData() {
 async function addItem(item) {
   const { data, error } = await supabase.from("items").insert({
     name: item.name, category: item.category, unit: item.unit, min_threshold: item.minThreshold,
-    supplier_sku: item.supplierSku || null,
+    supplier_sku: item.supplierSku || null, fragrance_group: item.fragranceGroup || null,
   }).select().single();
   if (error) throw error;
   return data.id;
@@ -168,6 +168,7 @@ async function updateItem(id, patch) {
   if (patch.minThreshold !== undefined) payload.min_threshold = patch.minThreshold;
   if (patch.unitCost !== undefined) payload.unit_cost = patch.unitCost;
   if (patch.supplierSku !== undefined) payload.supplier_sku = patch.supplierSku;
+  if (patch.fragranceGroup !== undefined) payload.fragrance_group = patch.fragranceGroup || null;
   const { error } = await supabase.from("items").update(payload).eq("id", id);
   if (error) throw error;
 }
@@ -491,6 +492,11 @@ const fmtDate = (iso) =>
 
 const CATEGORIES = { device: "מכשירים", consumable: "נוזלים ומתכלים" };
 const PACKAGE_SIZES = ["25 ליטר", "5 ליטר", "1 ליטר", "0.5 ליטר", '250 מ"ל'];
+const PACKAGE_SIZE_VOLUMES = { "25 ליטר": 25, "5 ליטר": 5, "1 ליטר": 1, "0.5 ליטר": 0.5, '250 מ"ל': 0.25 };
+const guessFragranceName = (item) => {
+  if (item.fragranceGroup) return item.fragranceGroup;
+  return item.name.replace(/^תמצית ריח - /, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+};
 const CURRENCIES = ["USD", "EUR", "ILS", "GBP"];
 const CURRENCY_SYMBOLS = { USD: "$", EUR: "€", ILS: "₪", GBP: "£" };
 const PO_STATUSES = {
@@ -804,7 +810,7 @@ function Dashboard({ data, onExport }) {
 // ==================== Items ====================
 function ItemsScreen({ data, refresh, isAdmin }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", category: "device", unit: "", minThreshold: 0, quantity: 0, supplierSku: "" });
+  const [form, setForm] = useState({ name: "", fragranceName: "", category: "device", unit: "", minThreshold: 0, quantity: 0, supplierSku: "" });
   const [error, setError] = useState("");
 
   const [editItem, setEditItem] = useState(null);
@@ -815,14 +821,22 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   const warehouse = data.locations.find((l) => l.type === "warehouse");
 
   const submit = async () => {
-    if (!form.name.trim() || !form.unit.trim()) return;
+    const isConsumable = form.category === "consumable";
+    if (isConsumable && !form.fragranceName.trim()) { setError("שם הריח הוא שדה חובה"); return; }
+    if (!isConsumable && !form.name.trim()) { setError("שם הפריט הוא שדה חובה"); return; }
+    if (!form.unit.trim()) { setError("יחידת מידה / גודל אריזה הוא שדה חובה"); return; }
+    setError("");
     try {
-      const newItemId = await api.addItem({ ...form, minThreshold: Number(form.minThreshold) || 0 });
+      const finalName = isConsumable ? `תמצית ריח - ${form.fragranceName.trim()} (${form.unit})` : form.name.trim();
+      const newItemId = await api.addItem({
+        name: finalName, category: form.category, unit: form.unit, minThreshold: Number(form.minThreshold) || 0,
+        supplierSku: form.supplierSku, fragranceGroup: isConsumable ? form.fragranceName.trim() : null,
+      });
       const qty = Number(form.quantity) || 0;
       if (qty > 0 && warehouse) {
         await api.setItemStock(newItemId, warehouse.id, qty);
       }
-      setForm({ name: "", category: "device", unit: "", minThreshold: 0, quantity: 0, supplierSku: "" });
+      setForm({ name: "", fragranceName: "", category: "device", unit: "", minThreshold: 0, quantity: 0, supplierSku: "" });
       setOpen(false);
       await refresh();
     } catch (e) { setError(e.message); }
@@ -835,21 +849,30 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   const openEdit = (it) => {
     const currentQty = warehouse ? (data.stock[`${it.id}|${warehouse.id}`] || 0) : 0;
     setEditItem(it);
-    setEditForm({ name: it.name, category: it.category, unit: it.unit, minThreshold: it.minThreshold, unitCost: it.unitCost ?? "", quantity: currentQty, supplierSku: it.supplierSku || "" });
+    setEditForm({
+      name: it.name, fragranceName: it.category === "consumable" ? guessFragranceName(it) : "",
+      category: it.category, unit: it.unit, minThreshold: it.minThreshold, unitCost: it.unitCost ?? "",
+      quantity: currentQty, supplierSku: it.supplierSku || "",
+    });
     setEditError("");
   };
 
   const saveEdit = async () => {
-    if (!editForm.name.trim() || !editForm.unit.trim()) { setEditError("שם פריט ויחידת מידה הם שדות חובה"); return; }
+    const isConsumable = editForm.category === "consumable";
+    if (isConsumable && !editForm.fragranceName.trim()) { setEditError("שם הריח הוא שדה חובה"); return; }
+    if (!isConsumable && !editForm.name.trim()) { setEditError("שם הפריט הוא שדה חובה"); return; }
+    if (!editForm.unit.trim()) { setEditError("יחידת מידה / גודל אריזה הוא שדה חובה"); return; }
     setEditBusy(true);
     try {
+      const finalName = isConsumable ? `תמצית ריח - ${editForm.fragranceName.trim()} (${editForm.unit})` : editForm.name.trim();
       await api.updateItem(editItem.id, {
-        name: editForm.name.trim(),
+        name: finalName,
         category: editForm.category,
         unit: editForm.unit.trim(),
         minThreshold: Number(editForm.minThreshold) || 0,
         unitCost: editForm.unitCost === "" ? null : Number(editForm.unitCost),
         supplierSku: editForm.supplierSku.trim(),
+        fragranceGroup: isConsumable ? editForm.fragranceName.trim() : null,
       });
       if (warehouse) {
         await api.setItemStock(editItem.id, warehouse.id, Number(editForm.quantity) || 0);
@@ -859,12 +882,50 @@ function ItemsScreen({ data, refresh, isAdmin }) {
     } catch (e) { setEditError(e.message); } finally { setEditBusy(false); }
   };
 
+  // ---------- סיכום מלאי לפי ריח (מרכז כל גדלי האריזה של אותו ריח לשורה אחת) ----------
+  const totalStockOf = (itemId) => data.locations.reduce((s, l) => s + (data.stock[`${itemId}|${l.id}`] || 0), 0);
+  const fragranceGroups = {};
+  data.items.filter((it) => it.category === "consumable").forEach((it) => {
+    const groupName = guessFragranceName(it) || it.name;
+    if (!fragranceGroups[groupName]) fragranceGroups[groupName] = { name: groupName, sizes: [], totalWeighted: 0 };
+    const qty = totalStockOf(it.id);
+    const volumePerUnit = PACKAGE_SIZE_VOLUMES[it.unit] || 0;
+    fragranceGroups[groupName].sizes.push({ itemId: it.id, unit: it.unit, qty });
+    fragranceGroups[groupName].totalWeighted += qty * volumePerUnit;
+  });
+  const fragranceGroupList = Object.values(fragranceGroups).sort((a, b) => a.name.localeCompare(b.name, "he"));
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-xl text-slate-800">פריטים</h2>
         {isAdmin && <button onClick={() => setOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> פריט חדש</button>}
       </div>
+
+      {fragranceGroupList.length > 0 && (
+        <div className="mb-5">
+          <h3 className="font-bold text-slate-800 mb-2">סיכום מלאי לפי ריח</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {fragranceGroupList.map((g) => (
+              <div key={g.name} className="bg-white rounded-2xl border p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-bold text-slate-800">{g.name}</div>
+                  <Badge tone="violet">סה"כ {g.totalWeighted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ל'/ק"ג</Badge>
+                </div>
+                <div className="space-y-1">
+                  {g.sizes.map((s) => (
+                    <div key={s.itemId} className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">{s.unit}</span>
+                      <span className="font-medium text-slate-700">{s.qty} יח'</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -900,7 +961,6 @@ function ItemsScreen({ data, refresh, isAdmin }) {
 
       {open && (
         <Modal title="הוספת פריט חדש" onClose={() => setOpen(false)}>
-          <Field label="שם פריט"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           <Field label="קטגוריה">
             <select
               className={inputCls}
@@ -915,10 +975,16 @@ function ItemsScreen({ data, refresh, isAdmin }) {
             </select>
           </Field>
           {form.category === "consumable" ? (
+            <Field label="שם הריח"><input className={inputCls} value={form.fragranceName} onChange={(e) => setForm({ ...form, fragranceName: e.target.value })} placeholder="לדוגמה: מלון אסטוריה" /></Field>
+          ) : (
+            <Field label="שם פריט"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+          )}
+          {form.category === "consumable" ? (
             <Field label="גודל אריזה / נפח">
               <select className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
                 {PACKAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
               </select>
+              <div className="text-xs text-slate-400 mt-1">ניתן להוסיף אותו ריח כמה פעמים בגדלים שונים - כל גודל יתנהל כמלאי נפרד, ויסוכם יחד בתצוגה למעלה.</div>
             </Field>
           ) : (
             <Field label="יחידת מידה"><input className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="יחידה" /></Field>
@@ -935,7 +1001,6 @@ function ItemsScreen({ data, refresh, isAdmin }) {
 
       {editItem && (
         <Modal title="עריכת פריט" onClose={() => setEditItem(null)}>
-          <Field label="שם פריט"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></Field>
           <Field label="קטגוריה">
             <select
               className={inputCls}
@@ -949,6 +1014,11 @@ function ItemsScreen({ data, refresh, isAdmin }) {
               <option value="device">מכשירים</option><option value="consumable">נוזלים ומתכלים</option>
             </select>
           </Field>
+          {editForm.category === "consumable" ? (
+            <Field label="שם הריח"><input className={inputCls} value={editForm.fragranceName} onChange={(e) => setEditForm({ ...editForm, fragranceName: e.target.value })} placeholder="לדוגמה: מלון אסטוריה" /></Field>
+          ) : (
+            <Field label="שם פריט"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></Field>
+          )}
           {editForm.category === "consumable" ? (
             <Field label="גודל אריזה / נפח">
               <select className={inputCls} value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}>
