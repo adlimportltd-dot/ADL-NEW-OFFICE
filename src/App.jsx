@@ -535,9 +535,12 @@ const isLargePackage = (item) => {
   if (vol > 0) return vol >= 5;
   return /חבית|גלון/.test(`${item?.unit || ""} ${item?.name || ""}`);
 };
+// נירמול טקסט לצורך השוואת שמות ריח: מסיר רווחים כפולים/קצה ומאחד ייצוג יוניקוד,
+// כדי ששני מחרוזות שנראות זהות לעין (אבל לא זהות בייט-לבייט בגלל איך שהוקלדו) יתאמו.
+const normalizeText = (s) => (s || "").normalize("NFC").trim().replace(/\s+/g, " ");
 const guessFragranceName = (item) => {
-  if (item.fragranceGroup) return item.fragranceGroup;
-  return item.name.replace(/^תמצית ריח - /, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (item.fragranceGroup) return normalizeText(item.fragranceGroup);
+  return normalizeText(item.name.replace(/^תמצית ריח - /, "").replace(/\s*\([^)]*\)\s*$/, ""));
 };
 const CURRENCIES = ["USD", "EUR", "ILS", "GBP"];
 const CURRENCY_SYMBOLS = { USD: "$", EUR: "€", ILS: "₪", GBP: "£" };
@@ -931,7 +934,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   const totalStockOf = (itemId) => data.locations.reduce((s, l) => s + (data.stock[`${itemId}|${l.id}`] || 0), 0);
   const fragranceGroups = {};
   data.items.filter((it) => it.category === "consumable").forEach((it) => {
-    const groupName = guessFragranceName(it) || it.name;
+    const groupName = guessFragranceName(it);
     if (!fragranceGroups[groupName]) fragranceGroups[groupName] = { name: groupName, sizes: [], totalWeighted: 0 };
     const qty = totalStockOf(it.id);
     const volumePerUnit = packageVolumeOf(it);
@@ -1134,7 +1137,7 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
     ? {
         name: fragranceName,
         sizes: data.items
-          .filter((it) => it.category === "consumable" && (it.fragranceGroup ? it.fragranceGroup === fragranceName : guessFragranceName(it) === fragranceName))
+          .filter((it) => it.category === "consumable" && guessFragranceName(it) === normalizeText(fragranceName))
           .map((it) => ({ itemId: it.id, unit: it.unit, qty: totalStockOf(it.id) })),
       }
     : null;
