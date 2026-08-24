@@ -14,6 +14,7 @@ const mapItem = (r) => ({
   id: r.id, name: r.name, category: r.category, model: r.model,
   color: r.color, unit: r.unit, minThreshold: Number(r.min_threshold),
   unitCost: r.unit_cost !== null && r.unit_cost !== undefined ? Number(r.unit_cost) : null,
+  supplierSku: r.supplier_sku || "",
 });
 const mapLocation = (r) => ({ id: r.id, name: r.name, type: r.type });
 const mapCustomer = (r) => ({ id: r.id, name: r.name, address: r.address, contact: r.contact });
@@ -24,9 +25,13 @@ const mapTransaction = (r) => ({
   unitPrice: r.unit_price !== null && r.unit_price !== undefined ? Number(r.unit_price) : null,
   date: r.created_at,
 });
-const mapSupplier = (r) => ({ id: r.id, name: r.name, country: r.country, contact: r.contact, phone: r.phone, email: r.email });
+const mapSupplier = (r) => ({
+  id: r.id, name: r.name, country: r.country, contact: r.contact, phone: r.phone, email: r.email,
+  currency: r.currency || "USD", notes: r.notes || "",
+});
 const mapPO = (r) => ({
   id: r.id, poNumber: r.po_number, supplierId: r.supplier_id, status: r.status, date: r.created_at,
+  currency: r.currency || "USD", shippingTerms: r.shipping_terms || "", notes: r.notes || "",
   lines: (r.po_lines || []).map((l) => ({ itemId: l.item_id, qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
 });
 
@@ -118,6 +123,7 @@ async function fetchAllData() {
 async function addItem(item) {
   const { data, error } = await supabase.from("items").insert({
     name: item.name, category: item.category, unit: item.unit, min_threshold: item.minThreshold,
+    supplier_sku: item.supplierSku || null,
   }).select().single();
   if (error) throw error;
   return data.id;
@@ -129,6 +135,7 @@ async function updateItem(id, patch) {
   if (patch.unit !== undefined) payload.unit = patch.unit;
   if (patch.minThreshold !== undefined) payload.min_threshold = patch.minThreshold;
   if (patch.unitCost !== undefined) payload.unit_cost = patch.unitCost;
+  if (patch.supplierSku !== undefined) payload.supplier_sku = patch.supplierSku;
   const { error } = await supabase.from("items").update(payload).eq("id", id);
   if (error) throw error;
 }
@@ -199,11 +206,14 @@ async function updateItemsUnitCosts(updates) {
 }
 
 // ---------- Purchase Orders ----------
-async function createPurchaseOrder(supplierId, lines) {
+async function createPurchaseOrder(supplierId, lines, extra = {}) {
   const poNumber = `ADL-PO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 900 + 100)}`;
   const { data: po, error } = await supabase
     .from("purchase_orders")
-    .insert({ po_number: poNumber, supplier_id: supplierId, status: "draft" })
+    .insert({
+      po_number: poNumber, supplier_id: supplierId, status: extra.status || "draft",
+      currency: extra.currency || "USD", shipping_terms: extra.shippingTerms || null, notes: extra.notes || null,
+    })
     .select()
     .single();
   if (error) throw error;
@@ -212,6 +222,35 @@ async function createPurchaseOrder(supplierId, lines) {
   );
   if (linesError) throw linesError;
   return po.id;
+}
+async function updatePOStatus(poId, status) {
+  const { error } = await supabase.from("purchase_orders").update({ status }).eq("id", poId);
+  if (error) throw error;
+}
+
+// ---------- Suppliers ----------
+async function addSupplier(supplier) {
+  const { error } = await supabase.from("suppliers").insert({
+    name: supplier.name, country: supplier.country, contact: supplier.contact,
+    phone: supplier.phone, email: supplier.email, currency: supplier.currency || "USD", notes: supplier.notes || null,
+  });
+  if (error) throw error;
+}
+async function updateSupplier(id, patch) {
+  const payload = {};
+  if (patch.name !== undefined) payload.name = patch.name;
+  if (patch.country !== undefined) payload.country = patch.country;
+  if (patch.contact !== undefined) payload.contact = patch.contact;
+  if (patch.phone !== undefined) payload.phone = patch.phone;
+  if (patch.email !== undefined) payload.email = patch.email;
+  if (patch.currency !== undefined) payload.currency = patch.currency;
+  if (patch.notes !== undefined) payload.notes = patch.notes;
+  const { error } = await supabase.from("suppliers").update(payload).eq("id", id);
+  if (error) throw error;
+}
+async function deleteSupplier(id) {
+  const { error } = await supabase.from("suppliers").delete().eq("id", id);
+  if (error) throw error;
 }
 
 // ---------- Settings / Logo ----------
@@ -245,7 +284,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePOStatus, addSupplier, updateSupplier, deleteSupplier, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -253,6 +292,14 @@ const fmtDate = (iso) =>
 
 const CATEGORIES = { device: "מכשירים", consumable: "נוזלים ומתכלים" };
 const PACKAGE_SIZES = ["25 ליטר", "5 ליטר", "1 ליטר", "0.5 ליטר", '250 מ"ל'];
+const CURRENCIES = ["USD", "EUR", "ILS", "GBP"];
+const CURRENCY_SYMBOLS = { USD: "$", EUR: "€", ILS: "₪", GBP: "£" };
+const PO_STATUSES = {
+  draft: { label: "טיוטה", tone: "gray" },
+  in_production: { label: "בייצור", tone: "amber" },
+  in_transit: { label: "בדרך", tone: "sky" },
+  received: { label: "התקבל", tone: "emerald" },
+};
 const TX_TYPES = {
   receive: { label: "קבלת סחורה מספק", icon: Download, color: "emerald" },
   transfer: { label: "העברה למחסן/רכב", icon: ArrowLeftRight, color: "sky" },
@@ -462,7 +509,7 @@ function Dashboard({ data, onExport }) {
 // ==================== Items ====================
 function ItemsScreen({ data, refresh, isAdmin }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", category: "device", unit: "", minThreshold: 0, quantity: 0 });
+  const [form, setForm] = useState({ name: "", category: "device", unit: "", minThreshold: 0, quantity: 0, supplierSku: "" });
   const [error, setError] = useState("");
 
   const [editItem, setEditItem] = useState(null);
@@ -480,7 +527,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
       if (qty > 0 && warehouse) {
         await api.setItemStock(newItemId, warehouse.id, qty);
       }
-      setForm({ name: "", category: "device", unit: "", minThreshold: 0, quantity: 0 });
+      setForm({ name: "", category: "device", unit: "", minThreshold: 0, quantity: 0, supplierSku: "" });
       setOpen(false);
       await refresh();
     } catch (e) { setError(e.message); }
@@ -493,7 +540,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   const openEdit = (it) => {
     const currentQty = warehouse ? (data.stock[`${it.id}|${warehouse.id}`] || 0) : 0;
     setEditItem(it);
-    setEditForm({ name: it.name, category: it.category, unit: it.unit, minThreshold: it.minThreshold, unitCost: it.unitCost ?? "", quantity: currentQty });
+    setEditForm({ name: it.name, category: it.category, unit: it.unit, minThreshold: it.minThreshold, unitCost: it.unitCost ?? "", quantity: currentQty, supplierSku: it.supplierSku || "" });
     setEditError("");
   };
 
@@ -507,6 +554,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         unit: editForm.unit.trim(),
         minThreshold: Number(editForm.minThreshold) || 0,
         unitCost: editForm.unitCost === "" ? null : Number(editForm.unitCost),
+        supplierSku: editForm.supplierSku.trim(),
       });
       if (warehouse) {
         await api.setItemStock(editItem.id, warehouse.id, Number(editForm.quantity) || 0);
@@ -526,7 +574,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">שם פריט</th><th className="px-4 py-2 font-medium">קטגוריה</th>
+              <th className="px-4 py-2 font-medium">שם פריט</th><th className="px-4 py-2 font-medium">SKU ספק</th><th className="px-4 py-2 font-medium">קטגוריה</th>
               <th className="px-4 py-2 font-medium">יחידת מידה</th><th className="px-4 py-2 font-medium">סף מינימום</th>
               <th className="px-4 py-2 font-medium">עלות נחיתה ליח'</th><th className="px-4 py-2"></th>
             </tr>
@@ -535,6 +583,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
             {data.items.map((it) => (
               <tr key={it.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => isAdmin && openEdit(it)}>
                 <td className="px-4 py-2.5 font-medium text-slate-800">{it.name}</td>
+                <td className="px-4 py-2.5 text-slate-500">{it.supplierSku || <span className="text-slate-300">-</span>}</td>
                 <td className="px-4 py-2.5"><Badge tone={it.category === "device" ? "sky" : "violet"}>{CATEGORIES[it.category]}</Badge></td>
                 <td className="px-4 py-2.5">{it.unit}</td>
                 <td className="px-4 py-2.5">{it.minThreshold}</td>
@@ -549,7 +598,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
                 </td>
               </tr>
             ))}
-            {data.items.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">אין פריטים עדיין</td></tr>}
+            {data.items.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">אין פריטים עדיין</td></tr>}
           </tbody>
         </table>
       </div>
@@ -579,6 +628,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
           ) : (
             <Field label="יחידת מידה"><input className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="יחידה" /></Field>
           )}
+          <Field label="כינוי / SKU אצל הספק (לא חובה)"><input className={inputCls} value={form.supplierSku} onChange={(e) => setForm({ ...form, supplierSku: e.target.value })} placeholder='למשל: A300' /></Field>
           <Field label={`כמות במלאי (מחסן מרכזי)${form.unit ? " - " + form.unit : ""}`}>
             <input type="number" min="0" className={inputCls} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} placeholder="0" />
           </Field>
@@ -613,6 +663,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
           ) : (
             <Field label="יחידת מידה"><input className={inputCls} value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} placeholder="יחידה" /></Field>
           )}
+          <Field label="כינוי / SKU אצל הספק (לא חובה)"><input className={inputCls} value={editForm.supplierSku} onChange={(e) => setEditForm({ ...editForm, supplierSku: e.target.value })} placeholder='למשל: A300' /></Field>
           <Field label={`כמות במלאי (מחסן מרכזי)${editForm.unit ? " - " + editForm.unit : ""}`}>
             <input type="number" min="0" className={inputCls} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
           </Field>
@@ -1285,18 +1336,158 @@ function ForecastReport({ data }) {
 }
 
 // ==================== הזמנות רכש (Purchase Orders) ====================
-function POsScreen({ data, refresh, onPrint }) {
+// ==================== Suppliers ====================
+function SuppliersScreen({ data, refresh }) {
   const [open, setOpen] = useState(false);
-  const [supplierId, setSupplierId] = useState("");
-  const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
+  const [form, setForm] = useState({ name: "", country: "", contact: "", phone: "", email: "", currency: "USD", notes: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const openNew = () => { setSupplierId(data.suppliers[0]?.id || ""); setLines([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]); setError(""); setOpen(true); };
+  const [editSupplier, setEditSupplier] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editError, setEditError] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+
+  const openNew = () => { setForm({ name: "", country: "", contact: "", phone: "", email: "", currency: "USD", notes: "" }); setError(""); setOpen(true); };
+
+  const submit = async () => {
+    if (!form.name.trim()) { setError("שם הספק הוא שדה חובה"); return; }
+    setBusy(true);
+    try {
+      await api.addSupplier(form);
+      await refresh();
+      setOpen(false);
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const openEdit = (s) => {
+    setEditSupplier(s);
+    setEditForm({ name: s.name, country: s.country || "", contact: s.contact || "", phone: s.phone || "", email: s.email || "", currency: s.currency, notes: s.notes || "" });
+    setEditError("");
+  };
+
+  const saveEdit = async () => {
+    if (!editForm.name.trim()) { setEditError("שם הספק הוא שדה חובה"); return; }
+    setEditBusy(true);
+    try {
+      await api.updateSupplier(editSupplier.id, editForm);
+      await refresh();
+      setEditSupplier(null);
+    } catch (e) { setEditError(e.message); } finally { setEditBusy(false); }
+  };
+
+  const removeSupplier = async (id) => {
+    if (!confirm("למחוק את הספק? לא ניתן יהיה לשחזר.")) return;
+    try { await api.deleteSupplier(id); await refresh(); }
+    catch (e) { alert(e.message.includes("foreign key") ? "לא ניתן למחוק ספק עם הזמנות רכש קיימות" : e.message); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-xl text-slate-800">ספקים</h2>
+        <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> ספק חדש</button>
+      </div>
+      <div className="bg-white rounded-2xl border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-slate-500 text-right">
+              <th className="px-4 py-2 font-medium">שם ספק</th><th className="px-4 py-2 font-medium">מדינה</th>
+              <th className="px-4 py-2 font-medium">איש קשר</th><th className="px-4 py-2 font-medium">טלפון</th>
+              <th className="px-4 py-2 font-medium">אימייל</th><th className="px-4 py-2 font-medium">מטבע</th><th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.suppliers.map((s) => (
+              <tr key={s.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => openEdit(s)}>
+                <td className="px-4 py-2.5 font-medium text-slate-800">{s.name}</td>
+                <td className="px-4 py-2.5 text-slate-500">{s.country || "-"}</td>
+                <td className="px-4 py-2.5 text-slate-500">{s.contact || "-"}</td>
+                <td className="px-4 py-2.5 text-slate-500">{s.phone || "-"}</td>
+                <td className="px-4 py-2.5 text-slate-500">{s.email || "-"}</td>
+                <td className="px-4 py-2.5"><Badge tone="sky">{CURRENCY_SYMBOLS[s.currency]} {s.currency}</Badge></td>
+                <td className="px-4 py-2.5 text-left" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2 justify-end">
+                    <button onClick={() => openEdit(s)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
+                    <button onClick={() => removeSupplier(s.id)} className="text-gray-400 hover:text-rose-600" title="מחיקה"><Trash2 size={16} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {data.suppliers.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">אין ספקים עדיין</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {open && (
+        <Modal title="הוספת ספק חדש" onClose={() => setOpen(false)}>
+          <Field label="שם ספק"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+          <Field label="מדינה"><input className={inputCls} value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} /></Field>
+          <Field label="איש קשר"><input className={inputCls} value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} /></Field>
+          <Field label="טלפון"><input className={inputCls} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+          <Field label="אימייל"><input type="email" className={inputCls} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+          <Field label="מטבע עבודה">
+            <select className={inputCls} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+              {CURRENCIES.map((c) => <option key={c} value={c}>{CURRENCY_SYMBOLS[c]} {c}</option>)}
+            </select>
+          </Field>
+          <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת ספק</button>
+        </Modal>
+      )}
+
+      {editSupplier && (
+        <Modal title="עריכת ספק" onClose={() => setEditSupplier(null)}>
+          <Field label="שם ספק"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></Field>
+          <Field label="מדינה"><input className={inputCls} value={editForm.country} onChange={(e) => setEditForm({ ...editForm, country: e.target.value })} /></Field>
+          <Field label="איש קשר"><input className={inputCls} value={editForm.contact} onChange={(e) => setEditForm({ ...editForm, contact: e.target.value })} /></Field>
+          <Field label="טלפון"><input className={inputCls} value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} /></Field>
+          <Field label="אימייל"><input type="email" className={inputCls} value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></Field>
+          <Field label="מטבע עבודה">
+            <select className={inputCls} value={editForm.currency} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}>
+              {CURRENCIES.map((c) => <option key={c} value={c}>{CURRENCY_SYMBOLS[c]} {c}</option>)}
+            </select>
+          </Field>
+          <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ==================== הזמנות רכש (Purchase Orders) ====================
+function POsScreen({ data, refresh, onPrint }) {
+  const [open, setOpen] = useState(false);
+  const [supplierId, setSupplierId] = useState("");
+  const [status, setStatus] = useState("draft");
+  const [shippingTerms, setShippingTerms] = useState("");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [statusBusyId, setStatusBusyId] = useState(null);
+
+  const selectedSupplier = data.suppliers.find((s) => s.id === supplierId);
+  const currency = selectedSupplier?.currency || "USD";
+  const currencySymbol = CURRENCY_SYMBOLS[currency] || currency;
+
+  const openNew = () => {
+    setSupplierId(data.suppliers[0]?.id || "");
+    setStatus("draft"); setShippingTerms(""); setNotes("");
+    setLines([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
+    setError(""); setOpen(true);
+  };
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
   const onPickItem = (id, itemId) => { const it = data.items.find((i) => i.id === itemId); setLine(id, { itemId, unitPrice: it?.unitCost ? String(it.unitCost) : "" }); };
+  const itemLabel = (it) => it.supplierSku ? `${it.name} (${it.supplierSku})` : it.name;
+
+  const lineTotal = (l) => (Number(l.qty) || 0) * (Number(l.unitPrice) || 0);
+  const orderTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
 
   const submit = async () => {
     setError("");
@@ -1305,11 +1496,21 @@ function POsScreen({ data, refresh, onPrint }) {
     if (valid.length === 0) { setError("יש להוסיף לפחות שורת פריט אחת"); return; }
     setBusy(true);
     try {
-      const poId = await api.createPurchaseOrder(supplierId, valid.map((l) => ({ itemId: l.itemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })));
+      const poId = await api.createPurchaseOrder(
+        supplierId,
+        valid.map((l) => ({ itemId: l.itemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })),
+        { status, currency, shippingTerms, notes }
+      );
       await refresh();
       setOpen(false);
       onPrint(poId);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const changeStatus = async (poId, newStatus) => {
+    setStatusBusyId(poId);
+    try { await api.updatePOStatus(poId, newStatus); await refresh(); }
+    catch (e) { alert(e.message); } finally { setStatusBusyId(null); }
   };
 
   const poTotal = (po) => po.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
@@ -1319,39 +1520,69 @@ function POsScreen({ data, refresh, onPrint }) {
       <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-xl text-slate-800">הזמנות רכש (Purchase Orders)</h2><button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> PO חדש</button></div>
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
-          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2"></th></tr></thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.purchaseOrders.map((po) => {
               const supplier = data.suppliers.find((s) => s.id === po.supplierId);
+              const sym = CURRENCY_SYMBOLS[po.currency] || po.currency;
               return (
                 <tr key={po.id} className="border-t">
                   <td className="px-4 py-2.5 font-medium text-slate-800">{po.poNumber}</td>
                   <td className="px-4 py-2.5 text-slate-500">{fmtDate(po.date)}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{supplier?.name} ({supplier?.country})</td>
+                  <td className="px-4 py-2.5 text-slate-500">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
                   <td className="px-4 py-2.5">{po.lines.length}</td>
-                  <td className="px-4 py-2.5 font-bold">₪{poTotal(po).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td className="px-4 py-2.5 font-bold">{sym}{poTotal(po).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-4 py-2.5">
+                    <select
+                      className="text-xs rounded-lg border border-gray-300 px-2 py-1 bg-white"
+                      value={po.status}
+                      disabled={statusBusyId === po.id}
+                      onChange={(e) => changeStatus(po.id, e.target.value)}
+                    >
+                      {Object.entries(PO_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+                    </select>
+                  </td>
                   <td className="px-4 py-2.5 text-left"><button onClick={() => onPrint(po.id)} className="text-amber-600 hover:underline font-medium flex items-center gap-1"><Printer size={14} /> צפייה/הדפסה</button></td>
                 </tr>
               );
             })}
-            {data.purchaseOrders.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">עדיין לא נוצרו הזמנות רכש</td></tr>}
+            {data.purchaseOrders.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">עדיין לא נוצרו הזמנות רכש</td></tr>}
           </tbody>
         </table>
       </div>
       {open && (
         <Modal title="הזמנת רכש חדשה" onClose={() => setOpen(false)}>
-          <Field label="ספק"><select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>{data.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.country})</option>)}</select></Field>
-          <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-slate-600">פריטים</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
-          <div className="space-y-2 mb-4">
+          <Field label="ספק">
+            <select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+              <option value="">בחר ספק...</option>
+              {data.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} {s.country ? `(${s.country})` : ""} - {s.currency}</option>)}
+            </select>
+          </Field>
+          <Field label="סטטוס הזמנה">
+            <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>
+              {Object.entries(PO_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+            </select>
+          </Field>
+          <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-slate-600">פריטים (מחירים ב-{currencySymbol}{currency})</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
+          <div className="space-y-2 mb-2">
             {lines.map((l) => (
               <div key={l.id} className="grid grid-cols-6 gap-1.5 items-center">
-                <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}><option value="">פריט...</option>{data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}</select>
+                <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
+                  <option value="">פריט...</option>
+                  {data.items.map((it) => <option key={it.id} value={it.id}>{itemLabel(it)}</option>)}
+                </select>
                 <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
-                <input type="number" min="0" step="0.01" placeholder="מחיר" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
+                <input type="number" min="0" step="0.01" placeholder={`מחיר (${currencySymbol})`} className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
                 {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
               </div>
             ))}
           </div>
+          <div className="flex items-center justify-between text-sm mb-4 px-1">
+            <span className="text-slate-500">סה"כ הזמנה</span>
+            <span className="font-bold text-slate-800">{currencySymbol}{orderTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          </div>
+          <Field label="תנאי משלוח"><input className={inputCls} value={shippingTerms} onChange={(e) => setShippingTerms(e.target.value)} placeholder="לדוגמה: FOB Shanghai, 45 ימי אספקה" /></Field>
+          <Field label="הערות"><textarea className={inputCls} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}יצירת הזמנה והפקת מסמך</button>
         </Modal>
@@ -1360,11 +1591,14 @@ function POsScreen({ data, refresh, onPrint }) {
   );
 }
 
+const PO_STATUS_EN = { draft: "Draft", in_production: "In Production", in_transit: "In Transit", received: "Received" };
+
 function POPrintView({ data, poId, onClose }) {
   const po = data.purchaseOrders.find((p) => p.id === poId);
   if (!po) return null;
   const supplier = data.suppliers.find((s) => s.id === po.supplierId);
-  const lineRows = po.lines.map((l) => { const item = data.items.find((i) => i.id === l.itemId); return { ...l, name: item?.name || "-", unit: item?.unit || "", lineTotal: l.qty * l.unitPrice }; });
+  const sym = CURRENCY_SYMBOLS[po.currency] || po.currency;
+  const lineRows = po.lines.map((l) => { const item = data.items.find((i) => i.id === l.itemId); return { ...l, name: item?.name || "-", sku: item?.supplierSku || "", unit: item?.unit || "", lineTotal: l.qty * l.unitPrice }; });
   const grandTotal = lineRows.reduce((s, l) => s + l.lineTotal, 0);
   return (
     <div className="fixed inset-0 bg-slate-800/60 z-50 overflow-y-auto py-8 px-4">
@@ -1376,7 +1610,13 @@ function POPrintView({ data, poId, onClose }) {
         <div dir="ltr" lang="en" className="p-8" style={{ fontFamily: "Arial, sans-serif" }}>
           <div className="flex items-start justify-between mb-8">
             <div><div className="text-2xl font-bold text-slate-900">ADL Import LTD</div><div className="text-sm text-slate-500 mt-1">אדל אימפורט</div><div className="text-sm text-slate-500">Israel</div></div>
-            <div className="text-left"><div className="text-xl font-bold text-amber-600">PURCHASE ORDER</div><div className="text-sm text-slate-600 mt-1">PO #: {po.poNumber}</div><div className="text-sm text-slate-600">Date: {new Date(po.date).toLocaleDateString("en-GB")}</div></div>
+            <div className="text-left">
+              <div className="text-xl font-bold text-amber-600">PURCHASE ORDER</div>
+              <div className="text-sm text-slate-600 mt-1">PO #: {po.poNumber}</div>
+              <div className="text-sm text-slate-600">Date: {new Date(po.date).toLocaleDateString("en-GB")}</div>
+              <div className="text-sm text-slate-600">Status: {PO_STATUS_EN[po.status] || po.status}</div>
+              <div className="text-sm text-slate-600">Currency: {po.currency}</div>
+            </div>
           </div>
           <div className="mb-6 bg-gray-50 rounded-xl p-4">
             <div className="text-xs uppercase text-slate-400 font-bold mb-1">Supplier</div>
@@ -1386,10 +1626,16 @@ function POPrintView({ data, poId, onClose }) {
             <div className="text-sm text-slate-600">{supplier?.phone} · {supplier?.email}</div>
           </div>
           <table className="w-full text-sm mb-6 border-collapse">
-            <thead><tr className="border-b-2 border-slate-800 text-left"><th className="py-2 font-bold">SKU / Item</th><th className="py-2 font-bold">Qty</th><th className="py-2 font-bold">Unit Price</th><th className="py-2 font-bold text-right">Line Total</th></tr></thead>
-            <tbody>{lineRows.map((l, i) => (<tr key={i} className="border-b border-slate-200"><td className="py-2">{l.name}</td><td className="py-2">{l.qty} {l.unit}</td><td className="py-2">${l.unitPrice.toFixed(2)}</td><td className="py-2 text-right">${l.lineTotal.toFixed(2)}</td></tr>))}</tbody>
-            <tfoot><tr><td colSpan={3} className="pt-3 text-right font-bold">Grand Total</td><td className="pt-3 text-right font-bold">${grandTotal.toFixed(2)}</td></tr></tfoot>
+            <thead><tr className="border-b-2 border-slate-800 text-left"><th className="py-2 font-bold">SKU</th><th className="py-2 font-bold">Item</th><th className="py-2 font-bold">Qty</th><th className="py-2 font-bold">Unit Price</th><th className="py-2 font-bold text-right">Line Total</th></tr></thead>
+            <tbody>{lineRows.map((l, i) => (<tr key={i} className="border-b border-slate-200"><td className="py-2">{l.sku || "-"}</td><td className="py-2">{l.name}</td><td className="py-2">{l.qty} {l.unit}</td><td className="py-2">{sym}{l.unitPrice.toFixed(2)}</td><td className="py-2 text-right">{sym}{l.lineTotal.toFixed(2)}</td></tr>))}</tbody>
+            <tfoot><tr><td colSpan={4} className="pt-3 text-right font-bold">Grand Total</td><td className="pt-3 text-right font-bold">{sym}{grandTotal.toFixed(2)}</td></tr></tfoot>
           </table>
+          {po.shippingTerms && (
+            <div className="mb-4"><div className="text-xs uppercase text-slate-400 font-bold mb-1">Shipping Terms</div><div className="text-sm text-slate-700">{po.shippingTerms}</div></div>
+          )}
+          {po.notes && (
+            <div className="mb-4"><div className="text-xs uppercase text-slate-400 font-bold mb-1">Notes</div><div className="text-sm text-slate-700">{po.notes}</div></div>
+          )}
           <div className="text-xs text-slate-400 border-t pt-4">This purchase order was generated by ADL Import LTD inventory management system.</div>
         </div>
       </div>
@@ -1550,6 +1796,7 @@ const FULL_NAV = [
   { key: "items", label: "פריטים", icon: Package, adminOnly: true },
   { key: "locations", label: "מיקומים", icon: Warehouse, adminOnly: true },
   { key: "customers", label: "לקוחות", icon: Users },
+  { key: "suppliers", label: "ספקים", icon: Building2, adminOnly: true },
   { key: "landedCost", label: "מחשבון יבוא ועליות נחיתה", icon: Calculator, adminOnly: true },
   { key: "reports", label: "דוחות וערך מלאי", icon: BarChart3 },
   { key: "po", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
@@ -1733,6 +1980,7 @@ export default function App() {
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
+                {tab === "suppliers" && isAdmin && <SuppliersScreen data={data} refresh={refresh} />}
                 {tab === "transaction" && <TransactionScreen data={data} refresh={refresh} quickTx={quickTx} />}
                 {tab === "landedCost" && isAdmin && <LandedCostScreen data={data} refresh={refresh} />}
                 {tab === "reports" && <ReportsScreen data={data} />}
