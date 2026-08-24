@@ -1001,7 +1001,7 @@ function AuditLog({ data }) {
 // ==================== Nav ====================
 // ==================== מחשבון יבוא ועלויות נחיתה (Landed Cost) ====================
 function LandedCostScreen({ data, refresh }) {
-  const [overhead, setOverhead] = useState({ shipping: "", customs: "", brokerage: "", inland: "" });
+  const [overhead, setOverhead] = useState({ shipping: "", customs: "", brokerage: "", inland: "", wireFee: "", fxFeeValue: "", fxFeeMode: "percent" });
   const [method, setMethod] = useState("value");
   const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "" }]);
   const [busy, setBusy] = useState(false);
@@ -1011,8 +1011,14 @@ function LandedCostScreen({ data, refresh }) {
   const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "" }]);
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
 
-  const totalOverhead = ["shipping", "customs", "brokerage", "inland"].reduce((s, k) => s + (Number(overhead[k]) || 0), 0);
   const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
+  const totalGoodsValue = validLines.reduce((s, l) => s + Number(l.qty) * Number(l.unitPrice), 0);
+  const fixedOverhead = ["shipping", "customs", "brokerage", "inland", "wireFee"].reduce((s, k) => s + (Number(overhead[k]) || 0), 0);
+  const fxFeeAmount = overhead.fxFeeMode === "percent"
+    ? totalGoodsValue * ((Number(overhead.fxFeeValue) || 0) / 100)
+    : (Number(overhead.fxFeeValue) || 0);
+  const totalOverhead = fixedOverhead + fxFeeAmount;
+
   const totalBasis = validLines.reduce((s, l) => {
     const qty = Number(l.qty);
     return s + (method === "value" ? qty * Number(l.unitPrice) : qty * (Number(l.unitVolume) || 0));
@@ -1050,7 +1056,20 @@ function LandedCostScreen({ data, refresh }) {
           <Field label="מכס"><input type="number" min="0" className={inputCls} value={overhead.customs} onChange={(e) => setOverhead({ ...overhead, customs: e.target.value })} /></Field>
           <Field label="עמילות מכס"><input type="number" min="0" className={inputCls} value={overhead.brokerage} onChange={(e) => setOverhead({ ...overhead, brokerage: e.target.value })} /></Field>
           <Field label="הובלה יבשתית"><input type="number" min="0" className={inputCls} value={overhead.inland} onChange={(e) => setOverhead({ ...overhead, inland: e.target.value })} /></Field>
-          <div className="border-t pt-3 mt-1 flex items-center justify-between"><span className="text-slate-600 font-medium">סה"כ עלויות משלוח</span><span className="font-bold text-slate-800">₪{totalOverhead.toLocaleString()}</span></div>
+          <Field label="דמי העברה בנקאית (Wire / SWIFT)"><input type="number" min="0" className={inputCls} value={overhead.wireFee} onChange={(e) => setOverhead({ ...overhead, wireFee: e.target.value })} /></Field>
+          <Field label='עמלות מט"ח'>
+            <div className="flex gap-2">
+              <input type="number" min="0" step="0.01" className={inputCls} value={overhead.fxFeeValue} onChange={(e) => setOverhead({ ...overhead, fxFeeValue: e.target.value })} placeholder={overhead.fxFeeMode === "percent" ? "לדוגמה: 1.5" : "לדוגמה: 350"} />
+              <div className="flex shrink-0 rounded-xl border border-gray-300 overflow-hidden">
+                <button type="button" onClick={() => setOverhead({ ...overhead, fxFeeMode: "percent" })} className={`px-3 text-sm font-medium ${overhead.fxFeeMode === "percent" ? "bg-amber-500 text-white" : "bg-white text-slate-600"}`}>%</button>
+                <button type="button" onClick={() => setOverhead({ ...overhead, fxFeeMode: "amount" })} className={`px-3 text-sm font-medium ${overhead.fxFeeMode === "amount" ? "bg-amber-500 text-white" : "bg-white text-slate-600"}`}>₪</button>
+              </div>
+            </div>
+            {overhead.fxFeeMode === "percent" && totalGoodsValue > 0 && (
+              <div className="text-xs text-slate-400 mt-1">= ₪{fxFeeAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} על שווי סחורה של ₪{totalGoodsValue.toLocaleString()}</div>
+            )}
+          </Field>
+          <div className="border-t pt-3 mt-1 flex items-center justify-between"><span className="text-slate-600 font-medium">סה"כ עלויות משלוח</span><span className="font-bold text-slate-800">₪{totalOverhead.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
         </div>
         <div className="bg-white rounded-2xl border p-4">
           <h3 className="font-bold text-slate-800 mb-3">שיטת חלוקת העלויות</h3>
