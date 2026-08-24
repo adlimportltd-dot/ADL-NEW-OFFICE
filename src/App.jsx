@@ -1131,7 +1131,7 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
 
   const consumedLines = group
     ? group.sizes
-        .filter((s) => isLargePackage(itemFor(s.itemId)) && Number(consumedQtys[s.itemId]) > 0)
+        .filter((s) => Number(consumedQtys[s.itemId]) > 0)
         .map((s) => ({ itemId: s.itemId, qty: Number(consumedQtys[s.itemId]), unit: s.unit, available: s.qty, volume: packageVolumeOf(itemFor(s.itemId)) }))
     : [];
   const producedLines = SMALL_PACKAGES
@@ -1188,17 +1188,17 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
         <>
           <div className="mb-3">
             <div className="text-sm font-bold text-slate-700 mb-1">אריזות לגריעה מהמחסן (פתיחה)</div>
-            <p className="text-xs text-slate-400 mb-2">המערכת בודקת אוטומטית אילו אריזות גדולות (חבית/גלון) קיימות במלאי בכמות גדולה מ-0, ומציגה רק אותן.</p>
+            <p className="text-xs text-slate-400 mb-2">כל אריזה מהריח הזה שקיימת במלאי בכמות גדולה מ-0 מוצגת כאן לבחירה.</p>
             <div className="space-y-2">
-              {group.sizes.filter((s) => isLargePackage(itemFor(s.itemId)) && s.qty > 0).map((s) => (
+              {group.sizes.filter((s) => s.qty > 0).map((s) => (
                 <div key={s.itemId} className="flex items-center gap-2">
                   <span className="text-sm text-slate-600 w-28 shrink-0">{s.unit}</span>
                   <span className="text-xs text-slate-400 w-20 shrink-0">זמין: {s.qty}</span>
                   <input type="number" min="0" max={s.qty} className={inputCls + " !py-1.5"} value={consumedQtys[s.itemId] || ""} onChange={(e) => setConsumedQtys({ ...consumedQtys, [s.itemId]: e.target.value })} placeholder="0" />
                 </div>
               ))}
-              {group.sizes.filter((s) => isLargePackage(itemFor(s.itemId)) && s.qty > 0).length === 0 && (
-                <div className="text-sm text-slate-400 py-2">אין מלאי חבית/גלון זמין לריח הזה כרגע - אי אפשר לבצע המרה עד שיתקבל מלאי גדול.</div>
+              {group.sizes.filter((s) => s.qty > 0).length === 0 && (
+                <div className="text-sm text-slate-400 py-2">אין מלאי זמין לריח הזה כרגע - אי אפשר לבצע המרה עד שיתקבל מלאי.</div>
               )}
             </div>
           </div>
