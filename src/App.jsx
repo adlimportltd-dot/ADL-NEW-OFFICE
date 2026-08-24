@@ -921,6 +921,8 @@ function ItemsScreen({ data, refresh, isAdmin }) {
 
   const [repackFor, setRepackFor] = useState(null); // fragrance name, or "" for open-picker mode
 
+  const deviceItems = data.items.filter((it) => it.category === "device");
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -934,25 +936,33 @@ function ItemsScreen({ data, refresh, isAdmin }) {
       </div>
 
       {fragranceGroupList.length > 0 && (
-        <div className="mb-5">
-          <h3 className="font-bold text-slate-800 mb-2">סיכום מלאי לפי ריח</h3>
+        <div className="mb-6">
+          <h3 className="font-bold text-slate-800 mb-2">תמציות ריח - כרטיס אחד לכל ריח</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {fragranceGroupList.map((g) => (
               <div key={g.name} className="bg-white rounded-2xl border p-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <div className="font-bold text-slate-800">{g.name}</div>
                   <Badge tone="violet">סה"כ {g.totalWeighted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ל'/ק"ג</Badge>
                 </div>
-                <div className="space-y-1">
-                  {g.sizes.map((s) => (
-                    <div key={s.itemId} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500">{s.unit}</span>
-                      <span className="font-medium text-slate-700">{s.qty} יח'</span>
-                    </div>
-                  ))}
+                <div className="space-y-1.5 mb-2">
+                  {g.sizes.map((s) => {
+                    const item = data.items.find((i) => i.id === s.itemId);
+                    return (
+                      <div key={s.itemId} className="flex items-center justify-between text-sm group">
+                        <span className="text-slate-500">{s.unit}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-700">{s.qty} יח'</span>
+                          {isAdmin && item && (
+                            <button onClick={() => openEdit(item)} className="text-gray-300 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition" title="עריכת אריזה זו"><Pencil size={13} /></button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
                 {isAdmin && (
-                  <button onClick={() => setRepackFor(g.name)} className="text-xs text-amber-600 hover:underline font-medium mt-2 flex items-center gap-1"><Calculator size={12} /> המרת אריזות לריח זה</button>
+                  <button onClick={() => setRepackFor(g.name)} className="text-xs text-amber-600 hover:underline font-medium mt-1 flex items-center gap-1"><Calculator size={12} /> המרת אריזות לריח זה</button>
                 )}
               </div>
             ))}
@@ -960,21 +970,21 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         </div>
       )}
 
+      <h3 className="font-bold text-slate-800 mb-2">מכשירים</h3>
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">שם פריט</th><th className="px-4 py-2 font-medium">SKU ספק</th><th className="px-4 py-2 font-medium">קטגוריה</th>
+              <th className="px-4 py-2 font-medium">שם פריט</th><th className="px-4 py-2 font-medium">SKU ספק</th>
               <th className="px-4 py-2 font-medium">יחידת מידה</th><th className="px-4 py-2 font-medium">סף מינימום</th>
               <th className="px-4 py-2 font-medium">עלות נחיתה ליח'</th><th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {data.items.map((it) => (
+            {deviceItems.map((it) => (
               <tr key={it.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => isAdmin && openEdit(it)}>
                 <td className="px-4 py-2.5 font-medium text-slate-800">{it.name}</td>
                 <td className="px-4 py-2.5 text-slate-500">{it.supplierSku || <span className="text-slate-300">-</span>}</td>
-                <td className="px-4 py-2.5"><Badge tone={it.category === "device" ? "sky" : "violet"}>{CATEGORIES[it.category]}</Badge></td>
                 <td className="px-4 py-2.5">{it.unit}</td>
                 <td className="px-4 py-2.5">{it.minThreshold}</td>
                 <td className="px-4 py-2.5">{it.unitCost ? `₪${Number(it.unitCost).toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
@@ -988,7 +998,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
                 </td>
               </tr>
             ))}
-            {data.items.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">אין פריטים עדיין</td></tr>}
+            {deviceItems.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">אין מכשירים עדיין</td></tr>}
           </tbody>
         </table>
       </div>
@@ -1156,17 +1166,17 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
         <>
           <div className="mb-3">
             <div className="text-sm font-bold text-slate-700 mb-1">אריזות לגריעה מהמחסן (פתיחה)</div>
-            <p className="text-xs text-slate-400 mb-2">רק אריזות גדולות - חבית ו/או גלון - ניתנות לפתיחה.</p>
+            <p className="text-xs text-slate-400 mb-2">המערכת בודקת אוטומטית אילו אריזות גדולות (חבית/גלון) קיימות במלאי בכמות גדולה מ-0, ומציגה רק אותן.</p>
             <div className="space-y-2">
-              {group.sizes.filter((s) => LARGE_PACKAGES.includes(s.unit)).map((s) => (
+              {group.sizes.filter((s) => LARGE_PACKAGES.includes(s.unit) && s.qty > 0).map((s) => (
                 <div key={s.itemId} className="flex items-center gap-2">
                   <span className="text-sm text-slate-600 w-28 shrink-0">{s.unit}</span>
                   <span className="text-xs text-slate-400 w-20 shrink-0">זמין: {s.qty}</span>
                   <input type="number" min="0" max={s.qty} className={inputCls + " !py-1.5"} value={consumedQtys[s.itemId] || ""} onChange={(e) => setConsumedQtys({ ...consumedQtys, [s.itemId]: e.target.value })} placeholder="0" />
                 </div>
               ))}
-              {group.sizes.filter((s) => LARGE_PACKAGES.includes(s.unit)).length === 0 && (
-                <div className="text-sm text-slate-400 py-2">אין מלאי חבית/גלון לריח הזה כרגע - אי אפשר לבצע המרה עד שיתקבל מלאי גדול.</div>
+              {group.sizes.filter((s) => LARGE_PACKAGES.includes(s.unit) && s.qty > 0).length === 0 && (
+                <div className="text-sm text-slate-400 py-2">אין מלאי חבית/גלון זמין לריח הזה כרגע - אי אפשר לבצע המרה עד שיתקבל מלאי גדול.</div>
               )}
             </div>
           </div>
