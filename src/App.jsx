@@ -29,6 +29,7 @@ const mapSupplier = (r) => ({
   id: r.id, name: r.name, country: r.country, contact: r.contact, phone: r.phone, email: r.email,
   currency: r.currency || "USD", notes: r.notes || "",
 });
+const mapShipment = (r) => ({ id: r.id, name: r.name, status: r.status, notes: r.notes || "", date: r.created_at });
 const mapPO = (r) => ({
   id: r.id, poNumber: r.po_number, supplierId: r.supplier_id, status: r.status, date: r.created_at,
   currency: r.currency || "USD", shippingTerms: r.shipping_terms || "", notes: r.notes || "",
@@ -80,18 +81,19 @@ async function fetchMyProfile(userId) {
 
 // ---------- Fetch everything needed for the app ----------
 async function fetchAllData() {
-  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, posRes, settingsRes] = await Promise.all([
+  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, posRes, settingsRes] = await Promise.all([
     supabase.from("items").select("*").order("category").order("name"),
     supabase.from("locations").select("*").order("type"),
     supabase.from("customers").select("*").order("name"),
     supabase.from("stock_levels").select("*"),
     supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(500),
     supabase.from("suppliers").select("*").order("name"),
+    supabase.from("shipments").select("*").order("created_at", { ascending: false }),
     supabase.from("purchase_orders").select("*, po_lines(*)").order("created_at", { ascending: false }),
     supabase.from("app_settings").select("*"),
   ]);
 
-  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, posRes, settingsRes]) {
+  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, posRes, settingsRes]) {
     if (r.error) throw r.error;
   }
 
@@ -114,6 +116,7 @@ async function fetchAllData() {
     stock,
     transactions: txRes.data.map(mapTransaction),
     suppliers: (suppliersRes.data || []).map(mapSupplier),
+    shipments: (shipmentsRes.data || []).map(mapShipment),
     purchaseOrders: (posRes.data || []).map(mapPO),
     logoUrl: settings.logo_url || null,
     companySettings,
@@ -276,6 +279,27 @@ async function deleteSupplier(id) {
   if (error) throw error;
 }
 
+// ---------- Shipments ----------
+async function addShipment(shipment) {
+  const { data, error } = await supabase.from("shipments").insert({
+    name: shipment.name, status: shipment.status || "preparing", notes: shipment.notes || null,
+  }).select().single();
+  if (error) throw error;
+  return data.id;
+}
+async function updateShipment(id, patch) {
+  const payload = {};
+  if (patch.name !== undefined) payload.name = patch.name;
+  if (patch.status !== undefined) payload.status = patch.status;
+  if (patch.notes !== undefined) payload.notes = patch.notes;
+  const { error } = await supabase.from("shipments").update(payload).eq("id", id);
+  if (error) throw error;
+}
+async function deleteShipment(id) {
+  const { error } = await supabase.from("shipments").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ---------- Settings / Logo ----------
 async function updateLogoUrl(dataUrl) {
   const { error } = await supabase.from("app_settings").upsert({ key: "logo_url", value: dataUrl });
@@ -307,7 +331,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addSupplier, updateSupplier, deleteSupplier, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -322,6 +346,11 @@ const PO_STATUSES = {
   in_production: { label: "בייצור", tone: "amber" },
   in_transit: { label: "בדרך", tone: "sky" },
   received: { label: "התקבל", tone: "emerald" },
+};
+const SHIPMENT_STATUSES = {
+  preparing: { label: "בהכנה", tone: "amber" },
+  in_transit: { label: "בדרך", tone: "sky" },
+  planned: { label: "מתוכנן לחודש הבא", tone: "violet" },
 };
 const TX_TYPES = {
   receive: { label: "קבלת סחורה מספק", icon: Download, color: "emerald" },
@@ -1125,7 +1154,7 @@ function LandedCostScreen({ data, refresh }) {
   const [selectedShipment, setSelectedShipment] = useState("");
   const [exchangeRates, setExchangeRates] = useState({});
 
-  const shipmentIds = [...new Set(data.purchaseOrders.map((p) => p.shipmentId).filter(Boolean))];
+  const shipmentsWithPOs = data.shipments.filter((s) => data.purchaseOrders.some((p) => p.shipmentId === s.id));
 
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "", currency: "ILS" }]);
@@ -1197,15 +1226,15 @@ function LandedCostScreen({ data, refresh }) {
       <h2 className="font-bold text-xl text-slate-800 mb-1 flex items-center gap-2"><Ship size={22} className="text-amber-600" /> מחשבון יבוא ועלויות נחיתה (Landed Cost)</h2>
       <p className="text-slate-500 text-sm mb-4">חשב את מחיר הנחיתה הסופי ליחידה עבור משלוח, וחלק את עלויות המשלוח בין הפריטים לפי נפח או לפי ערך.</p>
 
-      {shipmentIds.length > 0 && (
+      {shipmentsWithPOs.length > 0 && (
         <div className="bg-white rounded-2xl border p-4 mb-4">
           <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Ship size={16} /> טעינה ממכולה/משלוח משותף</h3>
-          <p className="text-slate-500 text-sm mb-3">בחירת מספר מכולה תטען אוטומטית את כל הפריטים והכמויות מכל הזמנות הרכש (מכל הספקים) שמשויכות אליה.</p>
+          <p className="text-slate-500 text-sm mb-3">בחירת משלוח תטען אוטומטית את כל הפריטים והכמויות מכל הזמנות הרכש (מכל הספקים) שמשויכות אליו.</p>
           <select className={inputCls} value={selectedShipment} onChange={(e) => loadShipment(e.target.value)}>
             <option value="">בחירה ידנית (בלי טעינה)...</option>
-            {shipmentIds.map((id) => {
-              const posCount = data.purchaseOrders.filter((p) => p.shipmentId === id).length;
-              return <option key={id} value={id}>{id} ({posCount} הזמנות)</option>;
+            {shipmentsWithPOs.map((s) => {
+              const posCount = data.purchaseOrders.filter((p) => p.shipmentId === s.id).length;
+              return <option key={s.id} value={s.id}>{s.name} - {SHIPMENT_STATUSES[s.status]?.label} ({posCount} הזמנות)</option>;
             })}
           </select>
         </div>
@@ -1548,6 +1577,186 @@ function SuppliersScreen({ data, refresh }) {
   );
 }
 
+// ==================== משלוחים / מכולות (Shipments) ====================
+function ShipmentsScreen({ data, refresh }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", status: "preparing", notes: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const [editShipment, setEditShipment] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editError, setEditError] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+
+  const [viewShipmentId, setViewShipmentId] = useState(null);
+
+  const openNew = () => { setForm({ name: "", status: "preparing", notes: "" }); setError(""); setOpen(true); };
+
+  const submit = async () => {
+    if (!form.name.trim()) { setError("שם המשלוח הוא שדה חובה"); return; }
+    setBusy(true);
+    try { await api.addShipment(form); await refresh(); setOpen(false); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const openEdit = (s) => { setEditShipment(s); setEditForm({ name: s.name, status: s.status, notes: s.notes || "" }); setEditError(""); };
+  const saveEdit = async () => {
+    if (!editForm.name.trim()) { setEditError("שם המשלוח הוא שדה חובה"); return; }
+    setEditBusy(true);
+    try { await api.updateShipment(editShipment.id, editForm); await refresh(); setEditShipment(null); }
+    catch (e) { setEditError(e.message); } finally { setEditBusy(false); }
+  };
+
+  const removeShipment = async (id) => {
+    if (!confirm("למחוק את המשלוח? הזמנות הרכש המשויכות אליו לא יימחקו, רק ינותקו ממנו.")) return;
+    try { await api.deleteShipment(id); await refresh(); } catch (e) { alert(e.message); }
+  };
+
+  const posFor = (shipmentId) => data.purchaseOrders.filter((p) => p.shipmentId === shipmentId);
+  const suppliersFor = (shipmentId) => {
+    const ids = [...new Set(posFor(shipmentId).map((p) => p.supplierId))];
+    return ids.map((id) => data.suppliers.find((s) => s.id === id)).filter(Boolean);
+  };
+
+  if (viewShipmentId) {
+    const shipment = data.shipments.find((s) => s.id === viewShipmentId);
+    const pos = posFor(viewShipmentId);
+    if (!shipment) { setViewShipmentId(null); return null; }
+
+    const itemTotals = {};
+    pos.forEach((po) => {
+      const supplier = data.suppliers.find((s) => s.id === po.supplierId);
+      po.lines.forEach((l) => {
+        const item = data.items.find((i) => i.id === l.itemId);
+        const key = l.itemId;
+        if (!itemTotals[key]) itemTotals[key] = { item, qty: 0, suppliers: new Set() };
+        itemTotals[key].qty += l.qty;
+        if (supplier) itemTotals[key].suppliers.add(supplier.name);
+      });
+    });
+
+    return (
+      <div>
+        <button onClick={() => setViewShipmentId(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת משלוחים</button>
+        <div className="bg-white rounded-2xl border p-5 mb-4">
+          <div className="flex items-center gap-3 mb-1">
+            <h2 className="font-bold text-xl text-slate-800">{shipment.name}</h2>
+            <Badge tone={SHIPMENT_STATUSES[shipment.status]?.tone}>{SHIPMENT_STATUSES[shipment.status]?.label}</Badge>
+          </div>
+          {shipment.notes && <p className="text-slate-500 mt-1">{shipment.notes}</p>}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">הזמנות רכש</div><div className="text-2xl font-bold text-slate-800">{pos.length}</div></div>
+          <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">ספקים</div><div className="text-2xl font-bold text-slate-800">{suppliersFor(viewShipmentId).length}</div></div>
+          <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">שורות פריטים</div><div className="text-2xl font-bold text-slate-800">{Object.keys(itemTotals).length}</div></div>
+        </div>
+
+        <h3 className="font-bold text-slate-800 mb-2">הזמנות הרכש במשלוח זה</h3>
+        <div className="bg-white rounded-2xl border overflow-hidden mb-4">
+          <table className="w-full text-sm">
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">מטבע</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סטטוס PO</th></tr></thead>
+            <tbody>
+              {pos.map((po) => {
+                const supplier = data.suppliers.find((s) => s.id === po.supplierId);
+                return (
+                  <tr key={po.id} className="border-t">
+                    <td className="px-4 py-2.5 font-medium text-slate-800">{po.poNumber}</td>
+                    <td className="px-4 py-2.5 text-slate-500">{supplier?.name || "-"} {supplier?.country ? `(${supplier.country})` : ""}</td>
+                    <td className="px-4 py-2.5 text-slate-500">{po.currency}</td>
+                    <td className="px-4 py-2.5">{po.lines.length}</td>
+                    <td className="px-4 py-2.5"><Badge tone={PO_STATUSES[po.status]?.tone}>{PO_STATUSES[po.status]?.label}</Badge></td>
+                  </tr>
+                );
+              })}
+              {pos.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">אין עדיין הזמנות רכש משויכות למשלוח זה</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="font-bold text-slate-800 mb-2">פריטים וכמויות מרוכזים (כל הספקים יחד)</h3>
+        <div className="bg-white rounded-2xl border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות כוללת</th><th className="px-4 py-2 font-medium">מגיע מספקים</th></tr></thead>
+            <tbody>
+              {Object.values(itemTotals).map((r, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-4 py-2.5 font-medium text-slate-800">{r.item?.name || "-"}</td>
+                  <td className="px-4 py-2.5">{r.qty} {r.item?.unit || ""}</td>
+                  <td className="px-4 py-2.5 text-slate-500">{[...r.suppliers].join(", ")}</td>
+                </tr>
+              ))}
+              {Object.keys(itemTotals).length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400">אין עדיין פריטים</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-slate-400 text-xs mt-3">כדי לחשב עלות נחיתה למשלוח הזה, עברו ל"מחשבון יבוא ועליות נחיתה" ובחרו את המשלוח הזה מהרשימה.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-xl text-slate-800">משלוחים / מכולות</h2>
+        <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> משלוח חדש</button>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {data.shipments.map((s) => {
+          const pos = posFor(s.id);
+          const suppliers = suppliersFor(s.id);
+          return (
+            <div key={s.id} className="bg-white rounded-2xl border p-4 cursor-pointer hover:shadow-md transition" onClick={() => setViewShipmentId(s.id)}>
+              <div className="flex items-start justify-between mb-2">
+                <div className="p-2.5 rounded-xl bg-violet-100 text-violet-700"><Ship size={20} /></div>
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => openEdit(s)} className="text-gray-400 hover:text-amber-600 p-1" title="עריכה"><Pencil size={15} /></button>
+                  <button onClick={() => removeShipment(s.id)} className="text-gray-400 hover:text-rose-600 p-1" title="מחיקה"><Trash2 size={15} /></button>
+                </div>
+              </div>
+              <div className="font-bold text-slate-800 mb-1">{s.name}</div>
+              <Badge tone={SHIPMENT_STATUSES[s.status]?.tone}>{SHIPMENT_STATUSES[s.status]?.label}</Badge>
+              <div className="text-sm text-slate-500 mt-2">{pos.length} הזמנות · {suppliers.length} ספקים</div>
+            </div>
+          );
+        })}
+        {data.shipments.length === 0 && (
+          <div className="col-span-full bg-white rounded-2xl border p-8 text-center text-slate-400">אין עדיין משלוחים - צרו משלוח ראשון כדי להתחיל לשייך אליו הזמנות רכש</div>
+        )}
+      </div>
+
+      {open && (
+        <Modal title="משלוח / מכולה חדש" onClose={() => setOpen(false)}>
+          <Field label="שם המשלוח"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder='לדוגמה: מכולה אוגוסט 2026' /></Field>
+          <Field label="סטטוס">
+            <select className={inputCls} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              {Object.entries(SHIPMENT_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+            </select>
+          </Field>
+          <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת משלוח</button>
+        </Modal>
+      )}
+
+      {editShipment && (
+        <Modal title="עריכת משלוח" onClose={() => setEditShipment(null)}>
+          <Field label="שם המשלוח"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></Field>
+          <Field label="סטטוס">
+            <select className={inputCls} value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
+              {Object.entries(SHIPMENT_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+            </select>
+          </Field>
+          <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ==================== הזמנות רכש (Purchase Orders) ====================
 function POsScreen({ data, refresh, onPrint }) {
   const [open, setOpen] = useState(false);
@@ -1565,7 +1774,7 @@ function POsScreen({ data, refresh, onPrint }) {
   const selectedSupplier = data.suppliers.find((s) => s.id === supplierId);
   const currency = selectedSupplier?.currency || "USD";
   const currencySymbol = CURRENCY_SYMBOLS[currency] || currency;
-  const existingShipmentIds = [...new Set(data.purchaseOrders.map((p) => p.shipmentId).filter(Boolean))];
+  // הרשימה עצמה (data.shipments) מגיעה כעת מטבלת shipments אמיתית
 
   const openNew = () => {
     setEditingPOId(null);
@@ -1633,11 +1842,12 @@ function POsScreen({ data, refresh, onPrint }) {
           <tbody>
             {data.purchaseOrders.map((po) => {
               const supplier = data.suppliers.find((s) => s.id === po.supplierId);
+              const shipment = data.shipments.find((s) => s.id === po.shipmentId);
               const sym = CURRENCY_SYMBOLS[po.currency] || po.currency;
               return (
                 <tr key={po.id} className="border-t">
                   <td className="px-4 py-2.5 font-medium text-slate-800">{po.poNumber}</td>
-                  <td className="px-4 py-2.5">{po.shipmentId ? <Badge tone="violet">{po.shipmentId}</Badge> : <span className="text-slate-300">-</span>}</td>
+                  <td className="px-4 py-2.5">{shipment ? <Badge tone="violet">{shipment.name}</Badge> : <span className="text-slate-300">-</span>}</td>
                   <td className="px-4 py-2.5 text-slate-500">{fmtDate(po.date)}</td>
                   <td className="px-4 py-2.5 text-slate-500">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
                   <td className="px-4 py-2.5">{po.lines.length}</td>
@@ -1678,10 +1888,12 @@ function POsScreen({ data, refresh, onPrint }) {
               {Object.entries(PO_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
             </select>
           </Field>
-          <Field label="מספר מכולה / משלוח (לא חובה)">
-            <input className={inputCls} value={shipmentId} onChange={(e) => setShipmentId(e.target.value)} placeholder="לדוגמה: CONT-2026-08" list="shipment-ids-list" />
-            <datalist id="shipment-ids-list">{existingShipmentIds.map((id) => <option key={id} value={id} />)}</datalist>
-            <div className="text-xs text-slate-400 mt-1">הזמנות עם אותו מספר מכולה ייטענו יחד במחשבון היבוא ועלויות הנחיתה.</div>
+          <Field label="משלוח / מכולה (לא חובה)">
+            <select className={inputCls} value={shipmentId} onChange={(e) => setShipmentId(e.target.value)}>
+              <option value="">ללא שיוך למשלוח</option>
+              {data.shipments.map((s) => <option key={s.id} value={s.id}>{s.name} - {SHIPMENT_STATUSES[s.status]?.label}</option>)}
+            </select>
+            <div className="text-xs text-slate-400 mt-1">הזמנות מכל הספקים שמשויכות לאותו משלוח ייטענו יחד במחשבון היבוא ועלויות הנחיתה.</div>
           </Field>
           <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-slate-600">פריטים (מחירים ב-{currencySymbol}{currency})</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
           <div className="space-y-2 mb-2">
@@ -1917,6 +2129,7 @@ const FULL_NAV = [
   { key: "locations", label: "מיקומים", icon: Warehouse, adminOnly: true },
   { key: "customers", label: "לקוחות", icon: Users },
   { key: "suppliers", label: "ספקים", icon: Building2, adminOnly: true },
+  { key: "shipments", label: "משלוחים / מכולות", icon: Ship, adminOnly: true },
   { key: "landedCost", label: "מחשבון יבוא ועליות נחיתה", icon: Calculator, adminOnly: true },
   { key: "reports", label: "דוחות וערך מלאי", icon: BarChart3 },
   { key: "po", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
@@ -2101,6 +2314,7 @@ export default function App() {
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
                 {tab === "suppliers" && isAdmin && <SuppliersScreen data={data} refresh={refresh} />}
+                {tab === "shipments" && isAdmin && <ShipmentsScreen data={data} refresh={refresh} />}
                 {tab === "transaction" && <TransactionScreen data={data} refresh={refresh} quickTx={quickTx} />}
                 {tab === "landedCost" && isAdmin && <LandedCostScreen data={data} refresh={refresh} />}
                 {tab === "reports" && <ReportsScreen data={data} />}
