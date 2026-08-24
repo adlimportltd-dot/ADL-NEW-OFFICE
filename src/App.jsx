@@ -30,6 +30,10 @@ const mapSupplier = (r) => ({
   currency: r.currency || "USD", notes: r.notes || "",
 });
 const mapShipment = (r) => ({ id: r.id, name: r.name, status: r.status, notes: r.notes || "", date: r.created_at });
+const mapRateCard = (r) => ({
+  id: r.id, name: r.name, carrier: r.carrier || "", notes: r.notes || "", date: r.created_at,
+  rates: (r.shipping_rates || []).map((x) => ({ id: x.id, rateType: x.rate_type, label: x.label || "", price: Number(x.price), currency: x.currency || "USD" })),
+});
 const mapPO = (r) => ({
   id: r.id, poNumber: r.po_number, supplierId: r.supplier_id, status: r.status, date: r.created_at,
   currency: r.currency || "USD", shippingTerms: r.shipping_terms || "", notes: r.notes || "",
@@ -84,7 +88,7 @@ async function fetchMyProfile(userId) {
 
 // ---------- Fetch everything needed for the app ----------
 async function fetchAllData() {
-  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, posRes, paymentsRes, settingsRes] = await Promise.all([
+  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, settingsRes] = await Promise.all([
     supabase.from("items").select("*").order("category").order("name"),
     supabase.from("locations").select("*").order("type"),
     supabase.from("customers").select("*").order("name"),
@@ -92,12 +96,13 @@ async function fetchAllData() {
     supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(500),
     supabase.from("suppliers").select("*").order("name"),
     supabase.from("shipments").select("*").order("created_at", { ascending: false }),
+    supabase.from("shipping_rate_cards").select("*, shipping_rates(*)").order("created_at", { ascending: false }),
     supabase.from("purchase_orders").select("*, po_lines(*)").order("created_at", { ascending: false }),
     supabase.from("po_payments").select("*").order("paid_date", { ascending: false }),
     supabase.from("app_settings").select("*"),
   ]);
 
-  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, posRes, paymentsRes, settingsRes]) {
+  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, settingsRes]) {
     if (r.error) throw r.error;
   }
 
@@ -121,6 +126,7 @@ async function fetchAllData() {
     transactions: txRes.data.map(mapTransaction),
     suppliers: (suppliersRes.data || []).map(mapSupplier),
     shipments: (shipmentsRes.data || []).map(mapShipment),
+    rateCards: (rateCardsRes.data || []).map(mapRateCard),
     purchaseOrders: (posRes.data || []).map(mapPO),
     poPayments: (paymentsRes.data || []).map(mapPOPayment),
     logoUrl: settings.logo_url || null,
@@ -325,6 +331,38 @@ async function deleteShipment(id) {
   if (error) throw error;
 }
 
+// ---------- Shipping Rate Cards ----------
+async function addRateCard(card) {
+  const { data, error } = await supabase.from("shipping_rate_cards").insert({
+    name: card.name, carrier: card.carrier || null, notes: card.notes || null,
+  }).select().single();
+  if (error) throw error;
+  return data.id;
+}
+async function updateRateCard(id, patch) {
+  const payload = {};
+  if (patch.name !== undefined) payload.name = patch.name;
+  if (patch.carrier !== undefined) payload.carrier = patch.carrier;
+  if (patch.notes !== undefined) payload.notes = patch.notes;
+  const { error } = await supabase.from("shipping_rate_cards").update(payload).eq("id", id);
+  if (error) throw error;
+}
+async function deleteRateCard(id) {
+  const { error } = await supabase.from("shipping_rate_cards").delete().eq("id", id);
+  if (error) throw error;
+}
+async function addRateLine(rateCardId, rate) {
+  const { error } = await supabase.from("shipping_rates").insert({
+    rate_card_id: rateCardId, rate_type: rate.rateType, label: rate.label || null,
+    price: rate.price, currency: rate.currency || "USD",
+  });
+  if (error) throw error;
+}
+async function deleteRateLine(id) {
+  const { error } = await supabase.from("shipping_rates").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ---------- Settings / Logo ----------
 async function updateLogoUrl(dataUrl) {
   const { error } = await supabase.from("app_settings").upsert({ key: "logo_url", value: dataUrl });
@@ -356,7 +394,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, addCustomer, insertTransaction, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -381,6 +419,12 @@ const PAYMENT_TERMS = {
   prepaid_100: { label: "100% מראש" },
   deposit_balance: { label: "מקדמה + יתרה" },
   net_x: { label: "שוטף + X ימים" },
+};
+const RATE_TYPES = {
+  container_20ft: "מכולה 20ft",
+  container_40ft: "מכולה 40ft",
+  air_per_kg: 'הובלה אווירית (לפי ק"ג)',
+  other: "אחר",
 };
 const poTotalAmount = (po) => po.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
 const poPaidAmount = (data, poId) => (data.poPayments || []).filter((p) => p.poId === poId).reduce((s, p) => s + p.amount, 0);
@@ -1247,8 +1291,13 @@ function LandedCostScreen({ data, refresh }) {
   const [updated, setUpdated] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState("");
   const [exchangeRates, setExchangeRates] = useState({});
+  const [selectedRateCardId, setSelectedRateCardId] = useState("");
+  const [selectedRateId, setSelectedRateId] = useState("");
+  const [airWeight, setAirWeight] = useState("");
 
   const shipmentsWithPOs = data.shipments.filter((s) => data.purchaseOrders.some((p) => p.shipmentId === s.id));
+  const selectedRateCard = data.rateCards.find((c) => c.id === selectedRateCardId);
+  const selectedRate = selectedRateCard?.rates.find((r) => r.id === selectedRateId);
 
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", unitVolume: "", currency: "ILS" }]);
@@ -1279,7 +1328,7 @@ function LandedCostScreen({ data, refresh }) {
 
   const rateFor = (currency) => currency === "ILS" ? 1 : Number(exchangeRates[currency] ?? DEFAULT_FX_RATES[currency] ?? 1);
   const priceILS = (l) => (Number(l.unitPrice) || 0) * rateFor(l.currency || "ILS");
-  const currenciesInUse = [...new Set(lines.map((l) => l.currency || "ILS"))].filter((c) => c !== "ILS");
+  const currenciesInUse = [...new Set([...lines.map((l) => l.currency || "ILS"), ...(selectedRate ? [selectedRate.currency] : [])])].filter((c) => c !== "ILS");
 
   const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
   const totalGoodsValue = validLines.reduce((s, l) => s + Number(l.qty) * priceILS(l), 0);
@@ -1304,6 +1353,17 @@ function LandedCostScreen({ data, refresh }) {
     return { ...l, item, qty, unitPriceILS, share, allocatedOverhead, landedPerUnit };
   });
   const canCompute = validLines.length > 0 && totalBasis > 0;
+
+  const rateAppliedILS = selectedRate
+    ? (selectedRate.rateType === "air_per_kg"
+        ? selectedRate.price * (Number(airWeight) || 0)
+        : selectedRate.price) * rateFor(selectedRate.currency)
+    : 0;
+
+  const applyRateToShipping = () => {
+    if (!selectedRate) return;
+    setOverhead({ ...overhead, shipping: String(Math.round(rateAppliedILS * 100) / 100) });
+  };
 
   const applyToInventory = async () => {
     setBusy(true);
@@ -1339,6 +1399,40 @@ function LandedCostScreen({ data, refresh }) {
               return <option key={s.id} value={s.id}>{s.name} - {SHIPMENT_STATUSES[s.status]?.label} ({posCount} הזמנות)</option>;
             })}
           </select>
+        </div>
+      )}
+
+      {data.rateCards.length > 0 && (
+        <div className="bg-white rounded-2xl border p-4 mb-4">
+          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Database size={16} /> מחירון שילוח שמור</h3>
+          <p className="text-slate-500 text-sm mb-3">בחרו מחירון ושורת מחיר כדי למלא אוטומטית את עלות ההובלה - עדיין ניתן לדרוס ידנית אחרי המילוי.</p>
+          <div className="grid sm:grid-cols-2 gap-3 mb-2">
+            <Field label="מחירון">
+              <select className={inputCls} value={selectedRateCardId} onChange={(e) => { setSelectedRateCardId(e.target.value); setSelectedRateId(""); }}>
+                <option value="">בחר מחירון...</option>
+                {data.rateCards.map((c) => <option key={c.id} value={c.id}>{c.name}{c.carrier ? ` - ${c.carrier}` : ""}</option>)}
+              </select>
+            </Field>
+            {selectedRateCard && (
+              <Field label="שורת מחיר">
+                <select className={inputCls} value={selectedRateId} onChange={(e) => setSelectedRateId(e.target.value)}>
+                  <option value="">בחר...</option>
+                  {selectedRateCard.rates.map((r) => (
+                    <option key={r.id} value={r.id}>{RATE_TYPES[r.rateType]}{r.label ? ` - ${r.label}` : ""} ({CURRENCY_SYMBOLS[r.currency] || r.currency}{r.price}{r.rateType === "air_per_kg" ? '/ק"ג' : ""})</option>
+                  ))}
+                </select>
+              </Field>
+            )}
+          </div>
+          {selectedRate?.rateType === "air_per_kg" && (
+            <Field label='משקל כולל (ק"ג)'><input type="number" min="0" className={inputCls} value={airWeight} onChange={(e) => setAirWeight(e.target.value)} /></Field>
+          )}
+          {selectedRate && (
+            <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3 mt-2">
+              <span className="text-sm text-slate-600">עלות מחושבת: ₪{rateAppliedILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              <button onClick={applyRateToShipping} className={btnPrimary + " !py-2 !px-4 text-sm"}>החל על עלות הובלה</button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1880,6 +1974,151 @@ function ShipmentsScreen({ data, refresh }) {
           <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
           {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ==================== מחירוני שילוח (Shipping Rate Cards) ====================
+function ShippingRatesScreen({ data, refresh }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", carrier: "", notes: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const [editCard, setEditCard] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editError, setEditError] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+
+  const [rateFormFor, setRateFormFor] = useState(null); // card id
+  const [rateForm, setRateForm] = useState({ rateType: "container_20ft", label: "", price: "", currency: "USD" });
+  const [rateError, setRateError] = useState("");
+  const [rateBusy, setRateBusy] = useState(false);
+
+  const openNew = () => { setForm({ name: "", carrier: "", notes: "" }); setError(""); setOpen(true); };
+  const submit = async () => {
+    if (!form.name.trim()) { setError("שם המחירון הוא שדה חובה"); return; }
+    setBusy(true);
+    try { await api.addRateCard(form); await refresh(); setOpen(false); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const openEdit = (c) => { setEditCard(c); setEditForm({ name: c.name, carrier: c.carrier || "", notes: c.notes || "" }); setEditError(""); };
+  const saveEdit = async () => {
+    if (!editForm.name.trim()) { setEditError("שם המחירון הוא שדה חובה"); return; }
+    setEditBusy(true);
+    try { await api.updateRateCard(editCard.id, editForm); await refresh(); setEditCard(null); }
+    catch (e) { setEditError(e.message); } finally { setEditBusy(false); }
+  };
+
+  const removeCard = async (id) => {
+    if (!confirm("למחוק את המחירון וכל השורות שבו?")) return;
+    try { await api.deleteRateCard(id); await refresh(); } catch (e) { alert(e.message); }
+  };
+
+  const openRateForm = (cardId) => { setRateFormFor(cardId); setRateForm({ rateType: "container_20ft", label: "", price: "", currency: "USD" }); setRateError(""); };
+  const submitRate = async () => {
+    if (!rateForm.price || Number(rateForm.price) <= 0) { setRateError("יש להזין מחיר תקין"); return; }
+    setRateBusy(true);
+    try {
+      await api.addRateLine(rateFormFor, rateForm);
+      await refresh();
+      setRateFormFor(null);
+    } catch (e) { setRateError(e.message); } finally { setRateBusy(false); }
+  };
+  const removeRate = async (id) => {
+    if (!confirm("למחוק את שורת המחיר?")) return;
+    try { await api.deleteRateLine(id); await refresh(); } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-xl text-slate-800">מחירוני שילוח (Shipping Rate Cards)</h2>
+        <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> מחירון חדש</button>
+      </div>
+      <p className="text-slate-500 text-sm mb-4">שמרו כאן מחירים קבועים שסגרתם מול חברות שילוח - הם ייבחרו אוטומטית ב"מחשבון יבוא ועלויות נחיתה" במקום להקליד את אותו מחיר בכל פעם מחדש.</p>
+
+      <div className="space-y-4">
+        {data.rateCards.map((card) => (
+          <div key={card.id} className="bg-white rounded-2xl border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+              <div>
+                <div className="font-bold text-slate-800">{card.name}</div>
+                {card.carrier && <div className="text-sm text-slate-500">{card.carrier}</div>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => openEdit(card)} className="text-gray-400 hover:text-amber-600 p-1" title="עריכה"><Pencil size={16} /></button>
+                <button onClick={() => removeCard(card.id)} className="text-gray-400 hover:text-rose-600 p-1" title="מחיקה"><Trash2 size={16} /></button>
+              </div>
+            </div>
+            <div className="p-4">
+              {card.notes && <p className="text-sm text-slate-500 mb-3">{card.notes}</p>}
+              <table className="w-full text-sm mb-3">
+                <thead><tr className="text-slate-500 text-right"><th className="py-1.5 font-medium">סוג</th><th className="py-1.5 font-medium">תיאור</th><th className="py-1.5 font-medium">מחיר</th><th className="py-1.5"></th></tr></thead>
+                <tbody>
+                  {card.rates.map((r) => (
+                    <tr key={r.id} className="border-t">
+                      <td className="py-1.5">{RATE_TYPES[r.rateType]}</td>
+                      <td className="py-1.5 text-slate-500">{r.label || "-"}</td>
+                      <td className="py-1.5 font-medium">{CURRENCY_SYMBOLS[r.currency] || r.currency}{r.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}{r.rateType === "air_per_kg" ? " / ק\"ג" : ""}</td>
+                      <td className="py-1.5 text-left"><button onClick={() => removeRate(r.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={14} /></button></td>
+                    </tr>
+                  ))}
+                  {card.rates.length === 0 && <tr><td colSpan={4} className="py-4 text-center text-slate-400">אין עדיין שורות מחיר במחירון זה</td></tr>}
+                </tbody>
+              </table>
+              <button onClick={() => openRateForm(card.id)} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={14} /> הוספת שורת מחיר</button>
+            </div>
+          </div>
+        ))}
+        {data.rateCards.length === 0 && (
+          <div className="bg-white rounded-2xl border p-8 text-center text-slate-400">אין עדיין מחירוני שילוח - צרו מחירון ראשון (לדוגמה "הובלה חודש יוני" או "מחירון חברת שילוח X")</div>
+        )}
+      </div>
+
+      {open && (
+        <Modal title="מחירון שילוח חדש" onClose={() => setOpen(false)}>
+          <Field label='שם המחירון'><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder='לדוגמה: הובלה חודש יוני' /></Field>
+          <Field label="חברת שילוח (לא חובה)"><input className={inputCls} value={form.carrier} onChange={(e) => setForm({ ...form, carrier: e.target.value })} /></Field>
+          <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת מחירון</button>
+        </Modal>
+      )}
+
+      {editCard && (
+        <Modal title="עריכת מחירון" onClose={() => setEditCard(null)}>
+          <Field label="שם המחירון"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></Field>
+          <Field label="חברת שילוח (לא חובה)"><input className={inputCls} value={editForm.carrier} onChange={(e) => setEditForm({ ...editForm, carrier: e.target.value })} /></Field>
+          <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
+        </Modal>
+      )}
+
+      {rateFormFor && (
+        <Modal title="הוספת שורת מחיר" onClose={() => setRateFormFor(null)}>
+          <Field label="סוג">
+            <select className={inputCls} value={rateForm.rateType} onChange={(e) => setRateForm({ ...rateForm, rateType: e.target.value })}>
+              {Object.entries(RATE_TYPES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </Field>
+          {rateForm.rateType === "other" && (
+            <Field label="תיאור"><input className={inputCls} value={rateForm.label} onChange={(e) => setRateForm({ ...rateForm, label: e.target.value })} /></Field>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Field label={`מחיר${rateForm.rateType === "air_per_kg" ? ' לק"ג' : ""}`}><input type="number" min="0" step="0.01" className={inputCls} value={rateForm.price} onChange={(e) => setRateForm({ ...rateForm, price: e.target.value })} /></Field>
+            <Field label="מטבע">
+              <select className={inputCls} value={rateForm.currency} onChange={(e) => setRateForm({ ...rateForm, currency: e.target.value })}>
+                {["ILS", ...CURRENCIES].filter((c, i, arr) => arr.indexOf(c) === i).map((c) => <option key={c} value={c}>{CURRENCY_SYMBOLS[c] || c} {c}</option>)}
+              </select>
+            </Field>
+          </div>
+          {rateError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{rateError}</div>}
+          <button onClick={submitRate} disabled={rateBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{rateBusy && <Loader2 size={16} className="animate-spin" />}הוספת שורה</button>
         </Modal>
       )}
     </div>
@@ -2441,6 +2680,7 @@ const FULL_NAV = [
   { key: "customers", label: "לקוחות", icon: Users },
   { key: "suppliers", label: "ספקים", icon: Building2, adminOnly: true },
   { key: "shipments", label: "משלוחים / מכולות", icon: Ship, adminOnly: true },
+  { key: "shippingRates", label: "מחירוני שילוח", icon: Database, adminOnly: true },
   { key: "landedCost", label: "מחשבון יבוא ועליות נחיתה", icon: Calculator, adminOnly: true },
   { key: "reports", label: "דוחות וערך מלאי", icon: BarChart3 },
   { key: "po", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
@@ -2626,6 +2866,7 @@ export default function App() {
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
                 {tab === "suppliers" && isAdmin && <SuppliersScreen data={data} refresh={refresh} />}
                 {tab === "shipments" && isAdmin && <ShipmentsScreen data={data} refresh={refresh} />}
+                {tab === "shippingRates" && isAdmin && <ShippingRatesScreen data={data} refresh={refresh} />}
                 {tab === "transaction" && <TransactionScreen data={data} refresh={refresh} quickTx={quickTx} />}
                 {tab === "landedCost" && isAdmin && <LandedCostScreen data={data} refresh={refresh} />}
                 {tab === "reports" && <ReportsScreen data={data} />}
