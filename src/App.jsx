@@ -36,6 +36,7 @@ const mapTransaction = (r) => ({
   fromLocationId: r.from_location_id, toLocationId: r.to_location_id,
   customerId: r.customer_id, condition: r.condition, note: r.note,
   unitPrice: r.unit_price !== null && r.unit_price !== undefined ? Number(r.unit_price) : null,
+  supplierId: r.supplier_id || null,
   date: r.created_at,
 });
 const mapSupplier = (r) => ({
@@ -284,6 +285,7 @@ async function insertTransaction(tx) {
     condition: tx.condition || null,
     note: tx.note || null,
     unit_price: tx.unitPrice !== undefined && tx.unitPrice !== null && tx.unitPrice !== "" ? Number(tx.unitPrice) : null,
+    supplier_id: tx.supplierId || null,
   });
   if (error) throw error;
 }
@@ -1540,7 +1542,8 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote }) {
 // ==================== Transaction ====================
 function TransactionScreen({ data, refresh, quickTx }) {
   const [type, setType] = useState(null);
-  const [form, setForm] = useState({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "" });
+  const [form, setForm] = useState({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" });
+  const [receiveCategoryFilter, setReceiveCategoryFilter] = useState("all"); // all | device | consumable
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1548,11 +1551,11 @@ function TransactionScreen({ data, refresh, quickTx }) {
   const warehouse = data.locations.find((l) => l.type === "warehouse");
   const vehicles = data.locations.filter((l) => l.type === "vehicle");
 
-  const resetForm = () => setForm({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "" });
+  const resetForm = () => setForm({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" });
 
   const chooseType = (t) => {
-    setType(t); setError(""); setSuccess("");
-    const base = { itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "" };
+    setType(t); setError(""); setSuccess(""); setReceiveCategoryFilter("all");
+    const base = { itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" };
     if (t === "receive") base.toLocationId = warehouse?.id || "";
     if (t === "transfer") base.fromLocationId = warehouse?.id || "";
     setForm(base);
@@ -1570,7 +1573,10 @@ function TransactionScreen({ data, refresh, quickTx }) {
     const qty = Number(form.qty);
     if (!form.itemId || !qty || qty <= 0) { setError("יש לבחור פריט ולהזין כמות תקינה"); return; }
 
-    if (type === "receive" && !form.toLocationId) { setError("יש לבחור מיקום יעד"); return; }
+    if (type === "receive") {
+      if (!form.toLocationId) { setError("יש לבחור מיקום יעד"); return; }
+      if (!form.supplierId) { setError("יש לבחור ספק שממנו התקבלה הסחורה"); return; }
+    }
     if (type === "transfer") {
       if (!form.fromLocationId || !form.toLocationId) { setError("יש לבחור מיקום מקור ויעד"); return; }
       if (form.fromLocationId === form.toLocationId) { setError("מקור ויעד לא יכולים להיות זהים"); return; }
@@ -1601,6 +1607,7 @@ function TransactionScreen({ data, refresh, quickTx }) {
         condition: type === "return" ? form.condition : null,
         note: form.note || "",
         unitPrice: type === "install" ? form.unitPrice : null,
+        supplierId: type === "receive" ? form.supplierId : null,
       });
       await refresh();
       setSuccess("התנועה נרשמה בהצלחה");
@@ -1635,14 +1642,43 @@ function TransactionScreen({ data, refresh, quickTx }) {
 
   const cfg = TX_TYPES[type];
   // בקבלת סחורה מספק מתקבלים אך ורק ג'ריקנים 25 ליטר של ריחות - לא אריזות קטנות ולא 5 ליטר.
-  // מכשירים לא מוגבלים.
-  const receiveItemOptions = data.items.filter((it) => it.category === "device" || isLargePackage(it));
+  // מכשירים לא מוגבלים. בנוסף ניתן לסנן בין מכשירים לתמציות לנוחות הבחירה.
+  const receiveItemOptions = data.items
+    .filter((it) => it.category === "device" || isLargePackage(it))
+    .filter((it) => receiveCategoryFilter === "all" || it.category === receiveCategoryFilter);
   const itemOptions = type === "receive" ? receiveItemOptions : data.items;
   return (
     <div>
       <button onClick={() => setType(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> בחירת סוג תנועה אחרת</button>
       <div className={`bg-${cfg.color}-50 border border-${cfg.color}-200 rounded-2xl p-4 sm:p-6 max-w-lg`}>
         <h2 className="font-bold text-xl text-slate-800 mb-4">{cfg.label}</h2>
+
+        {type === "receive" && (
+          <Field label="ספק">
+            <select className={inputCls} value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
+              <option value="">בחר ספק...</option>
+              {data.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.country ? ` (${s.country})` : ""}</option>)}
+            </select>
+            {data.suppliers.length === 0 && <div className="text-xs text-rose-500 mt-1">אין עדיין ספקים במערכת - הוסיפו ספק במסך "ספקים" לפני קבלת סחורה.</div>}
+          </Field>
+        )}
+
+        {type === "receive" && (
+          <Field label="סינון לפי סוג">
+            <div className="flex gap-2">
+              {[["all", "הכל"], ["device", "מכשירים"], ["consumable", "תמציות ריח"]].map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setReceiveCategoryFilter(key)}
+                  className={`flex-1 rounded-xl py-2 border text-sm font-medium ${receiveCategoryFilter === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
 
         <Field label="פריט">
           <select className={inputCls} value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value })}>
@@ -1729,6 +1765,7 @@ function AuditLog({ data }) {
   const rows = data.transactions.filter((t) => filter === "all" || t.type === filter);
   const locName = (id) => data.locations.find((l) => l.id === id)?.name || "-";
   const custName = (id) => data.customers.find((c) => c.id === id)?.name || "-";
+  const supplierName = (id) => data.suppliers.find((s) => s.id === id)?.name || "-";
 
   return (
     <div>
@@ -1746,7 +1783,7 @@ function AuditLog({ data }) {
               <th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">סוג</th>
               <th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th>
               <th className="px-4 py-2 font-medium">ממיקום</th><th className="px-4 py-2 font-medium">אל מיקום</th>
-              <th className="px-4 py-2 font-medium">לקוח</th><th className="px-4 py-2 font-medium">הערה</th>
+              <th className="px-4 py-2 font-medium">לקוח / ספק</th><th className="px-4 py-2 font-medium">הערה</th>
             </tr>
           </thead>
           <tbody>
@@ -1760,7 +1797,7 @@ function AuditLog({ data }) {
                   <td className="px-4 py-2.5">{t.qty}</td>
                   <td className="px-4 py-2.5 text-slate-500">{t.fromLocationId ? locName(t.fromLocationId) : "-"}</td>
                   <td className="px-4 py-2.5 text-slate-500">{t.toLocationId ? locName(t.toLocationId) : "-"}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{t.customerId ? custName(t.customerId) : "-"}</td>
+                  <td className="px-4 py-2.5 text-slate-500">{t.customerId ? custName(t.customerId) : t.supplierId ? supplierName(t.supplierId) : "-"}</td>
                   <td className="px-4 py-2.5 text-slate-500">{t.note || (t.condition === "faulty" ? "התקבל כתקול" : "")}</td>
                 </tr>
               );
