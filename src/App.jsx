@@ -672,9 +672,6 @@ function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
 }
 
 // ==================== Login ====================
-const ALLOWED_EMAIL = "adlimportltd25@gmail.com";
-const ALLOWED_PASSWORD = "123456";
-
 function LoginScreen({ onSuccess, logoUrl, initialError }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -684,18 +681,10 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   const submit = async () => {
     setError(""); setBusy(true);
     try {
-      if (email.trim().toLowerCase() !== ALLOWED_EMAIL) {
-        setError('גישה נדחתה. משתמש זה אינו מורשה להיכנס למערכת.');
-        return;
-      }
-      if (password !== ALLOWED_PASSWORD) {
-        setError('סיסמה שגויה, גישה נדחתה.');
-        return;
-      }
       await api.signIn(email.trim(), password);
       onSuccess();
     } catch (e) {
-      setError(e.message || "שגיאת התחברות");
+      setError(e.message === "Invalid login credentials" ? 'דוא"ל או סיסמה שגויים.' : (e.message || "שגיאת התחברות"));
     } finally {
       setBusy(false);
     }
@@ -1663,7 +1652,7 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
   );
 }
 
-function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale }) {
+function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, isAdmin }) {
   const customer = data.customers.find((c) => c.id === customerId);
   const history = data.transactions.filter((t) => t.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
   if (!customer) return null;
@@ -1688,8 +1677,8 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale }) 
             <p className="text-slate-500">{customer.contact} {customer.phone && `· ${customer.phone}`} {customer.email && `· ${customer.email}`}</p>
           </div>
           <div className="flex items-center gap-2">
-            {onStartSale && <button onClick={() => onStartSale(customer.id)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><ShoppingCart size={16} /> הזמנה חדשה</button>}
-            <button onClick={() => onCreateQuote(customer.id, null)} className={btnGhost + " flex items-center gap-1.5 !py-2"}><FileText size={16} /> יצירת הצעת מחיר</button>
+            {isAdmin && onStartSale && <button onClick={() => onStartSale(customer.id)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><ShoppingCart size={16} /> הזמנה חדשה</button>}
+            {isAdmin && <button onClick={() => onCreateQuote(customer.id, null)} className={btnGhost + " flex items-center gap-1.5 !py-2"}><FileText size={16} /> יצירת הצעת מחיר</button>}
           </div>
         </div>
       </div>
@@ -3790,13 +3779,13 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
 
 const FULL_NAV = [
   { key: "dashboard", label: "לוח בקרה", icon: LayoutDashboard },
-  { key: "transaction", label: "תנועת מלאי", icon: ArrowLeftRight },
-  { key: "sale", label: "מכירה / הזמנה חדשה", icon: ShoppingCart },
+  { key: "transaction", label: "תנועת מלאי", icon: ArrowLeftRight, adminOnly: true },
+  { key: "sale", label: "מכירה / הזמנה חדשה", icon: ShoppingCart, adminOnly: true },
   { key: "items", label: "פריטים", icon: Package, adminOnly: true },
   { key: "locations", label: "מיקומים", icon: Warehouse, adminOnly: true },
   { key: "customers", label: "לקוחות", icon: Users },
-  { key: "leads", label: "לידים (CRM)", icon: TrendingUp },
-  { key: "quotes", label: "הצעות מחיר", icon: FileText },
+  { key: "leads", label: "לידים (CRM)", icon: TrendingUp, adminOnly: true },
+  { key: "quotes", label: "הצעות מחיר", icon: FileText, adminOnly: true },
   { key: "suppliers", label: "ספקים", icon: Building2, adminOnly: true },
   { key: "shipments", label: "משלוחים / מכולות", icon: Ship, adminOnly: true },
   { key: "shippingRates", label: "מחירוני שילוח", icon: Database, adminOnly: true },
@@ -3822,7 +3811,6 @@ export default function App() {
   const [quoteBuilderFor, setQuoteBuilderFor] = useState(null); // { customerId, leadId }
   const [saleInitialCustomerId, setSaleInitialCustomerId] = useState(null);
   const [printQuoteId, setPrintQuoteId] = useState(null);
-  const [autoLoginError, setAutoLoginError] = useState("");
 
   const loadEverything = useCallback(async (userId) => {
     try {
@@ -3844,17 +3832,14 @@ export default function App() {
     }
   }, []);
 
-  // אין יותר מסך התחברות: המערכת מתחברת אוטומטית ברקע עם המשתמש המורשה היחיד,
-  // כך שהאפליקציה נפתחת ישירות ללוח הבקרה.
+  // מסך התחברות אמיתי: בודקים אם כבר יש session פעיל (למשל רענון עמוד),
+  // אחרת מציגים את LoginScreen ומחכים שהמשתמש יזין דוא"ל וסיסמה בעצמו.
   useEffect(() => {
     (async () => {
       try {
         const existing = await api.getSession();
-        if (existing) { setSession(existing); return; }
-        const result = await api.signIn(ALLOWED_EMAIL, ALLOWED_PASSWORD);
-        setSession(result.session);
+        setSession(existing || null);
       } catch (e) {
-        setAutoLoginError(e.message || "ההתחברות האוטומטית נכשלה");
         setSession(null);
       }
     })();
@@ -3903,15 +3888,7 @@ export default function App() {
     return <div dir="rtl" className="min-h-screen flex items-center justify-center text-slate-400 bg-slate-900">טוען...</div>;
   }
   if (!session) {
-    return (
-      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-slate-900 p-6">
-        <div className="bg-white rounded-2xl shadow-xl max-w-sm p-6 text-center">
-          <div className="text-rose-600 font-bold mb-2">ההתחברות האוטומטית נכשלה</div>
-          <p className="text-slate-500 text-sm">{autoLoginError}</p>
-          <p className="text-slate-400 text-xs mt-3">בדקו שהמשתמש המורשה קיים ב-Supabase Authentication עם הסיסמה הנכונה, ושהמייל מאושר (Confirmed).</p>
-        </div>
-      </div>
-    );
+    return <LoginScreen onSuccess={() => {}} logoUrl={null} />;
   }
   if (!data || !profile) {
     return (
@@ -3923,8 +3900,11 @@ export default function App() {
   }
 
   const isAdmin = profile.role === "admin";
+  const isViewer = profile.role === "viewer";
+  const roleLabel = isAdmin ? "מנהל" : isViewer ? "צפייה בלבד" : "טכנאי";
   const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
   const goTab = (key) => { setTab(key); setCustomerFileId(null); setMobileMenuOpen(false); };
+  const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (
     <div dir="rtl" lang="he" className="min-h-screen bg-gray-50 text-slate-800" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
@@ -3946,7 +3926,8 @@ export default function App() {
           </nav>
           <div className="border-t border-slate-800 pt-3 px-2">
             <div className="text-sm text-slate-300 font-medium">{profile.fullName || session.user.email}</div>
-            <div className="text-xs text-slate-500">{isAdmin ? "מנהל" : "טכנאי"}</div>
+            <div className="text-xs text-slate-500 mb-2">{roleLabel}</div>
+            <button onClick={handleSignOut} className="flex items-center gap-2 text-xs text-slate-400 hover:text-white transition"><LogOut size={14} /> התנתקות</button>
           </div>
         </aside>
 
@@ -3972,7 +3953,8 @@ export default function App() {
                 </nav>
                 <div className="border-t pt-3">
                   <div className="text-sm text-slate-700 font-medium">{profile.fullName || session.user.email}</div>
-                  <div className="text-xs text-slate-400">{isAdmin ? "מנהל" : "טכנאי"}</div>
+                  <div className="text-xs text-slate-400 mb-2">{roleLabel}</div>
+                  <button onClick={handleSignOut} className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-800 transition"><LogOut size={14} /> התנתקות</button>
                 </div>
               </div>
             </div>
@@ -3987,6 +3969,7 @@ export default function App() {
                 onBack={() => setCustomerFileId(null)}
                 onCreateQuote={openQuoteBuilder}
                 onStartSale={(id) => { setSaleInitialCustomerId(id); setCustomerFileId(null); setTab("sale"); }}
+                isAdmin={isAdmin}
               />
             ) : (
               <>
@@ -4010,7 +3993,7 @@ export default function App() {
             )}
           </div>
 
-          {tab !== "transaction" && !customerFileId && (
+          {tab !== "transaction" && !customerFileId && isAdmin && (
             <div className="md:hidden fixed inset-x-0 bottom-14 z-20 px-3 pb-2 flex gap-2 pointer-events-none">
               <button onClick={() => runQuickAction("transfer")} className="pointer-events-auto flex-1 bg-sky-600 text-white font-bold rounded-2xl py-3.5 shadow-lg flex items-center justify-center gap-2 active:scale-95 transition"><ArrowLeftRight size={20} /> העברה מהירה</button>
               <button onClick={() => runQuickAction("install")} className="pointer-events-auto flex-1 bg-amber-500 text-white font-bold rounded-2xl py-3.5 shadow-lg flex items-center justify-center gap-2 active:scale-95 transition"><Truck size={20} /> התקנה מהירה</button>
@@ -4018,7 +4001,7 @@ export default function App() {
           )}
 
           <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t flex justify-around py-1.5 z-30">
-            {MOBILE_NAV.map((key) => {
+            {MOBILE_NAV.filter((key) => nav.some((n) => n.key === key)).map((key) => {
               const item = FULL_NAV.find((n) => n.key === key);
               const Icon = item.icon;
               const active = tab === key && !customerFileId;
