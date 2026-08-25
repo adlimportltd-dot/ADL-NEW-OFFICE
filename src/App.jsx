@@ -4,7 +4,7 @@ import {
   ScrollText, Plus, X, TriangleAlert, Download, Truck, Building2,
   CircleCheck, CircleX, Trash2, ChevronLeft, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
-  Settings, Database, KeyRound, User, Pencil, TrendingUp,
+  Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
@@ -200,11 +200,12 @@ async function updateLocation(id, patch) {
 
 // ---------- Customers ----------
 async function addCustomer(customer) {
-  const { error } = await supabase.from("customers").insert({
+  const { data, error } = await supabase.from("customers").insert({
     name: customer.name, address: customer.address, contact: customer.contact,
     phone: customer.phone || null, email: customer.email || null, client_type: customer.clientType || "private",
-  });
+  }).select().single();
   if (error) throw error;
+  return data.id;
 }
 async function updateCustomer(id, patch) {
   const payload = {};
@@ -1349,6 +1350,176 @@ function LocationsScreen({ data, refresh, isAdmin }) {
   );
 }
 
+// ==================== מכירה חדשה / הזמנה (Sale) ====================
+function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
+  const [customerId, setCustomerId] = useState(initialCustomerId || "");
+  const [newCustomerMode, setNewCustomerMode] = useState(false);
+  const [newCustomerForm, setNewCustomerForm] = useState({ name: "", phone: "", address: "", clientType: "private" });
+  const [sourceLocationId, setSourceLocationId] = useState("");
+  const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState(null); // { customerId, total }
+
+  const warehouse = data.locations.find((l) => l.type === "warehouse");
+  const vehicles = data.locations.filter((l) => l.type === "vehicle");
+
+  useEffect(() => {
+    if (!sourceLocationId && warehouse) setSourceLocationId(warehouse.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warehouse?.id]);
+
+  const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
+  const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
+  const onPickItem = (id, itemId) => {
+    const it = data.items.find((i) => i.id === itemId);
+    setLine(id, { itemId, unitPrice: it?.unitCost ? String(Math.round(it.unitCost * 1.4 * 100) / 100) : "" });
+  };
+
+  const stockOf = (itemId) => (sourceLocationId ? data.stock[`${itemId}|${sourceLocationId}`] || 0 : 0);
+  const total = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
+
+  const createNewCustomer = async () => {
+    if (!newCustomerForm.name.trim()) { setError("שם הלקוח הוא שדה חובה"); return; }
+    setBusy(true);
+    try {
+      const newId = await api.addCustomer(newCustomerForm);
+      await refresh();
+      setNewCustomerMode(false);
+      setError("");
+      setCustomerId(newId);
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const submit = async () => {
+    setError("");
+    if (!customerId) { setError("יש לבחור לקוח"); return; }
+    if (!sourceLocationId) { setError("יש לבחור מיקום מקור"); return; }
+    const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
+    if (validLines.length === 0) { setError("יש להוסיף לפחות שורת מוצר אחת"); return; }
+    const overStock = validLines.find((l) => Number(l.qty) > stockOf(l.itemId));
+    if (overStock) {
+      const it = data.items.find((i) => i.id === overStock.itemId);
+      setError(`אין מספיק מלאי ל"${it?.name}" במיקום שנבחר (זמין: ${stockOf(overStock.itemId)})`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const batchTag = `הזמנה #${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      for (const l of validLines) {
+        await api.insertTransaction({
+          type: "install", itemId: l.itemId, qty: Number(l.qty),
+          fromLocationId: sourceLocationId, customerId,
+          unitPrice: Number(l.unitPrice), note: note ? `${batchTag} - ${note}` : batchTag,
+        });
+      }
+      await refresh();
+      setSuccess({ customerId, total });
+      setLines([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
+      setNote("");
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const newSale = () => { setSuccess(null); setCustomerId(""); };
+
+  if (success) {
+    const customer = data.customers.find((c) => c.id === success.customerId);
+    return (
+      <div className="max-w-lg mx-auto text-center py-10">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4"><CircleCheck size={32} /></div>
+        <h2 className="font-bold text-xl text-slate-800 mb-1">ההזמנה נשמרה בהצלחה</h2>
+        <p className="text-slate-500 mb-1">עבור {customer?.name} · סה"כ ₪{success.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+        <p className="text-slate-400 text-sm mb-6">המלאי עודכן אוטומטית - אין צורך בפעולה נוספת.</p>
+        <div className="flex gap-2 justify-center">
+          <button onClick={newSale} className={btnPrimary}>הזמנה חדשה</button>
+          <button onClick={() => onOpenCustomer(success.customerId)} className={btnGhost}>צפייה בתיק הלקוח</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <h2 className="font-bold text-xl text-slate-800 mb-1">מכירה / הזמנה חדשה</h2>
+      <p className="text-slate-500 text-sm mb-4">בחרו לקוח, הוסיפו שורות מוצרים (מכשירים ותמציות), ושמרו - המלאי במחסן המרכזי יתעדכן אוטומטית, בלי צורך בעדכון ידני.</p>
+
+      <div className="bg-white rounded-2xl border p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold text-slate-700">לקוח</span>
+          <button onClick={() => setNewCustomerMode(!newCustomerMode)} className="text-xs text-amber-600 hover:underline font-medium flex items-center gap-1"><Plus size={12} /> {newCustomerMode ? "בחירת לקוח קיים" : "לקוח חדש"}</button>
+        </div>
+        {!newCustomerMode ? (
+          <select className={inputCls} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+            <option value="">בחר לקוח...</option>
+            {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        ) : (
+          <div className="space-y-2">
+            <input className={inputCls} placeholder="שם הלקוח" value={newCustomerForm.name} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, name: e.target.value })} />
+            <div className="grid grid-cols-2 gap-2">
+              <input className={inputCls} placeholder="טלפון" value={newCustomerForm.phone} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })} />
+              <select className={inputCls} value={newCustomerForm.clientType} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, clientType: e.target.value })}>
+                <option value="private">פרטי</option><option value="business">עסקי</option>
+              </select>
+            </div>
+            <input className={inputCls} placeholder="כתובת" value={newCustomerForm.address} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, address: e.target.value })} />
+            <button onClick={createNewCustomer} disabled={busy} className={btnGhost + " w-full"}>שמירת לקוח חדש ובחירה</button>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border p-4 mb-4">
+        <span className="text-sm font-bold text-slate-700 block mb-2">מקור המלאי</span>
+        <select className={inputCls} value={sourceLocationId} onChange={(e) => setSourceLocationId(e.target.value)}>
+          {warehouse && <option value={warehouse.id}>{warehouse.name}</option>}
+          {vehicles.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+      </div>
+
+      <div className="bg-white rounded-2xl border p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-bold text-slate-700">שורות מוצרים</span>
+          <button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button>
+        </div>
+        <div className="space-y-2">
+          {lines.map((l) => {
+            const available = l.itemId ? stockOf(l.itemId) : null;
+            const overLimit = l.itemId && Number(l.qty) > available;
+            return (
+              <div key={l.id}>
+                <div className="grid grid-cols-6 gap-1.5 items-center">
+                  <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
+                    <option value="">פריט...</option>
+                    {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                  </select>
+                  <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
+                  <input type="number" min="0" step="0.01" placeholder="מחיר (₪)" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
+                  {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
+                </div>
+                {l.itemId && <div className={`text-xs mt-0.5 ${overLimit ? "text-rose-500" : "text-slate-400"}`}>זמין במקור שנבחר: {available}{overLimit ? " - לא מספיק!" : ""}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-sm mb-4 px-1">
+        <span className="text-slate-500">סה"כ הזמנה</span>
+        <span className="font-bold text-slate-800 text-lg">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+      </div>
+
+      <div className="bg-white rounded-2xl border p-4 mb-4">
+        <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+      </div>
+
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2 text-lg py-3.5"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת הזמנה ועדכון מלאי אוטומטי</button>
+    </div>
+  );
+}
+
 // ==================== Customers ====================
 function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
   const [open, setOpen] = useState(false);
@@ -1454,7 +1625,7 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
   );
 }
 
-function CustomerFile({ data, customerId, onBack, onCreateQuote }) {
+function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale }) {
   const customer = data.customers.find((c) => c.id === customerId);
   const history = data.transactions.filter((t) => t.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
   if (!customer) return null;
@@ -1478,7 +1649,10 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote }) {
             <p className="text-slate-500 mt-1">{customer.address}</p>
             <p className="text-slate-500">{customer.contact} {customer.phone && `· ${customer.phone}`} {customer.email && `· ${customer.email}`}</p>
           </div>
-          <button onClick={() => onCreateQuote(customer.id, null)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><FileText size={16} /> יצירת הצעת מחיר</button>
+          <div className="flex items-center gap-2">
+            {onStartSale && <button onClick={() => onStartSale(customer.id)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><ShoppingCart size={16} /> הזמנה חדשה</button>}
+            <button onClick={() => onCreateQuote(customer.id, null)} className={btnGhost + " flex items-center gap-1.5 !py-2"}><FileText size={16} /> יצירת הצעת מחיר</button>
+          </div>
         </div>
       </div>
 
@@ -3579,6 +3753,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
 const FULL_NAV = [
   { key: "dashboard", label: "לוח בקרה", icon: LayoutDashboard },
   { key: "transaction", label: "תנועת מלאי", icon: ArrowLeftRight },
+  { key: "sale", label: "מכירה / הזמנה חדשה", icon: ShoppingCart },
   { key: "items", label: "פריטים", icon: Package, adminOnly: true },
   { key: "locations", label: "מיקומים", icon: Warehouse, adminOnly: true },
   { key: "customers", label: "לקוחות", icon: Users },
@@ -3607,6 +3782,7 @@ export default function App() {
   const [quickTx, setQuickTx] = useState(null);
   const [printPOId, setPrintPOId] = useState(null);
   const [quoteBuilderFor, setQuoteBuilderFor] = useState(null); // { customerId, leadId }
+  const [saleInitialCustomerId, setSaleInitialCustomerId] = useState(null);
   const [printQuoteId, setPrintQuoteId] = useState(null);
   const [autoLoginError, setAutoLoginError] = useState("");
 
@@ -3767,7 +3943,13 @@ export default function App() {
           <div className="p-4 sm:p-6 pb-24 md:pb-6 max-w-6xl mx-auto">
             {dataError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-4">{dataError}</div>}
             {customerFileId ? (
-              <CustomerFile data={data} customerId={customerFileId} onBack={() => setCustomerFileId(null)} onCreateQuote={openQuoteBuilder} />
+              <CustomerFile
+                data={data}
+                customerId={customerFileId}
+                onBack={() => setCustomerFileId(null)}
+                onCreateQuote={openQuoteBuilder}
+                onStartSale={(id) => { setSaleInitialCustomerId(id); setCustomerFileId(null); setTab("sale"); }}
+              />
             ) : (
               <>
                 {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} />}
@@ -3780,6 +3962,7 @@ export default function App() {
                 {tab === "shipments" && isAdmin && <ShipmentsScreen data={data} refresh={refresh} />}
                 {tab === "shippingRates" && isAdmin && <ShippingRatesScreen data={data} refresh={refresh} />}
                 {tab === "transaction" && <TransactionScreen data={data} refresh={refresh} quickTx={quickTx} />}
+                {tab === "sale" && <SaleScreen data={data} refresh={refresh} initialCustomerId={saleInitialCustomerId} onOpenCustomer={(id) => { setCustomerFileId(id); setTab("customers"); }} />}
                 {tab === "landedCost" && isAdmin && <LandedCostScreen data={data} refresh={refresh} />}
                 {tab === "reports" && <ReportsScreen data={data} />}
                 {tab === "po" && isAdmin && <POsScreen data={data} refresh={refresh} onPrint={setPrintPOId} />}
