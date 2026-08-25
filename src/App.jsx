@@ -537,6 +537,14 @@ const isLargePackage = (item) => {
   if (vol > 0) return vol >= 25;
   return /ג['׳]?ריקן|חבית 25|25 ליטר/.test(`${item?.unit || ""} ${item?.name || ""}`);
 };
+// אריזה שמותר לפתוח בחלון ההמרה (לגרוע ממנה): ג'ריקן 25 ליטר, אבל גם חבית/גלון 5 ליטר -
+// כי אפשר גם למזוג ישירות מ-5 ליטר לבקבוקים קטנים בלי לעבור דרך 25. שונה מ-isLargePackage,
+// שנשאר מוגבל ל-25 ליטר בלבד לצורך מסך "קבלת סחורה מספק".
+const canOpenForRepack = (item) => {
+  const vol = packageVolumeOf(item);
+  if (vol > 0) return vol >= 5;
+  return /ג['׳]?ריקן|חבית|גלון/.test(`${item?.unit || ""} ${item?.name || ""}`);
+};
 // נירמול טקסט לצורך השוואת שמות ריח: מסיר רווחים כפולים/קצה ומאחד ייצוג יוניקוד,
 // כדי ששני מחרוזות שנראות זהות לעין (אבל לא זהות בייט-לבייט בגלל איך שהוקלדו) יתאמו.
 const normalizeText = (s) => (s || "").normalize("NFC").trim().replace(/\s+/g, " ");
@@ -1147,7 +1155,7 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
 
   const consumedLines = group
     ? group.sizes
-        .filter((s) => isLargePackage(itemFor(s.itemId)) && Number(consumedQtys[s.itemId]) > 0)
+        .filter((s) => canOpenForRepack(itemFor(s.itemId)) && Number(consumedQtys[s.itemId]) > 0)
         .map((s) => ({ itemId: s.itemId, qty: Number(consumedQtys[s.itemId]), unit: s.unit, available: s.qty, volume: packageVolumeOf(itemFor(s.itemId)) }))
     : [];
   const producedLines = SMALL_PACKAGES
@@ -1206,14 +1214,14 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
             <div className="text-sm font-bold text-slate-700 mb-1">אריזות לגריעה מהמחסן (פתיחה)</div>
             <p className="text-xs text-slate-400 mb-2">רק אריזות גדולות (ג'ריקן 25 ליטר / חבית 5 ליטר) עם מלאי גדול מ-0 מוצגות כאן. אריזות קטנות ניתן רק להוסיף למטה.</p>
             <div className="space-y-2">
-              {group.sizes.filter((s) => isLargePackage(itemFor(s.itemId)) && s.qty > 0).map((s) => (
+              {group.sizes.filter((s) => canOpenForRepack(itemFor(s.itemId)) && s.qty > 0).map((s) => (
                 <div key={s.itemId} className="flex items-center gap-2">
                   <span className="text-sm text-slate-600 w-28 shrink-0">{s.unit}</span>
                   <span className="text-xs text-slate-400 w-20 shrink-0">זמין: {s.qty}</span>
                   <input type="number" min="0" max={s.qty} className={inputCls + " !py-1.5"} value={consumedQtys[s.itemId] || ""} onChange={(e) => setConsumedQtys({ ...consumedQtys, [s.itemId]: e.target.value })} placeholder="0" />
                 </div>
               ))}
-              {group.sizes.filter((s) => isLargePackage(itemFor(s.itemId)) && s.qty > 0).length === 0 && (
+              {group.sizes.filter((s) => canOpenForRepack(itemFor(s.itemId)) && s.qty > 0).length === 0 && (
                 <div className="text-sm text-slate-400 py-2">אין מלאי אריזה גדולה (ג'ריקן/חבית) זמין לריח הזה כרגע - אי אפשר לבצע המרה עד שיתקבל מלאי גדול.</div>
               )}
             </div>
