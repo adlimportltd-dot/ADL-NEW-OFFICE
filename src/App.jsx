@@ -3927,6 +3927,20 @@ export default function App() {
 
   return (
     <div dir="rtl" lang="he" className="min-h-screen bg-gray-50 text-slate-800" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
+      <style>{`
+        .sidebar-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+        .sidebar-scroll:hover { scrollbar-color: rgba(255,255,255,0.25) transparent; }
+        .sidebar-scroll::-webkit-scrollbar { width: 5px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 9999px; }
+        .sidebar-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); }
+        .mobile-nav-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+        .mobile-nav-scroll:hover { scrollbar-color: rgba(0,0,0,0.15) transparent; }
+        .mobile-nav-scroll::-webkit-scrollbar { width: 5px; }
+        .mobile-nav-scroll::-webkit-scrollbar-track { background: transparent; }
+        .mobile-nav-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 9999px; }
+        .mobile-nav-scroll:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+      `}</style>
       <div className="flex">
         <aside className="hidden md:flex flex-col w-60 shrink-0 bg-slate-900 text-slate-200 min-h-screen p-4 sticky top-0 h-screen">
           <div className="flex items-center gap-2 px-2 py-3 mb-4 shrink-0">
@@ -3936,7 +3950,7 @@ export default function App() {
               <div className="text-xs text-slate-400">ניהול מלאי</div>
             </div>
           </div>
-          <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto">
+          <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto sidebar-scroll">
             {nav.map(({ key, label, icon: Icon }) => (
               <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-[15px] font-medium transition shrink-0 ${tab === key && !customerFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
                 <Icon size={18} /> {label}
@@ -3963,7 +3977,7 @@ export default function App() {
             <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileMenuOpen(false)}>
               <div className="bg-white w-64 h-full p-4 flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5 shrink-0"><X size={20} /></button>
-                <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto">
+                <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto mobile-nav-scroll">
                   {nav.map(({ key, label, icon: Icon }) => (
                     <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-medium shrink-0 ${tab === key && !customerFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
                       <Icon size={18} /> {label}
