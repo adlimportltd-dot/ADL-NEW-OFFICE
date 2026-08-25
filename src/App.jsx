@@ -1544,6 +1544,8 @@ function TransactionScreen({ data, refresh, quickTx }) {
   const [type, setType] = useState(null);
   const [form, setForm] = useState({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" });
   const [receiveCategoryFilter, setReceiveCategoryFilter] = useState("all"); // all | device | consumable
+  const [selectedFragranceName, setSelectedFragranceName] = useState("");
+  const [resolvingFragrance, setResolvingFragrance] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1554,11 +1556,33 @@ function TransactionScreen({ data, refresh, quickTx }) {
   const resetForm = () => setForm({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" });
 
   const chooseType = (t) => {
-    setType(t); setError(""); setSuccess(""); setReceiveCategoryFilter("all");
+    setType(t); setError(""); setSuccess(""); setReceiveCategoryFilter("all"); setSelectedFragranceName("");
     const base = { itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" };
     if (t === "receive") base.toLocationId = warehouse?.id || "";
     if (t === "transfer") base.fromLocationId = warehouse?.id || "";
     setForm(base);
+  };
+
+  // מאגר הריחות הראשי - כל שם ריח ייחודי מתוך כל פריטי התמציות בקטלוג, בכל גודל
+  // (לא רק אלה שכבר קיימים בגודל 25 ליטר). זה מה שמוצג בבחירת קבלת סחורה.
+  const fragranceNames = [...new Set(data.items.filter((it) => it.category === "consumable").map((it) => guessFragranceName(it)))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "he"));
+
+  // כשבוחרים ריח לקבלת סחורה: אם כבר קיים לו פריט 25 ליטר - משתמשים בו.
+  // אם לא, יוצרים אותו כעת אוטומטית ומשתמשים בפריט החדש.
+  const onSelectReceiveFragrance = async (name) => {
+    setSelectedFragranceName(name);
+    if (!name) { setForm({ ...form, itemId: "" }); return; }
+    const existing = data.items.find((it) => it.category === "consumable" && isLargePackage(it) && guessFragranceName(it) === name);
+    if (existing) { setForm({ ...form, itemId: existing.id }); return; }
+    setResolvingFragrance(true);
+    setError("");
+    try {
+      const newId = await api.addItem({ name: `תמצית ריח - ${name} (25 ליטר)`, category: "consumable", unit: "25 ליטר", minThreshold: 0, fragranceGroup: name });
+      await refresh();
+      setForm({ ...form, itemId: newId });
+    } catch (e) { setError(e.message); } finally { setResolvingFragrance(false); }
   };
 
   useEffect(() => {
@@ -1641,12 +1665,9 @@ function TransactionScreen({ data, refresh, quickTx }) {
   }
 
   const cfg = TX_TYPES[type];
-  // בקבלת סחורה מספק מתקבלים אך ורק ג'ריקנים 25 ליטר של ריחות - לא אריזות קטנות ולא 5 ליטר.
-  // מכשירים לא מוגבלים. בנוסף ניתן לסנן בין מכשירים לתמציות לנוחות הבחירה.
-  const receiveItemOptions = data.items
-    .filter((it) => it.category === "device" || isLargePackage(it))
-    .filter((it) => receiveCategoryFilter === "all" || it.category === receiveCategoryFilter);
-  const itemOptions = type === "receive" ? receiveItemOptions : data.items;
+  // עבור סוגי תנועה שאינם קבלת סחורה, כל הפריטים זמינים כרגיל.
+  // קבלת סחורה משתמשת בבחירה ייעודית למטה (מכשיר / ריח) ולא ברשימה הזו.
+  const itemOptions = data.items;
   return (
     <div>
       <button onClick={() => setType(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> בחירת סוג תנועה אחרת</button>
@@ -1670,7 +1691,7 @@ function TransactionScreen({ data, refresh, quickTx }) {
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setReceiveCategoryFilter(key)}
+                  onClick={() => { setReceiveCategoryFilter(key); setSelectedFragranceName(""); setForm({ ...form, itemId: "" }); }}
                   className={`flex-1 rounded-xl py-2 border text-sm font-medium ${receiveCategoryFilter === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}
                 >
                   {label}
@@ -1680,13 +1701,34 @@ function TransactionScreen({ data, refresh, quickTx }) {
           </Field>
         )}
 
-        <Field label="פריט">
-          <select className={inputCls} value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value })}>
-            <option value="">בחר פריט...</option>
-            {itemOptions.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
-          </select>
-          {type === "receive" && <div className="text-xs text-slate-400 mt-1">תמציות ריח מתקבלות מהספק אך ורק בג'ריקן 25 ליטר.</div>}
-        </Field>
+        {type === "receive" && (receiveCategoryFilter === "device" || receiveCategoryFilter === "all") && (
+          <Field label="מכשיר">
+            <select className={inputCls} value={data.items.find((i) => i.id === form.itemId)?.category === "device" ? form.itemId : ""} onChange={(e) => { setSelectedFragranceName(""); setForm({ ...form, itemId: e.target.value }); }}>
+              <option value="">בחר מכשיר...</option>
+              {data.items.filter((it) => it.category === "device").map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+            </select>
+          </Field>
+        )}
+
+        {type === "receive" && (receiveCategoryFilter === "consumable" || receiveCategoryFilter === "all") && (
+          <Field label="ריח (מאגר הריחות הראשי - יתקבל כג'ריקן 25 ליטר)">
+            <select className={inputCls} value={selectedFragranceName} onChange={(e) => onSelectReceiveFragrance(e.target.value)} disabled={resolvingFragrance}>
+              <option value="">בחר ריח...</option>
+              {fragranceNames.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            {resolvingFragrance && <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> יוצר אריזת 25 ליטר לריח זה...</div>}
+            {!resolvingFragrance && <div className="text-xs text-slate-400 mt-1">תמציות ריח מתקבלות מהספק אך ורק בג'ריקן 25 ליטר. אם אין עדיין 25 ליטר לריח זה, ייווצר אוטומטית.</div>}
+          </Field>
+        )}
+
+        {type !== "receive" && (
+          <Field label="פריט">
+            <select className={inputCls} value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value })}>
+              <option value="">בחר פריט...</option>
+              {itemOptions.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+            </select>
+          </Field>
+        )}
 
         <Field label={`כמות${form.itemId ? " (" + (data.items.find((i) => i.id === form.itemId)?.unit || "") + ")" : ""}`}>
           <input type="number" min="1" className={inputCls} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
