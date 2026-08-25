@@ -1358,6 +1358,8 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   const [sourceLocationId, setSourceLocationId] = useState("");
   const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
   const [note, setNote] = useState("");
+  const [priceMode, setPriceMode] = useState("excl"); // excl = prices before VAT, incl = prices include VAT
+  const [vatRate, setVatRate] = useState("18");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(null); // { customerId, total }
@@ -1379,7 +1381,20 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   };
 
   const stockOf = (itemId) => (sourceLocationId ? data.stock[`${itemId}|${sourceLocationId}`] || 0 : 0);
-  const total = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
+  const linesSubtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
+  const vatPct = Number(vatRate) || 0;
+  let preVatAmount, vatAmount, total;
+  if (priceMode === "excl") {
+    preVatAmount = linesSubtotal;
+    vatAmount = preVatAmount * (vatPct / 100);
+    total = preVatAmount + vatAmount;
+  } else {
+    total = linesSubtotal;
+    vatAmount = total * (vatPct / (100 + vatPct));
+    preVatAmount = total - vatAmount;
+  }
+  // המחיר בפועל שנגבה ליחידה, כולל מע"מ - זה מה שנשמר בכל שורת תנועה
+  const finalUnitPrice = (rawPrice) => priceMode === "excl" ? Number(rawPrice) * (1 + vatPct / 100) : Number(rawPrice);
 
   const createNewCustomer = async () => {
     if (!newCustomerForm.name.trim()) { setError("שם הלקוח הוא שדה חובה"); return; }
@@ -1408,11 +1423,13 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
     setBusy(true);
     try {
       const batchTag = `הזמנה #${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      const vatNote = priceMode === "excl" ? `מחיר לפני מע"מ (${vatPct}%)` : `מחיר כולל מע"מ (${vatPct}%)`;
       for (const l of validLines) {
         await api.insertTransaction({
           type: "install", itemId: l.itemId, qty: Number(l.qty),
           fromLocationId: sourceLocationId, customerId,
-          unitPrice: Number(l.unitPrice), note: note ? `${batchTag} - ${note}` : batchTag,
+          unitPrice: Math.round(finalUnitPrice(l.unitPrice) * 100) / 100,
+          note: note ? `${batchTag} - ${note} - ${vatNote}` : `${batchTag} - ${vatNote}`,
         });
       }
       await refresh();
@@ -1505,9 +1522,30 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-sm mb-4 px-1">
-        <span className="text-slate-500">סה"כ הזמנה</span>
-        <span className="font-bold text-slate-800 text-lg">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+      <div className="bg-white rounded-2xl border p-4 mb-4">
+        <span className="text-sm font-bold text-slate-700 block mb-2">מע"מ</span>
+        <div className="flex gap-2 mb-3">
+          <button type="button" onClick={() => setPriceMode("excl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "excl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למעלה לפני מע"מ</button>
+          <button type="button" onClick={() => setPriceMode("incl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "incl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למעלה כוללים מע"מ</button>
+        </div>
+        <Field label={'אחוז מע"מ נוכחי'}>
+          <input type="number" min="0" step="0.1" className={inputCls + " w-28"} value={vatRate} onChange={(e) => setVatRate(e.target.value)} />
+        </Field>
+      </div>
+
+      <div className="bg-gray-50 rounded-2xl p-4 mb-4 space-y-1.5">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-500">סכום לפני מע"מ</span>
+          <span className="font-medium text-slate-700">₪{preVatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+        </div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-500">מע"מ ({vatPct}%)</span>
+          <span className="font-medium text-slate-700">₪{vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+        </div>
+        <div className="flex items-center justify-between pt-1.5 border-t">
+          <span className="font-bold text-slate-800">סה"כ הזמנה (כולל מע"מ)</span>
+          <span className="font-bold text-slate-800 text-lg">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border p-4 mb-4">
