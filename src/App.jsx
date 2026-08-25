@@ -681,8 +681,10 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   const submit = async () => {
     setError(""); setBusy(true);
     try {
-      await api.signIn(email.trim(), password);
-      onSuccess();
+      const result = await api.signIn(email.trim(), password);
+      // מעבירים את ה-session ישירות ל-App במקום להסתמך רק על ה-listener הגלובלי -
+      // כך המעבר ללוח הבקרה קורה מיד ובאופן ודאי, גם אם ה-listener מתעכב מסיבה כלשהי.
+      onSuccess(result.session);
     } catch (e) {
       setError(e.message === "Invalid login credentials" ? 'דוא"ל או סיסמה שגויים.' : (e.message || "שגיאת התחברות"));
     } finally {
@@ -3799,7 +3801,8 @@ const MOBILE_NAV = ["dashboard", "transaction", "customers", "log"];
 
 // ==================== App ====================
 export default function App() {
-  const [session, setSession] = useState(undefined); // undefined = loading, null = auto-login failed
+  const [session, setSession] = useState(undefined); // undefined = loading, null = not logged in yet
+  const [publicLogoUrl, setPublicLogoUrl] = useState(null);
   const [profile, setProfile] = useState(null);
   const [data, setData] = useState(null);
   const [dataError, setDataError] = useState("");
@@ -3847,6 +3850,19 @@ export default function App() {
     return unsubscribe;
   }, []);
 
+  // הלוגו נטען בנפרד עוד לפני התחברות, כדי שיוצג במסך ה-Login עצמו
+  // (מתאפשר בזכות מדיניות RLS ציבורית ייעודית על app_settings).
+  useEffect(() => {
+    (async () => {
+      try {
+        const logo = await api.fetchPublicLogo();
+        setPublicLogoUrl(logo);
+      } catch (e) {
+        // לא קריטי - מסך ההתחברות פשוט יציג את התג הגנרי אם זה נכשל
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (session?.user?.id) loadEverything(session.user.id);
   }, [session?.user?.id, loadEverything]);
@@ -3888,7 +3904,7 @@ export default function App() {
     return <div dir="rtl" className="min-h-screen flex items-center justify-center text-slate-400 bg-slate-900">טוען...</div>;
   }
   if (!session) {
-    return <LoginScreen onSuccess={() => {}} logoUrl={null} />;
+    return <LoginScreen onSuccess={(newSession) => setSession(newSession)} logoUrl={publicLogoUrl} />;
   }
   if (!data || !profile) {
     return (
@@ -3899,6 +3915,9 @@ export default function App() {
     );
   }
 
+  // isAdmin הוא המקור היחיד שקובע הרשאות בכל המערכת (תפריט + כל בדיקת isAdmin
+  // בתוך המסכים). isViewer משמש אך ורק לתווית התצוגה למטה - לא לשום החלטת
+  // הרשאה - כדי שלא ייווצר בעתיד גבול הרשאות כפול וסותר.
   const isAdmin = profile.role === "admin";
   const isViewer = profile.role === "viewer";
   const roleLabel = isAdmin ? "מנהל" : isViewer ? "צפייה בלבד" : "טכנאי";
