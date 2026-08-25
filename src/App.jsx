@@ -511,8 +511,8 @@ const fmtDate = (iso) =>
 const CATEGORIES = { device: "מכשירים", consumable: "נוזלים ומתכלים" };
 const PACKAGE_SIZES = ["25 ליטר", "5 ליטר", "1 ליטר", "0.5 ליטר", '250 מ"ל'];
 // אריזות "גדולות" הן תמיד מקור להמרה (נפתחות/נצרכות), "קטנות" הן תמיד תוצר (נמזגות אליהן)
-const LARGE_PACKAGES = ["25 ליטר", "5 ליטר"];
-const SMALL_PACKAGES = ["1 ליטר", "0.5 ליטר", '250 מ"ל'];
+const LARGE_PACKAGES = ["25 ליטר"];
+const SMALL_PACKAGES = ["5 ליטר", "1 ליטר", "0.5 ליטר", '250 מ"ל'];
 const PACKAGE_SIZE_VOLUMES = { "25 ליטר": 25, "5 ליטר": 5, "1 ליטר": 1, "0.5 ליטר": 0.5, '250 מ"ל': 0.25 };
 
 // זיהוי גודל אריזה עמיד - לא תלוי בהתאמת מחרוזת מדויקת. תומך גם בערכים
@@ -532,8 +532,8 @@ const packageVolumeOf = (item) => {
 };
 const isLargePackage = (item) => {
   const vol = packageVolumeOf(item);
-  if (vol > 0) return vol >= 5;
-  return /חבית|גלון/.test(`${item?.unit || ""} ${item?.name || ""}`);
+  if (vol > 0) return vol >= 25;
+  return /ג['׳]?ריקן|חבית 25|25 ליטר/.test(`${item?.unit || ""} ${item?.name || ""}`);
 };
 // נירמול טקסט לצורך השוואת שמות ריח: מסיר רווחים כפולים/קצה ומאחד ייצוג יוניקוד,
 // כדי ששני מחרוזות שנראות זהות לעין (אבל לא זהות בייט-לבייט בגלל איך שהוקלדו) יתאמו.
@@ -1634,6 +1634,10 @@ function TransactionScreen({ data, refresh, quickTx }) {
   }
 
   const cfg = TX_TYPES[type];
+  // בקבלת סחורה מספק מתקבלים אך ורק ג'ריקנים 25 ליטר של ריחות - לא אריזות קטנות ולא 5 ליטר.
+  // מכשירים לא מוגבלים.
+  const receiveItemOptions = data.items.filter((it) => it.category === "device" || isLargePackage(it));
+  const itemOptions = type === "receive" ? receiveItemOptions : data.items;
   return (
     <div>
       <button onClick={() => setType(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> בחירת סוג תנועה אחרת</button>
@@ -1643,8 +1647,9 @@ function TransactionScreen({ data, refresh, quickTx }) {
         <Field label="פריט">
           <select className={inputCls} value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value })}>
             <option value="">בחר פריט...</option>
-            {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+            {itemOptions.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
           </select>
+          {type === "receive" && <div className="text-xs text-slate-400 mt-1">תמציות ריח מתקבלות מהספק אך ורק בג'ריקן 25 ליטר.</div>}
         </Field>
 
         <Field label={`כמות${form.itemId ? " (" + (data.items.find((i) => i.id === form.itemId)?.unit || "") + ")" : ""}`}>
