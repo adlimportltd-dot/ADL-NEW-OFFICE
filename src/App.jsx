@@ -868,7 +868,7 @@ function Dashboard({ data, onExport }) {
 // ==================== Items ====================
 function ItemsScreen({ data, refresh, isAdmin }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", fragranceName: "", category: "device", unit: "", minThreshold: 0, quantity: 0, supplierSku: "" });
+  const [form, setForm] = useState({ name: "", fragranceName: "", category: "device", unit: "יחידה", minThreshold: 0, quantity: 0, supplierSku: "" });
   const [error, setError] = useState("");
 
   const [editItem, setEditItem] = useState(null);
@@ -882,19 +882,20 @@ function ItemsScreen({ data, refresh, isAdmin }) {
     const isConsumable = form.category === "consumable";
     if (isConsumable && !form.fragranceName.trim()) { setError("שם הריח הוא שדה חובה"); return; }
     if (!isConsumable && !form.name.trim()) { setError("שם הפריט הוא שדה חובה"); return; }
-    if (!form.unit.trim()) { setError("יחידת מידה / גודל אריזה הוא שדה חובה"); return; }
+    const finalUnit = isConsumable ? form.unit : "יחידה";
+    if (!finalUnit.trim()) { setError("יחידת מידה / גודל אריזה הוא שדה חובה"); return; }
     setError("");
     try {
-      const finalName = isConsumable ? `תמצית ריח - ${form.fragranceName.trim()} (${form.unit})` : form.name.trim();
+      const finalName = isConsumable ? `תמצית ריח - ${form.fragranceName.trim()} (${finalUnit})` : form.name.trim();
       const newItemId = await api.addItem({
-        name: finalName, category: form.category, unit: form.unit, minThreshold: Number(form.minThreshold) || 0,
+        name: finalName, category: form.category, unit: finalUnit, minThreshold: Number(form.minThreshold) || 0,
         supplierSku: form.supplierSku, fragranceGroup: isConsumable ? form.fragranceName.trim() : null,
       });
       const qty = Number(form.quantity) || 0;
       if (qty > 0 && warehouse) {
         await api.setItemStock(newItemId, warehouse.id, qty);
       }
-      setForm({ name: "", fragranceName: "", category: "device", unit: "", minThreshold: 0, quantity: 0, supplierSku: "" });
+      setForm({ name: "", fragranceName: "", category: "device", unit: "יחידה", minThreshold: 0, quantity: 0, supplierSku: "" });
       setOpen(false);
       await refresh();
     } catch (e) { setError(e.message); }
@@ -919,14 +920,15 @@ function ItemsScreen({ data, refresh, isAdmin }) {
     const isConsumable = editForm.category === "consumable";
     if (isConsumable && !editForm.fragranceName.trim()) { setEditError("שם הריח הוא שדה חובה"); return; }
     if (!isConsumable && !editForm.name.trim()) { setEditError("שם הפריט הוא שדה חובה"); return; }
-    if (!editForm.unit.trim()) { setEditError("יחידת מידה / גודל אריזה הוא שדה חובה"); return; }
+    const finalUnit = isConsumable ? editForm.unit.trim() : "יחידה";
+    if (!finalUnit) { setEditError("יחידת מידה / גודל אריזה הוא שדה חובה"); return; }
     setEditBusy(true);
     try {
-      const finalName = isConsumable ? `תמצית ריח - ${editForm.fragranceName.trim()} (${editForm.unit})` : editForm.name.trim();
+      const finalName = isConsumable ? `תמצית ריח - ${editForm.fragranceName.trim()} (${finalUnit})` : editForm.name.trim();
       await api.updateItem(editItem.id, {
         name: finalName,
         category: editForm.category,
-        unit: editForm.unit.trim(),
+        unit: finalUnit,
         minThreshold: Number(editForm.minThreshold) || 0,
         unitCost: editForm.unitCost === "" ? null : Number(editForm.unitCost),
         supplierSku: editForm.supplierSku.trim(),
@@ -1045,7 +1047,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
               value={form.category}
               onChange={(e) => {
                 const category = e.target.value;
-                const unit = category === "consumable" && !PACKAGE_SIZES.includes(form.unit) ? PACKAGE_SIZES[2] : form.unit;
+                const unit = category === "consumable" ? (PACKAGE_SIZES.includes(form.unit) ? form.unit : PACKAGE_SIZES[2]) : "יחידה";
                 setForm({ ...form, category, unit });
               }}
             >
@@ -1065,12 +1067,15 @@ function ItemsScreen({ data, refresh, isAdmin }) {
               <div className="text-xs text-slate-400 mt-1">ניתן להוסיף אותו ריח כמה פעמים בגדלים שונים - כל גודל יתנהל כמלאי נפרד, ויסוכם יחד בתצוגה למעלה.</div>
             </Field>
           ) : (
-            <Field label="יחידת מידה"><input className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="יחידה" /></Field>
+            <Field label="יחידת מידה"><input className={inputCls + " bg-gray-100 text-slate-500"} value="יחידה" disabled readOnly /></Field>
           )}
           <Field label="כינוי / SKU אצל הספק (לא חובה)"><input className={inputCls} value={form.supplierSku} onChange={(e) => setForm({ ...form, supplierSku: e.target.value })} placeholder='למשל: A300' /></Field>
-          <Field label={`כמות במלאי (מחסן מרכזי)${form.unit ? " - " + form.unit : ""}`}>
-            <input type="number" min="0" className={inputCls} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} placeholder="0" />
-          </Field>
+          <div className="border-t pt-3 mt-1 mb-1">
+            <div className="text-xs font-bold text-slate-500 mb-2">מלאי בפועל במחסן המרכזי (מספר יחידות, לא היחידה עצמה)</div>
+            <Field label={`כמה ${form.category === "consumable" ? form.unit || "יחידות" : "יחידות"} יש כרגע במחסן`}>
+              <input type="number" min="0" className={inputCls} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} placeholder="0" />
+            </Field>
+          </div>
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: e.target.value })} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} className={btnPrimary + " w-full"}>שמירת פריט</button>
@@ -1085,7 +1090,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
               value={editForm.category}
               onChange={(e) => {
                 const category = e.target.value;
-                const unit = category === "consumable" && !PACKAGE_SIZES.includes(editForm.unit) ? PACKAGE_SIZES[2] : editForm.unit;
+                const unit = category === "consumable" ? (PACKAGE_SIZES.includes(editForm.unit) ? editForm.unit : PACKAGE_SIZES[2]) : "יחידה";
                 setEditForm({ ...editForm, category, unit });
               }}
             >
@@ -1104,12 +1109,15 @@ function ItemsScreen({ data, refresh, isAdmin }) {
               </select>
             </Field>
           ) : (
-            <Field label="יחידת מידה"><input className={inputCls} value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} placeholder="יחידה" /></Field>
+            <Field label="יחידת מידה"><input className={inputCls + " bg-gray-100 text-slate-500"} value="יחידה" disabled readOnly /></Field>
           )}
           <Field label="כינוי / SKU אצל הספק (לא חובה)"><input className={inputCls} value={editForm.supplierSku} onChange={(e) => setEditForm({ ...editForm, supplierSku: e.target.value })} placeholder='למשל: A300' /></Field>
-          <Field label={`כמות במלאי (מחסן מרכזי)${editForm.unit ? " - " + editForm.unit : ""}`}>
-            <input type="number" min="0" className={inputCls} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
-          </Field>
+          <div className="border-t pt-3 mt-1 mb-1">
+            <div className="text-xs font-bold text-slate-500 mb-2">מלאי בפועל במחסן המרכזי (מספר יחידות, לא היחידה עצמה)</div>
+            <Field label={`כמה ${editForm.category === "consumable" ? editForm.unit || "יחידות" : "יחידות"} יש כרגע במחסן`}>
+              <input type="number" min="0" className={inputCls} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
+            </Field>
+          </div>
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={editForm.minThreshold} onChange={(e) => setEditForm({ ...editForm, minThreshold: e.target.value })} /></Field>
           <Field label="עלות נחיתה ליח' (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={editForm.unitCost} onChange={(e) => setEditForm({ ...editForm, unitCost: e.target.value })} placeholder="לא הוגדר" /></Field>
           {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
@@ -3039,7 +3047,7 @@ function POsScreen({ data, refresh, onPrint }) {
   const [statusBusyId, setStatusBusyId] = useState(null);
   const [paymentsPO, setPaymentsPO] = useState(null);
   const [newItemForLineId, setNewItemForLineId] = useState(null);
-  const [newItemForm, setNewItemForm] = useState({ name: "", category: "device", unit: "" });
+  const [newItemForm, setNewItemForm] = useState({ name: "", category: "device", unit: "יחידה" });
   const [newItemError, setNewItemError] = useState("");
   const [newItemBusy, setNewItemBusy] = useState(false);
 
@@ -3085,10 +3093,11 @@ function POsScreen({ data, refresh, onPrint }) {
   const submitNewItem = async () => {
     setNewItemError("");
     if (!newItemForm.name.trim()) { setNewItemError("שם הפריט הוא שדה חובה"); return; }
-    if (!newItemForm.unit.trim()) { setNewItemError("יחידת מידה היא שדה חובה"); return; }
+    const finalUnit = newItemForm.category === "consumable" ? newItemForm.unit.trim() : "יחידה";
+    if (!finalUnit) { setNewItemError("יחידת מידה היא שדה חובה"); return; }
     setNewItemBusy(true);
     try {
-      const newItemId = await api.addItem({ ...newItemForm, minThreshold: 0 });
+      const newItemId = await api.addItem({ ...newItemForm, unit: finalUnit, minThreshold: 0 });
       setLine(newItemForLineId, { itemId: newItemId });
       await refresh();
       setNewItemForLineId(null);
@@ -3274,7 +3283,7 @@ function POsScreen({ data, refresh, onPrint }) {
               value={newItemForm.category}
               onChange={(e) => {
                 const category = e.target.value;
-                const unit = category === "consumable" && !PACKAGE_SIZES.includes(newItemForm.unit) ? PACKAGE_SIZES[2] : newItemForm.unit;
+                const unit = category === "consumable" ? (PACKAGE_SIZES.includes(newItemForm.unit) ? newItemForm.unit : PACKAGE_SIZES[2]) : "יחידה";
                 setNewItemForm({ ...newItemForm, category, unit });
               }}
             >
@@ -3289,7 +3298,7 @@ function POsScreen({ data, refresh, onPrint }) {
               </select>
             </Field>
           ) : (
-            <Field label="יחידת מידה"><input className={inputCls} value={newItemForm.unit} onChange={(e) => setNewItemForm({ ...newItemForm, unit: e.target.value })} placeholder="יחידה" /></Field>
+            <Field label="יחידת מידה"><input className={inputCls + " bg-gray-100 text-slate-500"} value="יחידה" disabled readOnly /></Field>
           )}
           {newItemError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{newItemError}</div>}
           <button onClick={submitNewItem} disabled={newItemBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{newItemBusy && <Loader2 size={16} className="animate-spin" />}יצירה והוספה להזמנה</button>
