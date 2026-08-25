@@ -620,11 +620,11 @@ function Modal({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white">
+        <div className="flex items-center justify-between px-6 py-5 border-b sticky top-0 bg-white">
           <h3 className="font-bold text-lg text-slate-800">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100"><X size={20} /></button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-6">{children}</div>
       </div>
     </div>
   );
@@ -641,7 +641,7 @@ function Field({ label, children }) {
 
 const inputCls = "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400";
 const btnPrimary = "bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl px-4 py-3 text-[15px] transition disabled:opacity-40 disabled:cursor-not-allowed";
-const btnGhost = "bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 font-medium rounded-xl px-4 py-2.5 text-[15px] transition";
+const btnGhost = "bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 font-medium rounded-xl px-5 py-3 text-[15px] transition";
 
 // לוגו החברה: תמונה שהועלתה (נשמרת ב-app_settings) אם קיימת, אחרת התג "A"
 function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
@@ -779,7 +779,7 @@ function Dashboard({ data, onExport }) {
   return (
     <div className="space-y-5">
       {cashflowAlerts.length > 0 && (
-        <div className="bg-white rounded-2xl border overflow-hidden">
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b flex items-center gap-2"><Database size={18} className="text-amber-600" /><h3 className="font-bold text-slate-800">מרכז התראות תזרים</h3></div>
           <div className="divide-y">
             {cashflowAlerts.map((a, i) => {
@@ -818,13 +818,13 @@ function Dashboard({ data, onExport }) {
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">סה"כ יחידות במלאי</div><div className="text-2xl font-bold text-slate-800">{totalUnits}</div></div>
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">פריטים בקטלוג</div><div className="text-2xl font-bold text-slate-800">{items.length}</div></div>
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">מיקומים פעילים</div><div className="text-2xl font-bold text-slate-800">{locations.length}</div></div>
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">מתחת לסף</div><div className="text-2xl font-bold text-rose-600">{lowStock.length}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ יחידות במלאי</div><div className="text-2xl font-bold text-slate-800">{totalUnits}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">פריטים בקטלוג</div><div className="text-2xl font-bold text-slate-800">{items.length}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מיקומים פעילים</div><div className="text-2xl font-bold text-slate-800">{locations.length}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מתחת לסף</div><div className="text-2xl font-bold text-rose-600">{lowStock.length}</div></div>
       </div>
 
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h3 className="font-bold text-slate-800">מבט-על מלאי לפי פריט ומיקום</h3>
           <button onClick={onExport} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Download size={16} /> ייצוא ל-CSV</button>
@@ -833,20 +833,20 @@ function Dashboard({ data, onExport }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-slate-500 text-right">
-                <th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">קטגוריה</th>
-                <th className="px-4 py-2 font-medium">מחסן מרכזי</th><th className="px-4 py-2 font-medium">ברכבים</th>
-                <th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th>
+                <th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">קטגוריה</th>
+                <th className="px-5 py-3 font-medium">מחסן מרכזי</th><th className="px-5 py-3 font-medium">ברכבים</th>
+                <th className="px-5 py-3 font-medium">סה"כ</th><th className="px-5 py-3 font-medium">סטטוס</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.item.id} className="border-t">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{r.item.name}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{CATEGORIES[r.item.category]}</td>
-                  <td className="px-4 py-2.5">{r.whQty} {r.item.unit}</td>
-                  <td className="px-4 py-2.5">{r.vehicleQty} {r.item.unit}</td>
-                  <td className="px-4 py-2.5 font-bold">{r.total} {r.item.unit}</td>
-                  <td className="px-4 py-2.5">{r.low ? <Badge tone="rose">מתחת לסף</Badge> : <Badge tone="emerald">תקין</Badge>}</td>
+                  <td className="px-5 py-3 font-medium text-slate-800">{r.item.name}</td>
+                  <td className="px-5 py-3 text-slate-500">{CATEGORIES[r.item.category]}</td>
+                  <td className="px-5 py-3">{r.whQty} {r.item.unit}</td>
+                  <td className="px-5 py-3">{r.vehicleQty} {r.item.unit}</td>
+                  <td className="px-5 py-3 font-bold">{r.total} {r.item.unit}</td>
+                  <td className="px-5 py-3">{r.low ? <Badge tone="rose">מתחת לסף</Badge> : <Badge tone="emerald">תקין</Badge>}</td>
                 </tr>
               ))}
             </tbody>
@@ -968,7 +968,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
           <h3 className="font-bold text-slate-800 mb-2">תמציות ריח - כרטיס אחד לכל ריח</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {fragranceGroupList.map((g) => (
-              <div key={g.name} className="bg-white rounded-2xl border p-4">
+              <div key={g.name} className="bg-white rounded-2xl border shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div className="font-bold text-slate-800">{g.name}</div>
                   <Badge tone="violet">סה"כ {g.totalWeighted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ל'/ק"ג</Badge>
@@ -999,24 +999,24 @@ function ItemsScreen({ data, refresh, isAdmin }) {
       )}
 
       <h3 className="font-bold text-slate-800 mb-2">מכשירים</h3>
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">שם פריט</th><th className="px-4 py-2 font-medium">SKU ספק</th>
-              <th className="px-4 py-2 font-medium">יחידת מידה</th><th className="px-4 py-2 font-medium">סף מינימום</th>
-              <th className="px-4 py-2 font-medium">עלות נחיתה ליח'</th><th className="px-4 py-2"></th>
+              <th className="px-5 py-3 font-medium">שם פריט</th><th className="px-5 py-3 font-medium">SKU ספק</th>
+              <th className="px-5 py-3 font-medium">יחידת מידה</th><th className="px-5 py-3 font-medium">סף מינימום</th>
+              <th className="px-5 py-3 font-medium">עלות נחיתה ליח'</th><th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {deviceItems.map((it) => (
               <tr key={it.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => isAdmin && openEdit(it)}>
-                <td className="px-4 py-2.5 font-medium text-slate-800">{it.name}</td>
-                <td className="px-4 py-2.5 text-slate-500">{it.supplierSku || <span className="text-slate-300">-</span>}</td>
-                <td className="px-4 py-2.5">{it.unit}</td>
-                <td className="px-4 py-2.5">{it.minThreshold}</td>
-                <td className="px-4 py-2.5">{it.unitCost ? `₪${Number(it.unitCost).toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
-                <td className="px-4 py-2.5 text-left" onClick={(e) => e.stopPropagation()}>
+                <td className="px-5 py-3 font-medium text-slate-800">{it.name}</td>
+                <td className="px-5 py-3 text-slate-500">{it.supplierSku || <span className="text-slate-300">-</span>}</td>
+                <td className="px-5 py-3">{it.unit}</td>
+                <td className="px-5 py-3">{it.minThreshold}</td>
+                <td className="px-5 py-3">{it.unitCost ? `₪${Number(it.unitCost).toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
+                <td className="px-5 py-3 text-left" onClick={(e) => e.stopPropagation()}>
                   {isAdmin && (
                     <div className="flex items-center gap-2 justify-end">
                       <button onClick={() => openEdit(it)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
@@ -1299,7 +1299,7 @@ function LocationsScreen({ data, refresh, isAdmin }) {
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {data.locations.map((loc) => (
-          <div key={loc.id} className={`bg-white rounded-2xl border p-4 flex items-center gap-3 ${isAdmin ? "cursor-pointer hover:shadow-md transition" : ""}`} onClick={() => isAdmin && openEdit(loc)}>
+          <div key={loc.id} className={`bg-white rounded-2xl border shadow-sm p-5 flex items-center gap-3 ${isAdmin ? "cursor-pointer hover:shadow-md transition" : ""}`} onClick={() => isAdmin && openEdit(loc)}>
             <div className={`p-2.5 rounded-xl ${loc.type === "warehouse" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"}`}>
               {loc.type === "warehouse" ? <Building2 size={20} /> : <Truck size={20} />}
             </div>
@@ -1453,7 +1453,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
       <h2 className="font-bold text-xl text-slate-800 mb-1">מכירה / הזמנה חדשה</h2>
       <p className="text-slate-500 text-sm mb-4">בחרו לקוח, הוסיפו שורות מוצרים (מכשירים ותמציות), ושמרו - המלאי במחסן המרכזי יתעדכן אוטומטית, בלי צורך בעדכון ידני.</p>
 
-      <div className="bg-white rounded-2xl border p-4 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-bold text-slate-700">לקוח</span>
           <button onClick={() => setNewCustomerMode(!newCustomerMode)} className="text-xs text-amber-600 hover:underline font-medium flex items-center gap-1"><Plus size={12} /> {newCustomerMode ? "בחירת לקוח קיים" : "לקוח חדש"}</button>
@@ -1478,7 +1478,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
         )}
       </div>
 
-      <div className="bg-white rounded-2xl border p-4 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <span className="text-sm font-bold text-slate-700 block mb-2">מקור המלאי</span>
         <select className={inputCls} value={sourceLocationId} onChange={(e) => setSourceLocationId(e.target.value)}>
           {warehouse && <option value={warehouse.id}>{warehouse.name}</option>}
@@ -1486,7 +1486,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
         </select>
       </div>
 
-      <div className="bg-white rounded-2xl border p-4 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-bold text-slate-700">שורות מוצרים</span>
           <button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button>
@@ -1513,7 +1513,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border p-4 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <span className="text-sm font-bold text-slate-700 block mb-2">מע"מ</span>
         <div className="flex gap-2 mb-3">
           <button type="button" onClick={() => setPriceMode("excl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "excl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למעלה לפני מע"מ</button>
@@ -1539,7 +1539,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border p-4 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
 
@@ -1586,25 +1586,25 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
         <h2 className="font-bold text-xl text-slate-800">לקוחות</h2>
         {isAdmin && <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> לקוח חדש</button>}
       </div>
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">שם לקוח / עסק</th><th className="px-4 py-2 font-medium">סוג</th>
-              <th className="px-4 py-2 font-medium">טלפון</th><th className="px-4 py-2 font-medium">אימייל</th>
-              <th className="px-4 py-2 font-medium">כתובת</th><th className="px-4 py-2 font-medium">איש קשר</th><th className="px-4 py-2"></th>
+              <th className="px-5 py-3 font-medium">שם לקוח / עסק</th><th className="px-5 py-3 font-medium">סוג</th>
+              <th className="px-5 py-3 font-medium">טלפון</th><th className="px-5 py-3 font-medium">אימייל</th>
+              <th className="px-5 py-3 font-medium">כתובת</th><th className="px-5 py-3 font-medium">איש קשר</th><th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {data.customers.map((c) => (
               <tr key={c.id} className="border-t hover:bg-gray-50">
-                <td className="px-4 py-2.5 font-medium text-slate-800">{c.name}</td>
-                <td className="px-4 py-2.5"><Badge tone={CLIENT_TYPES[c.clientType]?.tone}>{CLIENT_TYPES[c.clientType]?.label}</Badge></td>
-                <td className="px-4 py-2.5 text-slate-500">{c.phone || "-"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{c.email || "-"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{c.address}</td>
-                <td className="px-4 py-2.5 text-slate-500">{c.contact}</td>
-                <td className="px-4 py-2.5 text-left">
+                <td className="px-5 py-3 font-medium text-slate-800">{c.name}</td>
+                <td className="px-5 py-3"><Badge tone={CLIENT_TYPES[c.clientType]?.tone}>{CLIENT_TYPES[c.clientType]?.label}</Badge></td>
+                <td className="px-5 py-3 text-slate-500">{c.phone || "-"}</td>
+                <td className="px-5 py-3 text-slate-500">{c.email || "-"}</td>
+                <td className="px-5 py-3 text-slate-500">{c.address}</td>
+                <td className="px-5 py-3 text-slate-500">{c.contact}</td>
+                <td className="px-5 py-3 text-left">
                   <div className="flex items-center gap-3 justify-end">
                     {isAdmin && <button onClick={() => openEdit(c)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={15} /></button>}
                     <button onClick={() => onOpenFile(c.id)} className="text-amber-600 hover:underline font-medium">תיק לקוח</button>
@@ -1668,7 +1668,7 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
   return (
     <div>
       <button onClick={onBack} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת לקוחות</button>
-      <div className="bg-white rounded-2xl border p-5 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-start justify-between flex-wrap gap-2">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -1686,20 +1686,20 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">סה"כ שולם</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">מכשירים שנרכשו</div><div className="text-2xl font-bold text-slate-800">{deviceCount}</div></div>
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">תמציות שנרכשו</div><div className="text-2xl font-bold text-slate-800">{consumableCount}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ שולם</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מכשירים שנרכשו</div><div className="text-2xl font-bold text-slate-800">{deviceCount}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">תמציות שנרכשו</div><div className="text-2xl font-bold text-slate-800">{consumableCount}</div></div>
       </div>
 
       <h3 className="font-bold text-slate-800 mb-2">היסטוריית הזמנות ורכישות</h3>
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">פריט</th>
-              <th className="px-4 py-2 font-medium">קטגוריה</th><th className="px-4 py-2 font-medium">יחידה / גודל</th>
-              <th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">מחיר ליח'</th>
-              <th className="px-4 py-2 font-medium">סה"כ שורה</th><th className="px-4 py-2 font-medium">סוג</th><th className="px-4 py-2 font-medium">הערה</th>
+              <th className="px-5 py-3 font-medium">תאריך</th><th className="px-5 py-3 font-medium">פריט</th>
+              <th className="px-5 py-3 font-medium">קטגוריה</th><th className="px-5 py-3 font-medium">יחידה / גודל</th>
+              <th className="px-5 py-3 font-medium">כמות</th><th className="px-5 py-3 font-medium">מחיר ליח'</th>
+              <th className="px-5 py-3 font-medium">סה"כ שורה</th><th className="px-5 py-3 font-medium">סוג</th><th className="px-5 py-3 font-medium">הערה</th>
             </tr>
           </thead>
           <tbody>
@@ -1708,15 +1708,15 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
               const lineTotal = t.unitPrice != null ? t.unitPrice * t.qty : null;
               return (
                 <tr key={t.id} className="border-t">
-                  <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{item?.name || "-"}</td>
-                  <td className="px-4 py-2.5">{item ? <Badge tone={item.category === "device" ? "sky" : "violet"}>{CATEGORIES[item.category]}</Badge> : "-"}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{item?.unit || "-"}</td>
-                  <td className="px-4 py-2.5">{t.qty}</td>
-                  <td className="px-4 py-2.5">{t.unitPrice != null ? `₪${t.unitPrice.toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
-                  <td className="px-4 py-2.5 font-bold">{lineTotal != null ? `₪${lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="text-slate-300">-</span>}</td>
-                  <td className="px-4 py-2.5"><Badge tone={TX_TYPES[t.type]?.color}>{TX_TYPES[t.type]?.label}</Badge></td>
-                  <td className="px-4 py-2.5 text-slate-500">{t.note || "-"}</td>
+                  <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
+                  <td className="px-5 py-3 font-medium text-slate-800">{item?.name || "-"}</td>
+                  <td className="px-5 py-3">{item ? <Badge tone={item.category === "device" ? "sky" : "violet"}>{CATEGORIES[item.category]}</Badge> : "-"}</td>
+                  <td className="px-5 py-3 text-slate-500">{item?.unit || "-"}</td>
+                  <td className="px-5 py-3">{t.qty}</td>
+                  <td className="px-5 py-3">{t.unitPrice != null ? `₪${t.unitPrice.toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
+                  <td className="px-5 py-3 font-bold">{lineTotal != null ? `₪${lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="text-slate-300">-</span>}</td>
+                  <td className="px-5 py-3"><Badge tone={TX_TYPES[t.type]?.color}>{TX_TYPES[t.type]?.label}</Badge></td>
+                  <td className="px-5 py-3 text-slate-500">{t.note || "-"}</td>
                 </tr>
               );
             })}
@@ -1725,8 +1725,8 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
           {purchases.length > 0 && (
             <tfoot>
               <tr className="border-t bg-gray-50">
-                <td colSpan={6} className="px-4 py-2.5 text-left font-bold text-slate-700">סה"כ שולם על ידי הלקוח</td>
-                <td colSpan={3} className="px-4 py-2.5 font-bold text-amber-700">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                <td colSpan={6} className="px-5 py-3 text-left font-bold text-slate-700">סה"כ שולם על ידי הלקוח</td>
+                <td colSpan={3} className="px-5 py-3 font-bold text-amber-700">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
               </tr>
             </tfoot>
           )}
@@ -1736,17 +1736,17 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
       {customerQuotes.length > 0 && (
         <>
           <h3 className="font-bold text-slate-800 mb-2 mt-4">הצעות מחיר</h3>
-          <div className="bg-white rounded-2xl border overflow-hidden">
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
             <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הצעה</th><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th></tr></thead>
+              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">מס' הצעה</th><th className="px-5 py-3 font-medium">תאריך</th><th className="px-5 py-3 font-medium">שורות</th><th className="px-5 py-3 font-medium">סה"כ</th><th className="px-5 py-3 font-medium">סטטוס</th></tr></thead>
               <tbody>
                 {customerQuotes.map((q) => (
                   <tr key={q.id} className="border-t">
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{q.quoteNumber}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{fmtDate(q.date)}</td>
-                    <td className="px-4 py-2.5">{q.lines.length}</td>
-                    <td className="px-4 py-2.5 font-bold">₪{q.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-2.5"><Badge tone={QUOTE_STATUSES[q.status]?.tone}>{QUOTE_STATUSES[q.status]?.label}</Badge></td>
+                    <td className="px-5 py-3 font-medium text-slate-800">{q.quoteNumber}</td>
+                    <td className="px-5 py-3 text-slate-500">{fmtDate(q.date)}</td>
+                    <td className="px-5 py-3">{q.lines.length}</td>
+                    <td className="px-5 py-3 font-bold">₪{q.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td className="px-5 py-3"><Badge tone={QUOTE_STATUSES[q.status]?.tone}>{QUOTE_STATUSES[q.status]?.label}</Badge></td>
                   </tr>
                 ))}
               </tbody>
@@ -2037,14 +2037,14 @@ function AuditLog({ data }) {
           {Object.entries(AUDIT_TX_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
       </div>
-      <div className="bg-white rounded-2xl border overflow-hidden overflow-x-auto">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">סוג</th>
-              <th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th>
-              <th className="px-4 py-2 font-medium">ממיקום</th><th className="px-4 py-2 font-medium">אל מיקום</th>
-              <th className="px-4 py-2 font-medium">לקוח / ספק</th><th className="px-4 py-2 font-medium">הערה</th>
+              <th className="px-5 py-3 font-medium">תאריך</th><th className="px-5 py-3 font-medium">סוג</th>
+              <th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">כמות</th>
+              <th className="px-5 py-3 font-medium">ממיקום</th><th className="px-5 py-3 font-medium">אל מיקום</th>
+              <th className="px-5 py-3 font-medium">לקוח / ספק</th><th className="px-5 py-3 font-medium">הערה</th>
             </tr>
           </thead>
           <tbody>
@@ -2052,14 +2052,14 @@ function AuditLog({ data }) {
               const item = data.items.find((i) => i.id === t.itemId);
               return (
                 <tr key={t.id} className="border-t">
-                  <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
-                  <td className="px-4 py-2.5"><Badge tone={AUDIT_TX_LABELS[t.type]?.color}>{AUDIT_TX_LABELS[t.type]?.label}</Badge></td>
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{item?.name || "-"}</td>
-                  <td className="px-4 py-2.5">{t.qty}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{t.fromLocationId ? locName(t.fromLocationId) : "-"}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{t.toLocationId ? locName(t.toLocationId) : "-"}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{t.customerId ? custName(t.customerId) : t.supplierId ? supplierName(t.supplierId) : "-"}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{t.note || (t.condition === "faulty" ? "התקבל כתקול" : "")}</td>
+                  <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
+                  <td className="px-5 py-3"><Badge tone={AUDIT_TX_LABELS[t.type]?.color}>{AUDIT_TX_LABELS[t.type]?.label}</Badge></td>
+                  <td className="px-5 py-3 font-medium text-slate-800">{item?.name || "-"}</td>
+                  <td className="px-5 py-3">{t.qty}</td>
+                  <td className="px-5 py-3 text-slate-500">{t.fromLocationId ? locName(t.fromLocationId) : "-"}</td>
+                  <td className="px-5 py-3 text-slate-500">{t.toLocationId ? locName(t.toLocationId) : "-"}</td>
+                  <td className="px-5 py-3 text-slate-500">{t.customerId ? custName(t.customerId) : t.supplierId ? supplierName(t.supplierId) : "-"}</td>
+                  <td className="px-5 py-3 text-slate-500">{t.note || (t.condition === "faulty" ? "התקבל כתקול" : "")}</td>
                 </tr>
               );
             })}
@@ -2181,7 +2181,7 @@ function LandedCostScreen({ data, refresh }) {
       <p className="text-slate-500 text-sm mb-4">חשב את מחיר הנחיתה הסופי ליחידה עבור משלוח, וחלק את עלויות המשלוח בין הפריטים לפי נפח או לפי ערך.</p>
 
       {shipmentsWithPOs.length > 0 && (
-        <div className="bg-white rounded-2xl border p-4 mb-4">
+        <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
           <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Ship size={16} /> טעינה ממכולה/משלוח משותף</h3>
           <p className="text-slate-500 text-sm mb-3">בחירת משלוח תטען אוטומטית את כל הפריטים והכמויות מכל הזמנות הרכש (מכל הספקים) שמשויכות אליו.</p>
           <select className={inputCls} value={selectedShipment} onChange={(e) => loadShipment(e.target.value)}>
@@ -2195,7 +2195,7 @@ function LandedCostScreen({ data, refresh }) {
       )}
 
       {data.rateCards.length > 0 && (
-        <div className="bg-white rounded-2xl border p-4 mb-4">
+        <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
           <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Database size={16} /> מחירון שילוח שמור</h3>
           <p className="text-slate-500 text-sm mb-3">בחרו מחירון ושורת מחיר כדי למלא אוטומטית את עלות ההובלה - עדיין ניתן לדרוס ידנית אחרי המילוי.</p>
           <div className="grid sm:grid-cols-2 gap-3 mb-2">
@@ -2266,7 +2266,7 @@ function LandedCostScreen({ data, refresh }) {
       )}
 
       <div className="grid md:grid-cols-2 gap-4 mb-4">
-        <div className="bg-white rounded-2xl border p-4">
+        <div className="bg-white rounded-2xl border shadow-sm p-5">
           <h3 className="font-bold text-slate-800 mb-3">עלויות המשלוח (₪)</h3>
           <Field label="הובלה ימית / אווירית"><input type="number" min="0" className={inputCls} value={overhead.shipping} onChange={(e) => setOverhead({ ...overhead, shipping: e.target.value })} /></Field>
           <Field label="מכס"><input type="number" min="0" className={inputCls} value={overhead.customs} onChange={(e) => setOverhead({ ...overhead, customs: e.target.value })} /></Field>
@@ -2291,7 +2291,7 @@ function LandedCostScreen({ data, refresh }) {
           </Field>
           <div className="border-t pt-3 mt-1 flex items-center justify-between"><span className="text-slate-600 font-medium">סה"כ עלויות משלוח + עמלות</span><span className="font-bold text-slate-800">₪{totalOverhead.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
         </div>
-        <div className="bg-white rounded-2xl border p-4">
+        <div className="bg-white rounded-2xl border shadow-sm p-5">
           <h3 className="font-bold text-slate-800 mb-3">שיטת חלוקת העלויות</h3>
           <div className="flex gap-2 mb-4">
             <button onClick={() => setMethod("value")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "value" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי ערך הפריט</button>
@@ -2300,7 +2300,7 @@ function LandedCostScreen({ data, refresh }) {
           <p className="text-sm text-slate-500">{method === "value" ? "עלויות המשלוח יחולקו ביחס לערך הכולל של כל שורה (בש\"ח, אחרי המרה)." : "עלויות המשלוח יחולקו ביחס לנפח הכולל שלהן במכולה."}</p>
         </div>
       </div>
-      <div className="bg-white rounded-2xl border p-4 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-slate-800">פריטים במשלוח</h3><button onClick={addLine} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={16} /> הוספת שורה</button></div>
         <div className="space-y-3">
           {lines.map((l) => (
@@ -2324,19 +2324,19 @@ function LandedCostScreen({ data, refresh }) {
         </div>
       </div>
       {canCompute && (
-        <div className="bg-white rounded-2xl border overflow-hidden mb-4">
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-4">
           <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">תוצאת חישוב עלות הנחיתה</h3></div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">מחיר בסיס (₪)</th><th className="px-4 py-2 font-medium">חלק יחסי</th><th className="px-4 py-2 font-medium">Landed Cost ליח'</th></tr></thead>
+              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">כמות</th><th className="px-5 py-3 font-medium">מחיר בסיס (₪)</th><th className="px-5 py-3 font-medium">חלק יחסי</th><th className="px-5 py-3 font-medium">Landed Cost ליח'</th></tr></thead>
               <tbody>
                 {results.map((r) => (
                   <tr key={r.id} className="border-t">
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{r.item?.name || "-"}</td>
-                    <td className="px-4 py-2.5">{r.qty}</td>
-                    <td className="px-4 py-2.5">₪{r.unitPriceILS.toFixed(2)}{r.currency !== "ILS" && <span className="text-slate-400 text-xs"> ({CURRENCY_SYMBOLS[r.currency]}{Number(r.unitPrice).toFixed(2)})</span>}</td>
-                    <td className="px-4 py-2.5">{(r.share * 100).toFixed(1)}%</td>
-                    <td className="px-4 py-2.5 font-bold text-amber-700">₪{r.landedPerUnit.toFixed(2)}</td>
+                    <td className="px-5 py-3 font-medium text-slate-800">{r.item?.name || "-"}</td>
+                    <td className="px-5 py-3">{r.qty}</td>
+                    <td className="px-5 py-3">₪{r.unitPriceILS.toFixed(2)}{r.currency !== "ILS" && <span className="text-slate-400 text-xs"> ({CURRENCY_SYMBOLS[r.currency]}{Number(r.unitPrice).toFixed(2)})</span>}</td>
+                    <td className="px-5 py-3">{(r.share * 100).toFixed(1)}%</td>
+                    <td className="px-5 py-3 font-bold text-amber-700">₪{r.landedPerUnit.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2387,21 +2387,21 @@ function ValuationReport({ data }) {
     <div className="space-y-5">
       {missingCost && <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-sm text-amber-800 flex items-center gap-2"><TriangleAlert size={16} /> חלק מהפריטים ללא עלות נחיתה - השווי שלהם לא נכלל.</div>}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">שווי מלאי כולל</div><div className="text-2xl font-bold text-slate-800">₪{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
-        {byCategory.map((c) => <div key={c.cat} className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">שווי {CATEGORIES[c.cat]}</div><div className="text-2xl font-bold text-slate-800">₪{c.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>)}
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">שווי מלאי כולל</div><div className="text-2xl font-bold text-slate-800">₪{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
+        {byCategory.map((c) => <div key={c.cat} className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">שווי {CATEGORIES[c.cat]}</div><div className="text-2xl font-bold text-slate-800">₪{c.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>)}
       </div>
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">שווי לפי מוצר (Top 10)</h3></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות</th><th className="px-4 py-2 font-medium">עלות ליח'</th><th className="px-4 py-2 font-medium">שווי כולל</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">כמות</th><th className="px-5 py-3 font-medium">עלות ליח'</th><th className="px-5 py-3 font-medium">שווי כולל</th></tr></thead>
             <tbody>
               {topProducts.map((r) => (
                 <tr key={r.item.id} className="border-t">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{r.item.name}</td>
-                  <td className="px-4 py-2.5">{r.totalQty}</td>
-                  <td className="px-4 py-2.5">₪{r.unitCost.toFixed(2)}</td>
-                  <td className="px-4 py-2.5 font-bold">₪{r.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td className="px-5 py-3 font-medium text-slate-800">{r.item.name}</td>
+                  <td className="px-5 py-3">{r.totalQty}</td>
+                  <td className="px-5 py-3">₪{r.unitCost.toFixed(2)}</td>
+                  <td className="px-5 py-3 font-bold">₪{r.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                 </tr>
               ))}
               {topProducts.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">אין עדיין שווי מחושב</td></tr>}
@@ -2441,24 +2441,24 @@ function ForecastReport({ data }) {
 
   return (
     <div className="space-y-5">
-      <div className="bg-white rounded-2xl border p-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
         <Field label="זמן אספקה (Lead Time) בימים - יבוא מסין/צרפת"><input type="number" min="1" className={inputCls + " w-32"} value={leadTime} onChange={(e) => setLeadTime(Number(e.target.value) || 60)} /></Field>
         <p className="text-sm text-slate-500">טווח מקובל: 45-60 יום. פריט עם פחות ימי מלאי מזמן האספקה מסומן דחוף.</p>
       </div>
       {urgentCount > 0 && <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4"><div className="flex items-center gap-2 text-rose-700 font-bold"><TriangleAlert size={18} /><span>{urgentCount} פריטים דחופים להזמנת רכש</span></div></div>}
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">קצב צריכה וימי מלאי נותרים</h3></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">מלאי נוכחי</th><th className="px-4 py-2 font-medium">קצב חודשי</th><th className="px-4 py-2 font-medium">ימי מלאי נותרים</th><th className="px-4 py-2 font-medium">סטטוס</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">מלאי נוכחי</th><th className="px-5 py-3 font-medium">קצב חודשי</th><th className="px-5 py-3 font-medium">ימי מלאי נותרים</th><th className="px-5 py-3 font-medium">סטטוס</th></tr></thead>
             <tbody>
               {sorted.map((r) => (
                 <tr key={r.item.id} className="border-t">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{r.item.name}</td>
-                  <td className="px-4 py-2.5">{r.currentStock} {r.item.unit}</td>
-                  <td className="px-4 py-2.5">{r.monthlyRate > 0 ? `${r.monthlyRate.toFixed(1)} ${r.item.unit}/חודש` : "-"}</td>
-                  <td className="px-4 py-2.5">{r.daysRemaining !== null ? Math.round(r.daysRemaining) : "-"}</td>
-                  <td className="px-4 py-2.5"><Badge tone={statusMeta[r.status].tone}>{statusMeta[r.status].label}</Badge></td>
+                  <td className="px-5 py-3 font-medium text-slate-800">{r.item.name}</td>
+                  <td className="px-5 py-3">{r.currentStock} {r.item.unit}</td>
+                  <td className="px-5 py-3">{r.monthlyRate > 0 ? `${r.monthlyRate.toFixed(1)} ${r.item.unit}/חודש` : "-"}</td>
+                  <td className="px-5 py-3">{r.daysRemaining !== null ? Math.round(r.daysRemaining) : "-"}</td>
+                  <td className="px-5 py-3"><Badge tone={statusMeta[r.status].tone}>{statusMeta[r.status].label}</Badge></td>
                 </tr>
               ))}
             </tbody>
@@ -2522,25 +2522,25 @@ function SuppliersScreen({ data, refresh }) {
         <h2 className="font-bold text-xl text-slate-800">ספקים</h2>
         <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> ספק חדש</button>
       </div>
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-4 py-2 font-medium">שם ספק</th><th className="px-4 py-2 font-medium">מדינה</th>
-              <th className="px-4 py-2 font-medium">איש קשר</th><th className="px-4 py-2 font-medium">טלפון</th>
-              <th className="px-4 py-2 font-medium">אימייל</th><th className="px-4 py-2 font-medium">מטבע</th><th className="px-4 py-2"></th>
+              <th className="px-5 py-3 font-medium">שם ספק</th><th className="px-5 py-3 font-medium">מדינה</th>
+              <th className="px-5 py-3 font-medium">איש קשר</th><th className="px-5 py-3 font-medium">טלפון</th>
+              <th className="px-5 py-3 font-medium">אימייל</th><th className="px-5 py-3 font-medium">מטבע</th><th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {data.suppliers.map((s) => (
               <tr key={s.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => openEdit(s)}>
-                <td className="px-4 py-2.5 font-medium text-slate-800">{s.name}</td>
-                <td className="px-4 py-2.5 text-slate-500">{s.country || "-"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{s.contact || "-"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{s.phone || "-"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{s.email || "-"}</td>
-                <td className="px-4 py-2.5"><Badge tone="sky">{CURRENCY_SYMBOLS[s.currency]} {s.currency}</Badge></td>
-                <td className="px-4 py-2.5 text-left" onClick={(e) => e.stopPropagation()}>
+                <td className="px-5 py-3 font-medium text-slate-800">{s.name}</td>
+                <td className="px-5 py-3 text-slate-500">{s.country || "-"}</td>
+                <td className="px-5 py-3 text-slate-500">{s.contact || "-"}</td>
+                <td className="px-5 py-3 text-slate-500">{s.phone || "-"}</td>
+                <td className="px-5 py-3 text-slate-500">{s.email || "-"}</td>
+                <td className="px-5 py-3"><Badge tone="sky">{CURRENCY_SYMBOLS[s.currency]} {s.currency}</Badge></td>
+                <td className="px-5 py-3 text-left" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-2 justify-end">
                     <button onClick={() => openEdit(s)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
                     <button onClick={() => removeSupplier(s.id)} className="text-gray-400 hover:text-rose-600" title="מחיקה"><Trash2 size={16} /></button>
@@ -2654,7 +2654,7 @@ function ShipmentsScreen({ data, refresh }) {
     return (
       <div>
         <button onClick={() => setViewShipmentId(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת משלוחים</button>
-        <div className="bg-white rounded-2xl border p-5 mb-4">
+        <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
           <div className="flex items-center gap-3 mb-1">
             <h2 className="font-bold text-xl text-slate-800">{shipment.name}</h2>
             <Badge tone={SHIPMENT_STATUSES[shipment.status]?.tone}>{SHIPMENT_STATUSES[shipment.status]?.label}</Badge>
@@ -2663,25 +2663,25 @@ function ShipmentsScreen({ data, refresh }) {
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">הזמנות רכש</div><div className="text-2xl font-bold text-slate-800">{pos.length}</div></div>
-          <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">ספקים</div><div className="text-2xl font-bold text-slate-800">{suppliersFor(viewShipmentId).length}</div></div>
-          <div className="bg-white rounded-2xl border p-4"><div className="text-slate-500 text-sm mb-1">שורות פריטים</div><div className="text-2xl font-bold text-slate-800">{Object.keys(itemTotals).length}</div></div>
+          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">הזמנות רכש</div><div className="text-2xl font-bold text-slate-800">{pos.length}</div></div>
+          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">ספקים</div><div className="text-2xl font-bold text-slate-800">{suppliersFor(viewShipmentId).length}</div></div>
+          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">שורות פריטים</div><div className="text-2xl font-bold text-slate-800">{Object.keys(itemTotals).length}</div></div>
         </div>
 
         <h3 className="font-bold text-slate-800 mb-2">הזמנות הרכש במשלוח זה</h3>
-        <div className="bg-white rounded-2xl border overflow-hidden mb-4">
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-4">
           <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">מטבע</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סטטוס PO</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">מס' הזמנה</th><th className="px-5 py-3 font-medium">ספק</th><th className="px-5 py-3 font-medium">מטבע</th><th className="px-5 py-3 font-medium">שורות</th><th className="px-5 py-3 font-medium">סטטוס PO</th></tr></thead>
             <tbody>
               {pos.map((po) => {
                 const supplier = data.suppliers.find((s) => s.id === po.supplierId);
                 return (
                   <tr key={po.id} className="border-t">
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{po.poNumber}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{supplier?.name || "-"} {supplier?.country ? `(${supplier.country})` : ""}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{po.currency}</td>
-                    <td className="px-4 py-2.5">{po.lines.length}</td>
-                    <td className="px-4 py-2.5"><Badge tone={PO_STATUSES[po.status]?.tone}>{PO_STATUSES[po.status]?.label}</Badge></td>
+                    <td className="px-5 py-3 font-medium text-slate-800">{po.poNumber}</td>
+                    <td className="px-5 py-3 text-slate-500">{supplier?.name || "-"} {supplier?.country ? `(${supplier.country})` : ""}</td>
+                    <td className="px-5 py-3 text-slate-500">{po.currency}</td>
+                    <td className="px-5 py-3">{po.lines.length}</td>
+                    <td className="px-5 py-3"><Badge tone={PO_STATUSES[po.status]?.tone}>{PO_STATUSES[po.status]?.label}</Badge></td>
                   </tr>
                 );
               })}
@@ -2691,15 +2691,15 @@ function ShipmentsScreen({ data, refresh }) {
         </div>
 
         <h3 className="font-bold text-slate-800 mb-2">פריטים וכמויות מרוכזים (כל הספקים יחד)</h3>
-        <div className="bg-white rounded-2xl border overflow-hidden">
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
           <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">פריט</th><th className="px-4 py-2 font-medium">כמות כוללת</th><th className="px-4 py-2 font-medium">מגיע מספקים</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">כמות כוללת</th><th className="px-5 py-3 font-medium">מגיע מספקים</th></tr></thead>
             <tbody>
               {Object.values(itemTotals).map((r, i) => (
                 <tr key={i} className="border-t">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{r.item?.name || "-"}</td>
-                  <td className="px-4 py-2.5">{r.qty} {r.item?.unit || ""}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{[...r.suppliers].join(", ")}</td>
+                  <td className="px-5 py-3 font-medium text-slate-800">{r.item?.name || "-"}</td>
+                  <td className="px-5 py-3">{r.qty} {r.item?.unit || ""}</td>
+                  <td className="px-5 py-3 text-slate-500">{[...r.suppliers].join(", ")}</td>
                 </tr>
               ))}
               {Object.keys(itemTotals).length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400">אין עדיין פריטים</td></tr>}
@@ -2722,7 +2722,7 @@ function ShipmentsScreen({ data, refresh }) {
           const pos = posFor(s.id);
           const suppliers = suppliersFor(s.id);
           return (
-            <div key={s.id} className="bg-white rounded-2xl border p-4 cursor-pointer hover:shadow-md transition" onClick={() => setViewShipmentId(s.id)}>
+            <div key={s.id} className="bg-white rounded-2xl border shadow-sm p-5 cursor-pointer hover:shadow-md transition" onClick={() => setViewShipmentId(s.id)}>
               <div className="flex items-start justify-between mb-2">
                 <div className="p-2.5 rounded-xl bg-violet-100 text-violet-700"><Ship size={20} /></div>
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -2835,7 +2835,7 @@ function ShippingRatesScreen({ data, refresh }) {
 
       <div className="space-y-4">
         {data.rateCards.map((card) => (
-          <div key={card.id} className="bg-white rounded-2xl border overflow-hidden">
+          <div key={card.id} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
               <div>
                 <div className="font-bold text-slate-800">{card.name}</div>
@@ -3156,9 +3156,9 @@ function QuotesScreen({ data, refresh, onPrint }) {
   return (
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-4">הצעות מחיר</h2>
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
-          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הצעה</th><th className="px-4 py-2 font-medium">תאריך</th><th className="px-4 py-2 font-medium">לקוח / ליד</th><th className="px-4 py-2 font-medium">שורות</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">מס' הצעה</th><th className="px-5 py-3 font-medium">תאריך</th><th className="px-5 py-3 font-medium">לקוח / ליד</th><th className="px-5 py-3 font-medium">שורות</th><th className="px-5 py-3 font-medium">סה"כ</th><th className="px-5 py-3 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.quotes.map((q) => {
               const customer = data.customers.find((c) => c.id === q.customerId);
@@ -3166,17 +3166,17 @@ function QuotesScreen({ data, refresh, onPrint }) {
               const total = q.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
               return (
                 <tr key={q.id} className="border-t">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{q.quoteNumber}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{fmtDate(q.date)}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{customer?.name || lead?.name || "-"}</td>
-                  <td className="px-4 py-2.5">{q.lines.length}</td>
-                  <td className="px-4 py-2.5 font-bold">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-5 py-3 font-medium text-slate-800">{q.quoteNumber}</td>
+                  <td className="px-5 py-3 text-slate-500">{fmtDate(q.date)}</td>
+                  <td className="px-5 py-3 text-slate-500">{customer?.name || lead?.name || "-"}</td>
+                  <td className="px-5 py-3">{q.lines.length}</td>
+                  <td className="px-5 py-3 font-bold">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-5 py-3">
                     <select className="text-xs rounded-lg border border-gray-300 px-2 py-1 bg-white" value={q.status} disabled={statusBusyId === q.id} onChange={(e) => changeStatus(q.id, e.target.value)}>
                       {Object.entries(QUOTE_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
                     </select>
                   </td>
-                  <td className="px-4 py-2.5 text-left">
+                  <td className="px-5 py-3 text-left">
                     <div className="flex items-center gap-3 justify-end">
                       <button onClick={() => onPrint(q.id)} className="text-amber-600 hover:underline font-medium flex items-center gap-1"><Printer size={14} /> צפייה/הדפסה</button>
                       <button onClick={() => removeQuote(q.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={14} /></button>
@@ -3350,9 +3350,9 @@ function POsScreen({ data, refresh, onPrint }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-xl text-slate-800">הזמנות רכש (Purchase Orders)</h2><button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> PO חדש</button></div>
-      <div className="bg-white rounded-2xl border overflow-hidden overflow-x-auto">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-2 font-medium">מס' הזמנה</th><th className="px-4 py-2 font-medium">מכולה/משלוח</th><th className="px-4 py-2 font-medium">ספק</th><th className="px-4 py-2 font-medium">סה"כ</th><th className="px-4 py-2 font-medium">שולם</th><th className="px-4 py-2 font-medium">יתרה</th><th className="px-4 py-2 font-medium">תנאי תשלום</th><th className="px-4 py-2 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">מס' הזמנה</th><th className="px-5 py-3 font-medium">מכולה/משלוח</th><th className="px-5 py-3 font-medium">ספק</th><th className="px-5 py-3 font-medium">סה"כ</th><th className="px-5 py-3 font-medium">שולם</th><th className="px-5 py-3 font-medium">יתרה</th><th className="px-5 py-3 font-medium">תנאי תשלום</th><th className="px-5 py-3 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.purchaseOrders.map((po) => {
               const supplier = data.suppliers.find((s) => s.id === po.supplierId);
@@ -3364,22 +3364,22 @@ function POsScreen({ data, refresh, onPrint }) {
               const isOverdue = po.dueDate && balance > 0.01 && new Date(po.dueDate) < new Date(new Date().toDateString());
               return (
                 <tr key={po.id} className="border-t">
-                  <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap">{po.poNumber}</td>
-                  <td className="px-4 py-2.5">{shipment ? <Badge tone="violet">{shipment.name}</Badge> : <span className="text-slate-300">-</span>}</td>
-                  <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
-                  <td className="px-4 py-2.5 font-bold whitespace-nowrap">{sym}{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                  <td className="px-4 py-2.5 text-emerald-700 whitespace-nowrap">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                  <td className={`px-4 py-2.5 font-medium whitespace-nowrap ${balance > 0.01 ? (isOverdue ? "text-rose-600" : "text-amber-600") : "text-slate-300"}`}>
+                  <td className="px-5 py-3 font-medium text-slate-800 whitespace-nowrap">{po.poNumber}</td>
+                  <td className="px-5 py-3">{shipment ? <Badge tone="violet">{shipment.name}</Badge> : <span className="text-slate-300">-</span>}</td>
+                  <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
+                  <td className="px-5 py-3 font-bold whitespace-nowrap">{sym}{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-5 py-3 text-emerald-700 whitespace-nowrap">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className={`px-5 py-3 font-medium whitespace-nowrap ${balance > 0.01 ? (isOverdue ? "text-rose-600" : "text-amber-600") : "text-slate-300"}`}>
                     {sym}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     {isOverdue && <span className="block text-xs">פג תוקף!</span>}
                   </td>
-                  <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
+                  <td className="px-5 py-3 text-slate-500 whitespace-nowrap">
                     {PAYMENT_TERMS[po.paymentTerms]?.label}
                     {po.paymentTerms === "deposit_balance" && po.depositPercent ? ` (${po.depositPercent}%)` : ""}
                     {po.paymentTerms === "net_x" && po.netDays ? ` (${po.netDays} ימים)` : ""}
                     {po.dueDate && <div className="text-xs">יעד: {new Date(po.dueDate).toLocaleDateString("he-IL")}</div>}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-5 py-3">
                     <select
                       className="text-xs rounded-lg border border-gray-300 px-2 py-1 bg-white"
                       value={po.status}
@@ -3389,7 +3389,7 @@ function POsScreen({ data, refresh, onPrint }) {
                       {Object.entries(PO_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
                     </select>
                   </td>
-                  <td className="px-4 py-2.5 text-left">
+                  <td className="px-5 py-3 text-left">
                     <div className="flex items-center gap-3 justify-end whitespace-nowrap">
                       <button onClick={() => setPaymentsPO(po)} className="text-emerald-600 hover:underline font-medium flex items-center gap-1"><Database size={14} /> תשלומים</button>
                       <button onClick={() => openEditPO(po)} className="text-slate-500 hover:text-amber-600 font-medium flex items-center gap-1"><Pencil size={14} /> עריכה</button>
@@ -3718,7 +3718,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
       <h2 className="font-bold text-xl text-slate-800 flex items-center gap-2"><Settings size={22} className="text-amber-600" /> הגדרות</h2>
 
       {isAdmin && (
-        <div className="bg-white rounded-2xl border p-5">
+        <div className="bg-white rounded-2xl border shadow-sm p-5">
           <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Upload size={18} /> לוגו העסק</h3>
           <p className="text-slate-500 text-sm mb-4">התמונה תוצג בסרגל הניווט ובמסך ההתחברות, ותישמר ב-Supabase (טבלת app_settings) לכל המשתמשים.</p>
           <div className="flex items-center gap-4">
@@ -3734,7 +3734,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border p-5">
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><User size={18} /> ניהול פרופיל</h3>
         <p className="text-slate-500 text-sm mb-4">כתובת הדוא"ל להתחברות.</p>
         <Field label='כתובת דוא"ל להתחברות'><input type="email" className={inputCls} value={newEmail} onChange={(e) => setNewEmail(e.target.value)} /></Field>
@@ -3744,7 +3744,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
       </div>
 
       {isAdmin && (
-        <div className="bg-white rounded-2xl border p-5">
+        <div className="bg-white rounded-2xl border shadow-sm p-5">
           <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Building2 size={18} /> פרטי העסק</h3>
           <p className="text-slate-500 text-sm mb-4">מוצג בכותרת המערכת ובמסמכי PO.</p>
           <Field label="שם החברה (עברית)"><input className={inputCls} value={company.name} onChange={(e) => setCompany({ ...company, name: e.target.value })} /></Field>
@@ -3756,7 +3756,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border p-5">
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><KeyRound size={18} /> אבטחה - שינוי סיסמה</h3>
         <p className="text-slate-500 text-sm mb-4">יש להזין את הסיסמה הנוכחית לאימות, ולאחר מכן את הסיסמה החדשה פעמיים.</p>
         <Field label="סיסמה נוכחית"><input type="password" className={inputCls} value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} /></Field>
@@ -3767,7 +3767,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
         <button onClick={changePassword} disabled={pwBusy} className={btnPrimary + " flex items-center gap-2"}>{pwBusy && <Loader2 size={16} className="animate-spin" />}עדכון סיסמה</button>
       </div>
 
-      <div className="bg-white rounded-2xl border p-5">
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Database size={18} /> חיבור מסד נתונים</h3>
         <div className="flex items-center gap-2 mt-2 mb-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
@@ -3936,9 +3936,9 @@ export default function App() {
               <div className="text-xs text-slate-400">ניהול מלאי</div>
             </div>
           </div>
-          <nav className="flex flex-col gap-1 flex-1">
+          <nav className="flex flex-col gap-1.5 flex-1">
             {nav.map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition ${tab === key && !customerFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
+              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-[15px] font-medium transition ${tab === key && !customerFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
                 <Icon size={18} /> {label}
               </button>
             ))}
@@ -3963,7 +3963,7 @@ export default function App() {
             <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileMenuOpen(false)}>
               <div className="bg-white w-64 h-full p-4 flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5"><X size={20} /></button>
-                <nav className="flex flex-col gap-1 flex-1">
+                <nav className="flex flex-col gap-1.5 flex-1">
                   {nav.map(({ key, label, icon: Icon }) => (
                     <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-medium ${tab === key && !customerFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
                       <Icon size={18} /> {label}
