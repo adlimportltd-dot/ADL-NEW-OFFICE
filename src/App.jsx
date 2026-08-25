@@ -3929,21 +3929,21 @@ export default function App() {
     <div dir="rtl" lang="he" className="min-h-screen bg-gray-50 text-slate-800" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
       <div className="flex">
         <aside className="hidden md:flex flex-col w-60 shrink-0 bg-slate-900 text-slate-200 min-h-screen p-4 sticky top-0 h-screen">
-          <div className="flex items-center gap-2 px-2 py-3 mb-4">
+          <div className="flex items-center gap-2 px-2 py-3 mb-4 shrink-0">
             <LogoBadge logoUrl={data.logoUrl} size={36} editable={isAdmin} onChange={async (dataUrl) => { try { await api.updateLogoUrl(dataUrl); await refresh(); } catch (e) { alert(e.message); } }} />
             <div>
               <div className="font-bold text-white leading-tight">אדל אימפורט</div>
               <div className="text-xs text-slate-400">ניהול מלאי</div>
             </div>
           </div>
-          <nav className="flex flex-col gap-1.5 flex-1">
+          <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto">
             {nav.map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-[15px] font-medium transition ${tab === key && !customerFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
+              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-[15px] font-medium transition shrink-0 ${tab === key && !customerFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
                 <Icon size={18} /> {label}
               </button>
             ))}
           </nav>
-          <div className="border-t border-slate-800 pt-3 px-2">
+          <div className="border-t border-slate-800 pt-3 px-2 shrink-0">
             <div className="text-sm text-slate-300 font-medium">{profile.fullName || session.user.email}</div>
             <div className="text-xs text-slate-500 mb-2">{roleLabel}</div>
             <button onClick={handleSignOut} className="flex items-center gap-2 text-xs text-slate-400 hover:text-white transition"><LogOut size={14} /> התנתקות</button>
@@ -3962,15 +3962,15 @@ export default function App() {
           {mobileMenuOpen && (
             <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileMenuOpen(false)}>
               <div className="bg-white w-64 h-full p-4 flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5"><X size={20} /></button>
-                <nav className="flex flex-col gap-1.5 flex-1">
+                <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5 shrink-0"><X size={20} /></button>
+                <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto">
                   {nav.map(({ key, label, icon: Icon }) => (
-                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-medium ${tab === key && !customerFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
+                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-medium shrink-0 ${tab === key && !customerFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
                       <Icon size={18} /> {label}
                     </button>
                   ))}
                 </nav>
-                <div className="border-t pt-3">
+                <div className="border-t pt-3 shrink-0">
                   <div className="text-sm text-slate-700 font-medium">{profile.fullName || session.user.email}</div>
                   <div className="text-xs text-slate-400 mb-2">{roleLabel}</div>
                   <button onClick={handleSignOut} className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-800 transition"><LogOut size={14} /> התנתקות</button>
