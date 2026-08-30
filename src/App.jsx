@@ -2520,44 +2520,120 @@ function buildMonthlyPL(data, vatRate) {
   });
 }
 
+// פילס צבעוניים לסכומים: ירוק = הכנסה/רווח חיובי, כתום/אדום עדין = הוצאה או הפסד.
+// שלושה "סוגים": revenue (תמיד ירוק), cost (תמיד כתום-עדין), profit (דינמי לפי הסימן).
+function MoneyPill({ value, kind = "neutral", fmt, size = "sm" }) {
+  const isNeg = value < 0;
+  let tone;
+  if (kind === "revenue") tone = "bg-emerald-50 text-emerald-700";
+  else if (kind === "cost") tone = "bg-amber-50 text-amber-700";
+  else if (kind === "profit") tone = value >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+  else tone = "bg-slate-100 text-slate-700";
+  const sizeCls = size === "lg" ? "px-3.5 py-1.5 text-base" : "px-2.5 py-1 text-xs";
+  const sign = kind === "cost" ? "-" : (kind === "profit" && isNeg ? "-" : "");
+  const shown = kind === "cost" ? Math.abs(value) : (kind === "profit" ? Math.abs(value) : value);
+  return <span className={`inline-flex items-center rounded-full font-bold ${tone} ${sizeCls}`}>{sign}{fmt(shown)}</span>;
+}
+
 function PLReport({ data }) {
   const vatRate = data.companySettings.vatRate ?? 18;
   const rows = buildMonthlyPL(data, vatRate);
   const fmt = (n) => `₪${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   const monthLabel = (m) => new Date(`${m}-01`).toLocaleDateString("he-IL", { year: "numeric", month: "long" });
 
+  const [expanded, setExpanded] = useState(() => new Set(rows.length > 0 ? [rows[0].month] : []));
+  const toggleMonth = (m) => setExpanded((prev) => {
+    const next = new Set(prev);
+    next.has(m) ? next.delete(m) : next.add(m);
+    return next;
+  });
+
+  const current = rows[0];
+  const previous = rows[1];
+  const trend = (curr, prev) => {
+    if (prev == null || prev === 0) return null;
+    const pct = ((curr - prev) / Math.abs(prev)) * 100;
+    return { pct, up: pct >= 0 };
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-sm text-slate-700">
-        <b>הבהרה חשובה:</b> "רווח לפני מע"מ" הוא הרווח התפעולי האמיתי (הכנסות פחות עלויות, שני הצדדים ללא מע"מ) - זה המספר החשבונאי הנכון. "תזרים כולל מע"מ" הוא ההפרש בין מה שהתקבל בפועל למה ששולם בפועל (כולל מע"מ בשני הצדדים) - זה מספר תזרימי, לא רווח אמיתי, כי המע"מ הוא כסף שעובר דרככם לרשות המסים ולא באמת שלכם.
-      </div>
-      {rows.length === 0 && <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-400">אין עדיין מספיק נתונים (מכירות/הוצאות) כדי להציג דוח</div>}
-      {rows.map((r) => (
-        <div key={r.month} className="bg-white rounded-2xl border shadow-sm p-5">
-          <h3 className="font-bold text-slate-800 mb-3">{monthLabel(r.month)}</h3>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs font-bold text-slate-400 uppercase mb-2">רווח תפעולי (ללא מע"מ)</div>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between"><span className="text-slate-500">הכנסות</span><span className="font-medium">{fmt(r.revenueExcl)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">עלות סחורה (COGS)</span><span className="font-medium text-rose-600">-{fmt(r.cogsExcl)}</span></div>
-                <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-700">רווח גולמי</span><span className="font-bold">{fmt(r.grossProfitExcl)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">הוצאות תפעול</span><span className="font-medium text-rose-600">-{fmt(r.opExExcl)}</span></div>
-                <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-800">רווח נקי</span><span className={`font-bold ${r.netProfitExcl >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{fmt(r.netProfitExcl)}</span></div>
+    <div className="space-y-5">
+      {current && (
+        <div className="grid sm:grid-cols-3 gap-4">
+          {[
+            { label: "רווח תפעולי נקי (ללא מע\"מ)", value: current.netProfitExcl, icon: TrendingUp, prevValue: previous?.netProfitExcl },
+            { label: "סך הכנסות (ללא מע\"מ)", value: current.revenueExcl, icon: BarChart3, prevValue: previous?.revenueExcl },
+            { label: "תזרים מזומנים נטו (כולל מע\"מ)", value: current.netProfitIncl, icon: Database, prevValue: previous?.netProfitIncl },
+          ].map((kpi, i) => {
+            const t = trend(kpi.value, kpi.prevValue);
+            const isNeg = kpi.value < 0;
+            const Icon = kpi.icon;
+            return (
+              <div key={i} className="bg-white rounded-2xl border shadow-sm p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`p-2.5 rounded-xl ${isNeg ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}><Icon size={20} /></div>
+                  {t && (
+                    <span className={`text-xs font-bold flex items-center gap-0.5 ${t.up ? "text-emerald-600" : "text-rose-600"}`}>
+                      {t.up ? "▲" : "▼"} {Math.abs(t.pct).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+                <div className={`text-2xl font-bold mb-1 ${isNeg ? "text-rose-600" : "text-slate-800"}`}>{isNeg ? "-" : ""}{fmt(Math.abs(kpi.value))}</div>
+                <div className="text-sm text-slate-500">{kpi.label}</div>
+                <div className="text-xs text-slate-400 mt-1">{monthLabel(current.month)}</div>
               </div>
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-400 uppercase mb-2">תזרים בפועל (כולל מע"מ)</div>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between"><span className="text-slate-500">התקבל מלקוחות</span><span className="font-medium">{fmt(r.revenueIncl)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">שולם לספקי סחורה</span><span className="font-medium text-rose-600">-{fmt(r.cogsIncl)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">שולם על הוצאות תפעול</span><span className="font-medium text-rose-600">-{fmt(r.opExIncl)}</span></div>
-                <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-800">תזרים נטו</span><span className={`font-bold ${r.netProfitIncl >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{fmt(r.netProfitIncl)}</span></div>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
-      ))}
+      )}
+
+      <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-sm text-slate-700">
+        <b>הבהרה חשובה:</b> "רווח תפעולי" הוא הרווח האמיתי (הכנסות פחות עלויות, שני הצדדים ללא מע"מ) - זה המספר החשבונאי הנכון. "תזרים מזומנים" הוא ההפרש בין מה שהתקבל בפועל למה ששולם בפועל (כולל מע"מ) - מספר תזרימי, לא רווח אמיתי, כי המע"מ עובר דרככם לרשות המסים ולא באמת שלכם.
+      </div>
+
+      {rows.length === 0 && <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-400">אין עדיין מספיק נתונים (מכירות/הוצאות) כדי להציג דוח</div>}
+
+      <div className="space-y-3">
+        {rows.map((r) => {
+          const isOpen = expanded.has(r.month);
+          return (
+            <div key={r.month} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+              <button onClick={() => toggleMonth(r.month)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition text-right">
+                <div className="flex items-center gap-3">
+                  <ChevronLeft size={18} className={`text-slate-400 transition-transform ${isOpen ? "-rotate-90" : ""}`} />
+                  <span className="font-bold text-slate-800">{monthLabel(r.month)}</span>
+                </div>
+                <MoneyPill value={r.netProfitExcl} kind="profit" fmt={fmt} />
+              </button>
+              {isOpen && (
+                <div className="px-5 pb-5 pt-1 border-t">
+                  <div className="grid sm:grid-cols-2 gap-5 pt-4">
+                    <div>
+                      <div className="text-xs font-bold text-slate-400 uppercase mb-3">רווח תפעולי (ללא מע"מ)</div>
+                      <div className="space-y-0">
+                        <div className="flex items-center justify-between py-2.5"><span className="text-sm text-slate-500">הכנסות</span><MoneyPill value={r.revenueExcl} kind="revenue" fmt={fmt} /></div>
+                        <div className="flex items-center justify-between py-2.5 border-t border-gray-100"><span className="text-sm text-slate-500">עלות סחורה (COGS)</span><MoneyPill value={r.cogsExcl} kind="cost" fmt={fmt} /></div>
+                        <div className="flex items-center justify-between py-2.5 border-t border-gray-200"><span className="text-sm font-bold text-slate-700">רווח גולמי</span><MoneyPill value={r.grossProfitExcl} kind="profit" fmt={fmt} /></div>
+                        <div className="flex items-center justify-between py-2.5 border-t border-gray-100"><span className="text-sm text-slate-500">הוצאות תפעול</span><MoneyPill value={r.opExExcl} kind="cost" fmt={fmt} /></div>
+                        <div className="flex items-center justify-between py-2.5 border-t-2 border-gray-300"><span className="text-sm font-bold text-slate-800">רווח נקי</span><MoneyPill value={r.netProfitExcl} kind="profit" fmt={fmt} size="lg" /></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-400 uppercase mb-3">תזרים בפועל (כולל מע"מ)</div>
+                      <div className="space-y-0">
+                        <div className="flex items-center justify-between py-2.5"><span className="text-sm text-slate-500">התקבל מלקוחות</span><MoneyPill value={r.revenueIncl} kind="revenue" fmt={fmt} /></div>
+                        <div className="flex items-center justify-between py-2.5 border-t border-gray-100"><span className="text-sm text-slate-500">שולם לספקי סחורה</span><MoneyPill value={r.cogsIncl} kind="cost" fmt={fmt} /></div>
+                        <div className="flex items-center justify-between py-2.5 border-t border-gray-100"><span className="text-sm text-slate-500">שולם על הוצאות תפעול</span><MoneyPill value={r.opExIncl} kind="cost" fmt={fmt} /></div>
+                        <div className="flex items-center justify-between py-2.5 border-t-2 border-gray-300"><span className="text-sm font-bold text-slate-800">תזרים נטו</span><MoneyPill value={r.netProfitIncl} kind="profit" fmt={fmt} size="lg" /></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
