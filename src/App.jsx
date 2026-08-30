@@ -2520,6 +2520,42 @@ function buildMonthlyPL(data, vatRate) {
   });
 }
 
+// בונה מטריצה: קטגוריות כשורות, חודשים כעמודות (ללא מע"מ - המספרים החשבונאיים
+// האמיתיים). משתמש באותם נתוני מקור בדיוק כמו buildMonthlyPL, רק מפרק את
+// ההוצאות לפי קטגוריה בודדת במקום שני צברים (סחורה/תפעול) בלבד.
+function buildCategoryMonthMatrix(data, vatRate) {
+  const monthsSet = new Set();
+  data.transactions.filter((t) => t.type === "install" && t.unitPrice != null).forEach((t) => monthsSet.add(t.date.slice(0, 7)));
+  data.expenses.forEach((e) => monthsSet.add(e.expenseDate.slice(0, 7)));
+  const months = [...monthsSet].sort((a, b) => b.localeCompare(a)); // מהחודש החדש לישן
+
+  const revenueByMonth = {};
+  months.forEach((m) => { revenueByMonth[m] = 0; });
+  data.transactions.filter((t) => t.type === "install" && t.unitPrice != null).forEach((t) => {
+    const m = t.date.slice(0, 7);
+    revenueByMonth[m] += (t.unitPrice * t.qty) / (1 + vatRate / 100);
+  });
+
+  const categoryRows = {};
+  Object.keys(EXPENSE_CATEGORIES).forEach((cat) => {
+    categoryRows[cat] = {};
+    months.forEach((m) => { categoryRows[cat][m] = 0; });
+  });
+  data.expenses.forEach((e) => {
+    const m = e.expenseDate.slice(0, 7);
+    if (categoryRows[e.category] && categoryRows[e.category][m] !== undefined) categoryRows[e.category][m] += e.amountExclVat;
+  });
+
+  const totalCostsByMonth = {};
+  const netProfitByMonth = {};
+  months.forEach((m) => {
+    totalCostsByMonth[m] = Object.values(categoryRows).reduce((s, row) => s + (row[m] || 0), 0);
+    netProfitByMonth[m] = revenueByMonth[m] - totalCostsByMonth[m];
+  });
+
+  return { months, revenueByMonth, categoryRows, totalCostsByMonth, netProfitByMonth };
+}
+
 // פילס צבעוניים לסכומים: ירוק = הכנסה/רווח חיובי, כתום/אדום עדין = הוצאה או הפסד.
 // שלושה "סוגים": revenue (תמיד ירוק), cost (תמיד כתום-עדין), profit (דינמי לפי הסימן).
 function MoneyPill({ value, kind = "neutral", fmt, size = "sm" }) {
@@ -2538,15 +2574,11 @@ function MoneyPill({ value, kind = "neutral", fmt, size = "sm" }) {
 function PLReport({ data }) {
   const vatRate = data.companySettings.vatRate ?? 18;
   const rows = buildMonthlyPL(data, vatRate);
+  const matrix = buildCategoryMonthMatrix(data, vatRate);
   const fmt = (n) => `₪${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   const monthLabel = (m) => new Date(`${m}-01`).toLocaleDateString("he-IL", { year: "numeric", month: "long" });
-
-  const [expanded, setExpanded] = useState(() => new Set(rows.length > 0 ? [rows[0].month] : []));
-  const toggleMonth = (m) => setExpanded((prev) => {
-    const next = new Set(prev);
-    next.has(m) ? next.delete(m) : next.add(m);
-    return next;
-  });
+  const monthLabelShort = (m) => new Date(`${m}-01`).toLocaleDateString("he-IL", { year: "2-digit", month: "short" });
+  const [exportBusy, setExportBusy] = useState(false);
 
   const current = rows[0];
   const previous = rows[1];
@@ -2554,6 +2586,37 @@ function PLReport({ data }) {
     if (prev == null || prev === 0) return null;
     const pct = ((curr - prev) / Math.abs(prev)) * 100;
     return { pct, up: pct >= 0 };
+  };
+
+  const exportMatrixToExcel = async () => {
+    setExportBusy(true);
+    try {
+      const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+      const sheetRows = [];
+      const header = { "קטגוריה": "הכנסות" };
+      matrix.months.forEach((m) => { header[monthLabel(m)] = matrix.revenueByMonth[m]; });
+      sheetRows.push(header);
+      Object.entries(EXPENSE_CATEGORIES).forEach(([cat, label]) => {
+        const row = { "קטגוריה": label };
+        matrix.months.forEach((m) => { row[monthLabel(m)] = matrix.categoryRows[cat][m] || 0; });
+        sheetRows.push(row);
+      });
+      const totalsRow = { "קטגוריה": 'סה"כ הוצאות' };
+      matrix.months.forEach((m) => { totalsRow[monthLabel(m)] = matrix.totalCostsByMonth[m]; });
+      sheetRows.push(totalsRow);
+      const profitRow = { "קטגוריה": "רווח נקי" };
+      matrix.months.forEach((m) => { profitRow[monthLabel(m)] = matrix.netProfitByMonth[m]; });
+      sheetRows.push(profitRow);
+
+      const ws = XLSX.utils.json_to_sheet(sheetRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "רווח והפסד");
+      XLSX.writeFile(wb, `רווח-והפסד-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (e) {
+      alert("ייצוא האקסל נכשל - ודאו שיש חיבור אינטרנט תקין ונסו שוב.");
+    } finally {
+      setExportBusy(false);
+    }
   };
 
   return (
@@ -2588,52 +2651,55 @@ function PLReport({ data }) {
       )}
 
       <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-sm text-slate-700">
-        <b>הבהרה חשובה:</b> "רווח תפעולי" הוא הרווח האמיתי (הכנסות פחות עלויות, שני הצדדים ללא מע"מ) - זה המספר החשבונאי הנכון. "תזרים מזומנים" הוא ההפרש בין מה שהתקבל בפועל למה ששולם בפועל (כולל מע"מ) - מספר תזרימי, לא רווח אמיתי, כי המע"מ עובר דרככם לרשות המסים ולא באמת שלכם.
+        <b>הבהרה חשובה:</b> כל הטבלה למטה מוצגת ללא מע"מ (המספרים החשבונאיים האמיתיים). "תזרים מזומנים" בכרטיסים למעלה בלבד הוא כולל מע"מ, לצורך מעקב תזרימי בפועל.
       </div>
 
-      {rows.length === 0 && <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-400">אין עדיין מספיק נתונים (מכירות/הוצאות) כדי להציג דוח</div>}
-
-      <div className="space-y-3">
-        {rows.map((r) => {
-          const isOpen = expanded.has(r.month);
-          return (
-            <div key={r.month} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-              <button onClick={() => toggleMonth(r.month)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition text-right">
-                <div className="flex items-center gap-3">
-                  <ChevronLeft size={18} className={`text-slate-400 transition-transform ${isOpen ? "-rotate-90" : ""}`} />
-                  <span className="font-bold text-slate-800">{monthLabel(r.month)}</span>
-                </div>
-                <MoneyPill value={r.netProfitExcl} kind="profit" fmt={fmt} />
-              </button>
-              {isOpen && (
-                <div className="px-5 pb-5 pt-1 border-t">
-                  <div className="grid sm:grid-cols-2 gap-5 pt-4">
-                    <div>
-                      <div className="text-xs font-bold text-slate-400 uppercase mb-3">רווח תפעולי (ללא מע"מ)</div>
-                      <div className="space-y-0">
-                        <div className="flex items-center justify-between py-2.5"><span className="text-sm text-slate-500">הכנסות</span><MoneyPill value={r.revenueExcl} kind="revenue" fmt={fmt} /></div>
-                        <div className="flex items-center justify-between py-2.5 border-t border-gray-100"><span className="text-sm text-slate-500">עלות סחורה (COGS)</span><MoneyPill value={r.cogsExcl} kind="cost" fmt={fmt} /></div>
-                        <div className="flex items-center justify-between py-2.5 border-t border-gray-200"><span className="text-sm font-bold text-slate-700">רווח גולמי</span><MoneyPill value={r.grossProfitExcl} kind="profit" fmt={fmt} /></div>
-                        <div className="flex items-center justify-between py-2.5 border-t border-gray-100"><span className="text-sm text-slate-500">הוצאות תפעול</span><MoneyPill value={r.opExExcl} kind="cost" fmt={fmt} /></div>
-                        <div className="flex items-center justify-between py-2.5 border-t-2 border-gray-300"><span className="text-sm font-bold text-slate-800">רווח נקי</span><MoneyPill value={r.netProfitExcl} kind="profit" fmt={fmt} size="lg" /></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-400 uppercase mb-3">תזרים בפועל (כולל מע"מ)</div>
-                      <div className="space-y-0">
-                        <div className="flex items-center justify-between py-2.5"><span className="text-sm text-slate-500">התקבל מלקוחות</span><MoneyPill value={r.revenueIncl} kind="revenue" fmt={fmt} /></div>
-                        <div className="flex items-center justify-between py-2.5 border-t border-gray-100"><span className="text-sm text-slate-500">שולם לספקי סחורה</span><MoneyPill value={r.cogsIncl} kind="cost" fmt={fmt} /></div>
-                        <div className="flex items-center justify-between py-2.5 border-t border-gray-100"><span className="text-sm text-slate-500">שולם על הוצאות תפעול</span><MoneyPill value={r.opExIncl} kind="cost" fmt={fmt} /></div>
-                        <div className="flex items-center justify-between py-2.5 border-t-2 border-gray-300"><span className="text-sm font-bold text-slate-800">תזרים נטו</span><MoneyPill value={r.netProfitIncl} kind="profit" fmt={fmt} size="lg" /></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+      {matrix.months.length === 0 ? (
+        <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-400">אין עדיין מספיק נתונים (מכירות/הוצאות) כדי להציג דוח</div>
+      ) : (
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b flex-wrap gap-2">
+            <h3 className="font-bold text-slate-800">מטריצת קטגוריות מול חודשים (ללא מע"מ)</h3>
+            <div className="flex items-center gap-2">
+              <button onClick={exportMatrixToExcel} disabled={exportBusy} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}>{exportBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} אקסל</button>
+              <button onClick={() => window.print()} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Printer size={14} /> PDF / הדפסה</button>
             </div>
-          );
-        })}
-      </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="sticky right-0 bg-gray-50 px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap border-l">קטגוריה</th>
+                  {matrix.months.map((m) => <th key={m} className="px-4 py-3 text-center font-bold text-slate-600 whitespace-nowrap min-w-[100px]">{monthLabelShort(m)}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t bg-emerald-50/40">
+                  <td className="sticky right-0 bg-emerald-50 px-4 py-3 font-bold text-emerald-800 whitespace-nowrap border-l">הכנסות</td>
+                  {matrix.months.map((m) => <td key={m} className="px-4 py-3 text-center"><MoneyPill value={matrix.revenueByMonth[m]} kind="revenue" fmt={fmt} /></td>)}
+                </tr>
+                {Object.entries(EXPENSE_CATEGORIES).map(([cat, label]) => (
+                  <tr key={cat} className="border-t">
+                    <td className="sticky right-0 bg-white px-4 py-3 text-slate-600 whitespace-nowrap border-l">{label}</td>
+                    {matrix.months.map((m) => {
+                      const v = matrix.categoryRows[cat][m] || 0;
+                      return <td key={m} className="px-4 py-3 text-center">{v > 0 ? <MoneyPill value={v} kind="cost" fmt={fmt} /> : <span className="text-slate-300 text-xs">-</span>}</td>;
+                    })}
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-gray-300 bg-gray-50">
+                  <td className="sticky right-0 bg-gray-50 px-4 py-3 font-bold text-slate-700 whitespace-nowrap border-l">סה"כ הוצאות</td>
+                  {matrix.months.map((m) => <td key={m} className="px-4 py-3 text-center"><MoneyPill value={matrix.totalCostsByMonth[m]} kind="cost" fmt={fmt} /></td>)}
+                </tr>
+                <tr className="border-t-2 border-gray-300">
+                  <td className="sticky right-0 bg-white px-4 py-3 font-bold text-slate-800 whitespace-nowrap border-l">רווח נקי</td>
+                  {matrix.months.map((m) => <td key={m} className="px-4 py-3 text-center"><MoneyPill value={matrix.netProfitByMonth[m]} kind="profit" fmt={fmt} size="lg" /></td>)}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
