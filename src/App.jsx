@@ -4,7 +4,7 @@ import {
   ScrollText, Plus, X, TriangleAlert, Download, Truck, Building2,
   CircleCheck, CircleX, Trash2, ChevronLeft, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
-  Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart,
+  Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
@@ -739,6 +739,41 @@ function Badge({ children, tone = "gray" }) {
     violet: "bg-violet-100 text-violet-800", rose: "bg-rose-100 text-rose-800",
   };
   return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tones[tone]}`}>{children}</span>;
+}
+
+// בונה קישור "Google Calendar Add Event" (action=TEMPLATE) - הכל בצד הלקוח,
+// בלי שום קריאת API או הרשאה. פותח את גוגל קלנדר עם השדות כבר ממולאים,
+// והמשתמש רק לוחץ "שמור" שם. אירוע יום שלם (כמו תאריך יעד/מעקב, בלי שעה).
+function buildGoogleCalendarUrl({ title, description, date }) {
+  if (!date) return null;
+  const start = new Date(date);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1); // גוגל דורש תאריך סיום "בלעדי" לאירוע יום שלם
+  const fmt = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title || "",
+    details: description || "",
+    dates: `${fmt(start)}/${fmt(end)}`,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+// כפתור משותף - מוצג רק אם יש תאריך תקין. נפתח בטאב חדש כדי לא לאבד את המסך הנוכחי.
+function AddToGoogleCalendarButton({ title, description, date, label = "הוסף ליומן Google", className }) {
+  const url = buildGoogleCalendarUrl({ title, description, date });
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className={className || "inline-flex items-center gap-1 text-xs text-sky-600 hover:underline font-medium"}
+    >
+      <CalendarPlus size={13} /> {label}
+    </a>
+  );
 }
 
 function Modal({ title, onClose, children }) {
@@ -2169,7 +2204,7 @@ function AuditLog({ data }) {
               <th className="px-5 py-3 font-medium">תאריך</th><th className="px-5 py-3 font-medium">סוג</th>
               <th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">כמות</th>
               <th className="px-5 py-3 font-medium">ממיקום</th><th className="px-5 py-3 font-medium">אל מיקום</th>
-              <th className="px-5 py-3 font-medium">לקוח / ספק</th><th className="px-5 py-3 font-medium">הערה</th>
+              <th className="px-5 py-3 font-medium">לקוח / ספק</th><th className="px-5 py-3 font-medium">הערה</th><th className="px-5 py-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -2185,10 +2220,18 @@ function AuditLog({ data }) {
                   <td className="px-5 py-3 text-slate-500">{t.toLocationId ? locName(t.toLocationId) : "-"}</td>
                   <td className="px-5 py-3 text-slate-500">{t.customerId ? custName(t.customerId) : t.supplierId ? supplierName(t.supplierId) : "-"}</td>
                   <td className="px-5 py-3 text-slate-500">{t.note || (t.condition === "faulty" ? "התקבל כתקול" : "")}</td>
+                  <td className="px-5 py-3 text-left">
+                    <AddToGoogleCalendarButton
+                      title={`${AUDIT_TX_LABELS[t.type]?.label || "תנועת מלאי"} - ${item?.name || ""}`}
+                      description={`כמות: ${t.qty}${t.note ? ` | הערה: ${t.note}` : ""}`}
+                      date={t.date}
+                      label=""
+                    />
+                  </td>
                 </tr>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">אין תנועות תואמות</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">אין תנועות תואמות</td></tr>}
           </tbody>
         </table>
       </div>
@@ -3435,8 +3478,14 @@ function LeadsScreen({ data, refresh, onCreateQuote }) {
                         {(lead.phone || lead.email) && <div className="text-xs text-slate-500 mb-1">{lead.phone} {lead.email && `· ${lead.email}`}</div>}
                         {lead.estimatedValue != null && <div className="text-xs text-emerald-700 font-medium mb-1">שווי משוער: ₪{lead.estimatedValue.toLocaleString()}</div>}
                         {lead.followUpDate && (
-                          <div className={`text-xs mb-1 ${isOverdue ? "text-rose-600 font-medium" : "text-slate-500"}`}>
-                            מעקב: {new Date(lead.followUpDate).toLocaleDateString("he-IL")} {isOverdue && "(עבר!)"}
+                          <div className={`text-xs mb-1 flex items-center justify-between gap-2 ${isOverdue ? "text-rose-600 font-medium" : "text-slate-500"}`}>
+                            <span>מעקב: {new Date(lead.followUpDate).toLocaleDateString("he-IL")} {isOverdue && "(עבר!)"}</span>
+                            <AddToGoogleCalendarButton
+                              title={`מעקב ליד: ${lead.name}`}
+                              description={`${lead.phone ? `טלפון: ${lead.phone}\n` : ""}${lead.notes || ""}`}
+                              date={lead.followUpDate}
+                              label=""
+                            />
                           </div>
                         )}
                         {lead.notes && <div className="text-xs text-slate-500 mb-2 line-clamp-2">{lead.notes}</div>}
@@ -4262,7 +4311,19 @@ function POsScreen({ data, refresh, onPrint }) {
                     {PAYMENT_TERMS[po.paymentTerms]?.label}
                     {po.paymentTerms === "deposit_balance" && po.depositPercent ? ` (${po.depositPercent}%)` : ""}
                     {po.paymentTerms === "net_x" && po.netDays ? ` (${po.netDays} ימים)` : ""}
-                    {po.dueDate && <div className="text-xs">יעד: {new Date(po.dueDate).toLocaleDateString("he-IL")}</div>}
+                    {po.dueDate && (
+                      <div className="flex items-center gap-1.5 text-xs mt-0.5">
+                        <span>יעד: {new Date(po.dueDate).toLocaleDateString("he-IL")}</span>
+                        {balance > 0.01 && (
+                          <AddToGoogleCalendarButton
+                            title={`תשלום לספק: ${supplier?.name || ""} - ${po.poNumber}`}
+                            description={`יתרה לתשלום: ${sym}${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} | הזמנה: ${po.poNumber}`}
+                            date={po.dueDate}
+                            label=""
+                          />
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-5 py-3">
                     <select
