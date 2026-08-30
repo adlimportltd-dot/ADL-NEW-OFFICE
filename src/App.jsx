@@ -57,6 +57,13 @@ const mapPO = (r) => ({
   lines: (r.po_lines || []).map((l) => ({ itemId: l.item_id, qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
 });
 const mapPOPayment = (r) => ({ id: r.id, poId: r.po_id, amount: Number(r.amount), paidDate: r.paid_date, note: r.note || "" });
+const mapExpense = (r) => ({
+  id: r.id, category: r.category, supplierId: r.supplier_id, description: r.description || "",
+  invoiceNumber: r.invoice_number || "", expenseDate: r.expense_date,
+  vatMode: r.vat_mode, amountExclVat: Number(r.amount_excl_vat), vatAmount: Number(r.vat_amount), amountInclVat: Number(r.amount_incl_vat),
+  paymentStatus: r.payment_status, paymentMethod: r.payment_method || "", notes: r.notes || "", date: r.created_at,
+});
+const mapExpensePayment = (r) => ({ id: r.id, expenseId: r.expense_id, amount: Number(r.amount), paidDate: r.paid_date, method: r.method || "", note: r.note || "" });
 
 // ---------- Auth ----------
 async function signIn(email, password) {
@@ -102,7 +109,7 @@ async function fetchMyProfile(userId) {
 
 // ---------- Fetch everything needed for the app ----------
 async function fetchAllData() {
-  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, settingsRes] = await Promise.all([
+  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, expensesRes, expensePaymentsRes, settingsRes] = await Promise.all([
     supabase.from("items").select("*").order("category").order("name"),
     supabase.from("locations").select("*").order("type"),
     supabase.from("customers").select("*").order("name"),
@@ -115,10 +122,12 @@ async function fetchAllData() {
     supabase.from("po_payments").select("*").order("paid_date", { ascending: false }),
     supabase.from("leads").select("*").order("created_at", { ascending: false }),
     supabase.from("quotes").select("*, quote_lines(*)").order("created_at", { ascending: false }),
+    supabase.from("expenses").select("*").order("expense_date", { ascending: false }),
+    supabase.from("expense_payments").select("*").order("paid_date", { ascending: false }),
     supabase.from("app_settings").select("*"),
   ]);
 
-  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, settingsRes]) {
+  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, expensesRes, expensePaymentsRes, settingsRes]) {
     if (r.error) throw r.error;
   }
 
@@ -129,7 +138,7 @@ async function fetchAllData() {
 
   const settings = {};
   (settingsRes.data || []).forEach((row) => { settings[row.key] = row.value; });
-  let companySettings = { name: "אדל אימפורט", legalName: "ADL Import LTD", address: "ישראל", phone: "" };
+  let companySettings = { name: "אדל אימפורט", legalName: "ADL Import LTD", address: "ישראל", phone: "", vatRate: 18, taxAdvanceRate: 0 };
   if (settings.company_settings) {
     try { companySettings = { ...companySettings, ...JSON.parse(settings.company_settings) }; } catch (e) {}
   }
@@ -147,6 +156,8 @@ async function fetchAllData() {
     poPayments: (paymentsRes.data || []).map(mapPOPayment),
     leads: (leadsRes.data || []).map(mapLead),
     quotes: (quotesRes.data || []).map(mapQuote),
+    expenses: (expensesRes.data || []).map(mapExpense),
+    expensePayments: (expensePaymentsRes.data || []).map(mapExpensePayment),
     logoUrl: settings.logo_url || null,
     companySettings,
   };
@@ -396,6 +407,41 @@ async function deletePOPayment(id) {
   if (error) throw error;
 }
 
+// ---------- Expenses (הוצאות וחשבוניות ספקים) ----------
+async function addExpense(expense) {
+  const { data, error } = await supabase.from("expenses").insert({
+    category: expense.category, supplier_id: expense.supplierId || null, description: expense.description || null,
+    invoice_number: expense.invoiceNumber || null, expense_date: expense.expenseDate,
+    vat_mode: expense.vatMode, amount_excl_vat: expense.amountExclVat, vat_amount: expense.vatAmount, amount_incl_vat: expense.amountInclVat,
+    payment_status: expense.paymentStatus, payment_method: expense.paymentMethod || null, notes: expense.notes || null,
+  }).select().single();
+  if (error) throw error;
+  return data.id;
+}
+async function updateExpense(id, expense) {
+  const { error } = await supabase.from("expenses").update({
+    category: expense.category, supplier_id: expense.supplierId || null, description: expense.description || null,
+    invoice_number: expense.invoiceNumber || null, expense_date: expense.expenseDate,
+    vat_mode: expense.vatMode, amount_excl_vat: expense.amountExclVat, vat_amount: expense.vatAmount, amount_incl_vat: expense.amountInclVat,
+    payment_status: expense.paymentStatus, payment_method: expense.paymentMethod || null, notes: expense.notes || null,
+  }).eq("id", id);
+  if (error) throw error;
+}
+async function deleteExpense(id) {
+  const { error } = await supabase.from("expenses").delete().eq("id", id);
+  if (error) throw error;
+}
+async function addExpensePayment(expenseId, amount, paidDate, method, note) {
+  const { error } = await supabase.from("expense_payments").insert({
+    expense_id: expenseId, amount, paid_date: paidDate, method: method || null, note: note || null,
+  });
+  if (error) throw error;
+}
+async function deleteExpensePayment(id) {
+  const { error } = await supabase.from("expense_payments").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ---------- Suppliers ----------
 async function addSupplier(supplier) {
   const { error } = await supabase.from("suppliers").insert({
@@ -505,7 +551,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -593,6 +639,55 @@ const QUOTE_STATUSES = {
   accepted: { label: "התקבלה", tone: "emerald" },
   rejected: { label: "נדחתה", tone: "rose" },
 };
+
+// ==================== מודול פיננסי - הוצאות, מע"מ, P&L ====================
+const EXPENSE_CATEGORIES = {
+  goods: "סחורה מספק (COGS)",
+  payroll: "משכורות ועלויות עובדים",
+  rent: "שכירות",
+  utilities: "חשבונות ותשתיות",
+  fixed: "הוצאה קבועה אחרת",
+  variable: "הוצאה משתנה אחרת",
+  other: "אחר",
+};
+const VAT_MODES = {
+  incl: 'כולל מע"מ',
+  excl: 'לא כולל מע"מ (לפני מע"מ)',
+  zero: 'מע"מ אפס (פטור)',
+};
+const EXPENSE_PAYMENT_STATUSES = {
+  paid: { label: "שולם", tone: "emerald" },
+  pending: { label: "ממתין לתשלום", tone: "amber" },
+};
+const PAYMENT_METHODS = {
+  bank_transfer: "העברה בנקאית",
+  check: "שק",
+  credit_card: "אשראי",
+  cash: "מזומן",
+};
+
+// מנוע חישוב מע"מ - נקודת אמת יחידה, כדי שהחישוב יהיה זהה בכל מסך שמשתמש בו.
+// amount הוא הסכום שהוזן בפועל (משמעותו תלויה ב-mode); rate הוא אחוז המע"מ (למשל 18).
+function computeVat(mode, amount, rate) {
+  const amt = Number(amount) || 0;
+  const r = Number(rate) || 0;
+  if (mode === "zero") return { amountExclVat: amt, vatAmount: 0, amountInclVat: amt };
+  if (mode === "excl") {
+    const vat = amt * (r / 100);
+    return { amountExclVat: amt, vatAmount: vat, amountInclVat: amt + vat };
+  }
+  // incl (ברירת מחדל): מחלקים ב-(1 + אחוז/100) - שקול לחלוקה ב-1.18 כשהאחוז הוא 18
+  const excl = amt / (1 + r / 100);
+  const vat = amt - excl;
+  return { amountExclVat: excl, vatAmount: vat, amountInclVat: amt };
+}
+// בקרת תקינות: הסכום ללא מע"מ + המע"מ (אחרי דריסה ידנית אפשרית) חייבים להתאים
+// בדיוק (עד אגורה) לסכום הכולל - אחרת זו טעות חשבונאית שחוסמת שמירה.
+function validateVatBalance(amountExclVat, vatAmount, amountInclVat) {
+  const diff = Math.round((Number(amountExclVat) + Number(vatAmount) - Number(amountInclVat)) * 100) / 100;
+  return { balanced: Math.abs(diff) < 0.01, diff };
+}
+
 const poTotalAmount = (po) => po.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
 const poPaidAmount = (data, poId) => (data.poPayments || []).filter((p) => p.poId === poId).reduce((s, p) => s + p.amount, 0);
 const poBalance = (data, po) => poTotalAmount(po) - poPaidAmount(data, po.id);
@@ -1350,7 +1445,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
   const [note, setNote] = useState("");
   const [priceMode, setPriceMode] = useState("excl"); // excl = prices before VAT, incl = prices include VAT
-  const [vatRate, setVatRate] = useState("18");
+  const [vatRate, setVatRate] = useState(String(data.companySettings.vatRate ?? 18));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(null); // { customerId, total }
@@ -2358,11 +2453,139 @@ function ReportsScreen({ data }) {
   return (
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-4">דוחות וערך מלאי</h2>
-      <div className="flex gap-2 mb-5">
+      <div className="flex gap-2 mb-5 flex-wrap">
         <button onClick={() => setSub("valuation")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "valuation" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><BarChart3 size={16} /> שווי מלאי</button>
         <button onClick={() => setSub("forecast")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "forecast" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><Gauge size={16} /> חיזוי מלאי</button>
+        <button onClick={() => setSub("pl")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "pl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><TrendingUp size={16} /> רווח והפסד (P&L)</button>
+        <button onClick={() => setSub("vat")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "vat" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><Calculator size={16} /> מע"מ ומקדמות</button>
       </div>
-      {sub === "valuation" ? <ValuationReport data={data} /> : <ForecastReport data={data} />}
+      {sub === "valuation" && <ValuationReport data={data} />}
+      {sub === "forecast" && <ForecastReport data={data} />}
+      {sub === "pl" && <PLReport data={data} />}
+      {sub === "vat" && <VatSettlementReport data={data} />}
+    </div>
+  );
+}
+
+// בונה פילוח חודשי: הכנסות (מתנועות התקנה, כולל מע"מ) מול הוצאות (מטבלת expenses,
+// שכבר שמורות עם פירוק מדויק לפני/אחרי מע"מ - לא נגזר בקירוב).
+function buildMonthlyPL(data, vatRate) {
+  const buckets = {};
+  const ensure = (month) => { if (!buckets[month]) buckets[month] = { revenueIncl: 0, cogsExcl: 0, cogsVat: 0, cogsIncl: 0, opExExcl: 0, opExVat: 0, opExIncl: 0 }; return buckets[month]; };
+  data.transactions.filter((t) => t.type === "install" && t.unitPrice != null).forEach((t) => {
+    ensure(t.date.slice(0, 7)).revenueIncl += t.unitPrice * t.qty;
+  });
+  data.expenses.forEach((e) => {
+    const b = ensure(e.expenseDate.slice(0, 7));
+    if (e.category === "goods") { b.cogsExcl += e.amountExclVat; b.cogsVat += e.vatAmount; b.cogsIncl += e.amountInclVat; }
+    else { b.opExExcl += e.amountExclVat; b.opExVat += e.vatAmount; b.opExIncl += e.amountInclVat; }
+  });
+  return Object.entries(buckets).sort((a, b) => b[0].localeCompare(a[0])).map(([month, v]) => {
+    const revenueExcl = v.revenueIncl / (1 + vatRate / 100);
+    const revenueVat = v.revenueIncl - revenueExcl;
+    const grossProfitExcl = revenueExcl - v.cogsExcl;
+    const netProfitExcl = grossProfitExcl - v.opExExcl;
+    const netProfitIncl = v.revenueIncl - v.cogsIncl - v.opExIncl;
+    return { month, ...v, revenueExcl, revenueVat, grossProfitExcl, netProfitExcl, netProfitIncl };
+  });
+}
+
+function PLReport({ data }) {
+  const vatRate = data.companySettings.vatRate ?? 18;
+  const rows = buildMonthlyPL(data, vatRate);
+  const fmt = (n) => `₪${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const monthLabel = (m) => new Date(`${m}-01`).toLocaleDateString("he-IL", { year: "numeric", month: "long" });
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-sm text-slate-700">
+        <b>הבהרה חשובה:</b> "רווח לפני מע"מ" הוא הרווח התפעולי האמיתי (הכנסות פחות עלויות, שני הצדדים ללא מע"מ) - זה המספר החשבונאי הנכון. "תזרים כולל מע"מ" הוא ההפרש בין מה שהתקבל בפועל למה ששולם בפועל (כולל מע"מ בשני הצדדים) - זה מספר תזרימי, לא רווח אמיתי, כי המע"מ הוא כסף שעובר דרככם לרשות המסים ולא באמת שלכם.
+      </div>
+      {rows.length === 0 && <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-400">אין עדיין מספיק נתונים (מכירות/הוצאות) כדי להציג דוח</div>}
+      {rows.map((r) => (
+        <div key={r.month} className="bg-white rounded-2xl border shadow-sm p-5">
+          <h3 className="font-bold text-slate-800 mb-3">{monthLabel(r.month)}</h3>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-bold text-slate-400 uppercase mb-2">רווח תפעולי (ללא מע"מ)</div>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">הכנסות</span><span className="font-medium">{fmt(r.revenueExcl)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">עלות סחורה (COGS)</span><span className="font-medium text-rose-600">-{fmt(r.cogsExcl)}</span></div>
+                <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-700">רווח גולמי</span><span className="font-bold">{fmt(r.grossProfitExcl)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">הוצאות תפעול</span><span className="font-medium text-rose-600">-{fmt(r.opExExcl)}</span></div>
+                <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-800">רווח נקי</span><span className={`font-bold ${r.netProfitExcl >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{fmt(r.netProfitExcl)}</span></div>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-slate-400 uppercase mb-2">תזרים בפועל (כולל מע"מ)</div>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">התקבל מלקוחות</span><span className="font-medium">{fmt(r.revenueIncl)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">שולם לספקי סחורה</span><span className="font-medium text-rose-600">-{fmt(r.cogsIncl)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">שולם על הוצאות תפעול</span><span className="font-medium text-rose-600">-{fmt(r.opExIncl)}</span></div>
+                <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-800">תזרים נטו</span><span className={`font-bold ${r.netProfitIncl >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{fmt(r.netProfitIncl)}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function biMonthlyPeriodOf(dateStr) {
+  const d = new Date(dateStr);
+  const y = d.getFullYear();
+  const biIndex = Math.floor(d.getMonth() / 2);
+  const startMonth = biIndex * 2 + 1;
+  return { key: `${y}-${biIndex}`, label: `${["ינואר-פברואר", "מרץ-אפריל", "מאי-יוני", "יולי-אוגוסט", "ספטמבר-אוקטובר", "נובמבר-דצמבר"][biIndex]} ${y}` };
+}
+
+function VatSettlementReport({ data }) {
+  const vatRate = data.companySettings.vatRate ?? 18;
+  const taxAdvanceRate = data.companySettings.taxAdvanceRate ?? 0;
+
+  const periods = {};
+  const ensure = (p) => { if (!periods[p.key]) periods[p.key] = { label: p.label, salesVat: 0, purchaseVat: 0, revenueExcl: 0 }; return periods[p.key]; };
+  data.transactions.filter((t) => t.type === "install" && t.unitPrice != null).forEach((t) => {
+    const incl = t.unitPrice * t.qty;
+    const excl = incl / (1 + vatRate / 100);
+    const b = ensure(biMonthlyPeriodOf(t.date));
+    b.salesVat += incl - excl;
+    b.revenueExcl += excl;
+  });
+  data.expenses.forEach((e) => {
+    ensure(biMonthlyPeriodOf(e.expenseDate)).purchaseVat += e.vatAmount;
+  });
+  const rows = Object.entries(periods).sort((a, b) => b[0].localeCompare(a[0])).map(([key, v]) => ({
+    key, ...v, netVat: v.salesVat - v.purchaseVat, taxAdvance: v.revenueExcl * (taxAdvanceRate / 100),
+  }));
+  const fmt = (n) => `₪${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+  return (
+    <div className="space-y-4">
+      {taxAdvanceRate === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800 flex items-center gap-2">
+          <TriangleAlert size={16} /> אחוז מקדמת מס הכנסה עדיין לא הוגדר (0%) - עדכנו אותו במסך "הגדרות" לפי האחוז שנקבע לכם על ידי רשות המסים, אחרת חישוב המקדמה למטה יציג 0.
+        </div>
+      )}
+      {rows.length === 0 && <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-400">אין עדיין מספיק נתונים כדי לחשב מע"מ</div>}
+      {rows.map((r) => (
+        <div key={r.key} className="bg-white rounded-2xl border shadow-sm p-5">
+          <h3 className="font-bold text-slate-800 mb-3">{r.label}</h3>
+          <div className="grid sm:grid-cols-2 gap-4 mb-3">
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">מע"מ עסקאות (על מכירות)</span><span className="font-medium">{fmt(r.salesVat)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">מע"מ תשומות (על הוצאות)</span><span className="font-medium text-rose-600">-{fmt(r.purchaseVat)}</span></div>
+              <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-800">מע"מ לתשלום בפועל</span><span className={`font-bold ${r.netVat >= 0 ? "text-rose-600" : "text-emerald-700"}`}>{fmt(Math.abs(r.netVat))} {r.netVat < 0 && "(לזיכוי)"}</span></div>
+            </div>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">הכנסות התקופה (ללא מע"מ)</span><span className="font-medium">{fmt(r.revenueExcl)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">אחוז מקדמת מס הכנסה</span><span className="font-medium">{taxAdvanceRate}%</span></div>
+              <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-800">מקדמת מס הכנסה נדרשת</span><span className="font-bold text-amber-700">{fmt(r.taxAdvance)}</span></div>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -3231,6 +3454,307 @@ function QuotePrintView({ data, quoteId, onClose }) {
   );
 }
 
+// ==================== הוצאות וחשבוניות ספקים (Expenses) ====================
+function emptyExpenseForm() {
+  return {
+    category: "goods", supplierId: "", description: "", invoiceNumber: "",
+    expenseDate: new Date().toISOString().slice(0, 10),
+    vatMode: "incl", amount: "", vatOverride: false, vatAmountOverride: "",
+    paymentStatus: "pending", paymentMethod: "bank_transfer", notes: "",
+  };
+}
+
+function ExpenseModal({ data, existing, onClose, refresh }) {
+  const [form, setForm] = useState(() => {
+    if (!existing) return emptyExpenseForm();
+    return {
+      category: existing.category, supplierId: existing.supplierId || "", description: existing.description,
+      invoiceNumber: existing.invoiceNumber, expenseDate: existing.expenseDate,
+      vatMode: existing.vatMode, amount: existing.vatMode === "incl" ? String(existing.amountInclVat) : String(existing.amountExclVat),
+      vatOverride: true, vatAmountOverride: String(existing.vatAmount),
+      paymentStatus: existing.paymentStatus, paymentMethod: existing.paymentMethod || "bank_transfer", notes: existing.notes,
+    };
+  });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const vatRate = data.companySettings.vatRate ?? 18;
+  const computed = computeVat(form.vatMode, form.amount, vatRate);
+  // דריסה ידנית: אם המשתמש נגע בשדה המע"מ בעצמו, נשתמש בערך שלו במקום בערך המחושב,
+  // ונגזור מחדש את הסכום ללא מע"מ כך שהוא + המע"מ שווים תמיד לסכום הכולל שהוזן.
+  const amountInclVat = form.vatMode === "incl" ? (Number(form.amount) || 0) : computed.amountInclVat;
+  const vatAmount = form.vatOverride && form.vatAmountOverride !== "" ? Number(form.vatAmountOverride) : computed.vatAmount;
+  const amountExclVat = form.vatMode === "incl" ? amountInclVat - vatAmount : (Number(form.amount) || 0);
+  const validation = validateVatBalance(amountExclVat, vatAmount, amountInclVat);
+
+  const submit = async () => {
+    setError("");
+    if (!form.category) { setError("יש לבחור קטגוריה"); return; }
+    if (!form.expenseDate) { setError("יש להזין תאריך"); return; }
+    if (!form.amount || Number(form.amount) <= 0) { setError("יש להזין סכום תקין"); return; }
+    if (!validation.balanced) {
+      setError(`בקרת תקינות נכשלה: הפרש של ₪${validation.diff.toFixed(2)} בין הסכום ללא מע"מ + מע"מ לבין הסכום הכולל. תקנו את הדריסה הידנית לפני השמירה.`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const payload = {
+        category: form.category, supplierId: form.supplierId || null, description: form.description,
+        invoiceNumber: form.invoiceNumber, expenseDate: form.expenseDate,
+        vatMode: form.vatMode,
+        amountExclVat: Math.round(amountExclVat * 100) / 100,
+        vatAmount: Math.round(vatAmount * 100) / 100,
+        amountInclVat: Math.round(amountInclVat * 100) / 100,
+        paymentStatus: form.paymentStatus, paymentMethod: form.paymentStatus === "paid" ? form.paymentMethod : null,
+        notes: form.notes,
+      };
+      if (existing) await api.updateExpense(existing.id, payload);
+      else await api.addExpense(payload);
+      await refresh();
+      onClose();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={existing ? "עריכת הוצאה / חשבונית" : "הוצאה / חשבונית חדשה"} onClose={onClose}>
+      <Field label="קטגוריה">
+        <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+          {Object.entries(EXPENSE_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </Field>
+      <Field label="ספק (לא חובה)">
+        <select className={inputCls} value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
+          <option value="">ללא / לא רלוונטי</option>
+          {data.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </Field>
+      <Field label="תיאור"><input className={inputCls} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="מספר חשבונית"><input className={inputCls} value={form.invoiceNumber} onChange={(e) => setForm({ ...form, invoiceNumber: e.target.value })} /></Field>
+        <Field label="תאריך אספקה/חיוב"><input type="date" className={inputCls} value={form.expenseDate} onChange={(e) => setForm({ ...form, expenseDate: e.target.value })} /></Field>
+      </div>
+
+      <Field label='סטטוס מע"מ'>
+        <div className="flex gap-1.5">
+          {Object.entries(VAT_MODES).map(([key, label]) => (
+            <button key={key} type="button" onClick={() => setForm({ ...form, vatMode: key, vatOverride: false, vatAmountOverride: "" })} className={`flex-1 rounded-xl py-2 border text-xs font-medium ${form.vatMode === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>{label}</button>
+          ))}
+        </div>
+      </Field>
+      <Field label={form.vatMode === "incl" ? 'סכום כולל מע"מ (₪)' : 'סכום לפני מע"מ (₪)'}>
+        <input type="number" min="0" step="0.01" className={inputCls} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+      </Field>
+
+      <div className="bg-gray-50 rounded-xl p-3 mb-4 text-sm space-y-1.5">
+        <div className="flex items-center justify-between"><span className="text-slate-500">סכום לפני מע"מ</span><span className="font-medium">₪{amountExclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 flex items-center gap-1.5">
+            מע"מ ({vatRate}%)
+            {form.vatMode !== "zero" && (
+              <button type="button" onClick={() => setForm({ ...form, vatOverride: !form.vatOverride, vatAmountOverride: form.vatOverride ? "" : String(Math.round(computed.vatAmount * 100) / 100) })} className="text-[11px] text-amber-600 hover:underline">
+                {form.vatOverride ? "בטל דריסה" : "דריסה ידנית"}
+              </button>
+            )}
+          </span>
+          {form.vatOverride ? (
+            <input type="number" step="0.01" className={inputCls + " w-24 !py-1"} value={form.vatAmountOverride} onChange={(e) => setForm({ ...form, vatAmountOverride: e.target.value })} />
+          ) : (
+            <span className="font-medium">₪{vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          )}
+        </div>
+        <div className="flex items-center justify-between pt-1.5 border-t"><span className="font-bold text-slate-800">סה"כ כולל מע"מ</span><span className="font-bold text-slate-800">₪{amountInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+        {!validation.balanced && (
+          <div className="bg-rose-100 text-rose-700 text-xs rounded-lg px-2.5 py-2 mt-1 flex items-center gap-1.5"><TriangleAlert size={13} /> החשבון לא מתאזן - הפרש ₪{validation.diff.toFixed(2)}. לא ניתן לשמור עד לתיקון.</div>
+        )}
+      </div>
+
+      <Field label="סטטוס תשלום">
+        <div className="flex gap-2">
+          {Object.entries(EXPENSE_PAYMENT_STATUSES).map(([key, cfg]) => (
+            <button key={key} type="button" onClick={() => setForm({ ...form, paymentStatus: key })} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${form.paymentStatus === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>{cfg.label}</button>
+          ))}
+        </div>
+      </Field>
+      {form.paymentStatus === "paid" && (
+        <Field label="אמצעי תשלום">
+          <select className={inputCls} value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}>
+            {Object.entries(PAYMENT_METHODS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Field>
+      )}
+      <Field label="הערות"><input className={inputCls} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={submit} disabled={busy || !validation.balanced} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}{existing ? "שמירת שינויים" : "שמירת הוצאה"}</button>
+    </Modal>
+  );
+}
+
+function ExpensePaymentsModal({ data, expense, onClose, refresh }) {
+  const [amount, setAmount] = useState("");
+  const [paidDate, setPaidDate] = useState(new Date().toISOString().slice(0, 10));
+  const [method, setMethod] = useState("bank_transfer");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const payments = (data.expensePayments || []).filter((p) => p.expenseId === expense.id).sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate));
+  const paid = payments.reduce((s, p) => s + p.amount, 0);
+  const balance = expense.amountInclVat - paid;
+
+  const addPayment = async () => {
+    setError("");
+    if (!amount || Number(amount) <= 0) { setError("יש להזין סכום תקין"); return; }
+    setBusy(true);
+    try {
+      await api.addExpensePayment(expense.id, Number(amount), paidDate, method, note);
+      await refresh();
+      setAmount(""); setNote("");
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+  const removePayment = async (id) => {
+    if (!confirm("למחוק את רישום התשלום?")) return;
+    try { await api.deleteExpensePayment(id); await refresh(); } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <Modal title={`תשלומים - ${expense.invoiceNumber || expense.description || "הוצאה"}`} onClose={onClose}>
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ (כולל מע"מ)</div><div className="font-bold text-slate-800">₪{expense.amountInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-emerald-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שולם</div><div className="font-bold text-emerald-700">₪{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-amber-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">יתרה</div><div className="font-bold text-amber-700">₪{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+      </div>
+      <div className="mb-4">
+        <div className="text-sm font-medium text-slate-600 mb-2">היסטוריית תשלומים</div>
+        {payments.length === 0 && <div className="text-sm text-slate-400 text-center py-3">עדיין לא נרשמו תשלומים</div>}
+        {payments.map((p) => (
+          <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
+            <div>
+              <div className="font-medium text-slate-800">₪{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} {p.method && `· ${PAYMENT_METHODS[p.method] || p.method}`}</div>
+              <div className="text-xs text-slate-500">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
+            </div>
+            <button onClick={() => removePayment(p.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={15} /></button>
+          </div>
+        ))}
+      </div>
+      <div className="border-t pt-3">
+        <div className="text-sm font-bold text-slate-700 mb-2">רישום תשלום חדש</div>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Field label="סכום (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+          <Field label="תאריך תשלום"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
+        </div>
+        <Field label="אמצעי תשלום">
+          <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+            {Object.entries(PAYMENT_METHODS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Field>
+        <Field label="הערה"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+        <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום תשלום</button>
+      </div>
+    </Modal>
+  );
+}
+
+function ExpensesScreen({ data, refresh, isAdmin }) {
+  const [modalExpense, setModalExpense] = useState(null); // {} for new, object for edit, null for closed
+  const [paymentsFor, setPaymentsFor] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [exportBusy, setExportBusy] = useState(false);
+
+  const rows = data.expenses.filter((e) => categoryFilter === "all" || e.category === categoryFilter);
+  const removeExpense = async (id) => {
+    if (!confirm("למחוק את ההוצאה/החשבונית וכל היסטוריית התשלומים שלה?")) return;
+    try { await api.deleteExpense(id); await refresh(); } catch (e) { alert(e.message); }
+  };
+
+  const exportToExcel = async () => {
+    setExportBusy(true);
+    try {
+      const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+      const sheetData = rows.map((e) => {
+        const supplier = data.suppliers.find((s) => s.id === e.supplierId);
+        const paid = (data.expensePayments || []).filter((p) => p.expenseId === e.id).reduce((s, p) => s + p.amount, 0);
+        return {
+          "תאריך": e.expenseDate, "קטגוריה": EXPENSE_CATEGORIES[e.category], "ספק": supplier?.name || "",
+          "מספר חשבונית": e.invoiceNumber, "תיאור": e.description,
+          "סכום לפני מע\"מ": e.amountExclVat, "מע\"מ": e.vatAmount, "סה\"כ כולל מע\"מ": e.amountInclVat,
+          "סטטוס תשלום": EXPENSE_PAYMENT_STATUSES[e.paymentStatus]?.label, "שולם בפועל": paid,
+          "אמצעי תשלום": e.paymentMethod ? PAYMENT_METHODS[e.paymentMethod] : "",
+        };
+      });
+      const ws = XLSX.utils.json_to_sheet(sheetData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "הוצאות");
+      XLSX.writeFile(wb, `הוצאות-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (e) {
+      alert("ייצוא האקסל נכשל - ודאו שיש חיבור אינטרנט תקין (הספרייה נטענת מרשת) ונסו שוב.");
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h2 className="font-bold text-xl text-slate-800">הוצאות וחשבוניות ספקים</h2>
+        <div className="flex items-center gap-2">
+          <button onClick={exportToExcel} disabled={exportBusy} className={btnGhost + " flex items-center gap-1.5 !py-2"}>{exportBusy ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} ייצוא לאקסל</button>
+          {isAdmin && <button onClick={() => setModalExpense({})} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> הוצאה חדשה</button>}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <select className={inputCls + " w-auto"} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+          <option value="all">כל הקטגוריות</option>
+          {Object.entries(EXPENSE_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-slate-500 text-right">
+              <th className="px-5 py-3 font-medium">תאריך</th><th className="px-5 py-3 font-medium">קטגוריה</th>
+              <th className="px-5 py-3 font-medium">ספק</th><th className="px-5 py-3 font-medium">חשבונית</th>
+              <th className="px-5 py-3 font-medium">לפני מע"מ</th><th className="px-5 py-3 font-medium">מע"מ</th>
+              <th className="px-5 py-3 font-medium">סה"כ</th><th className="px-5 py-3 font-medium">תשלום</th><th className="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((e) => {
+              const supplier = data.suppliers.find((s) => s.id === e.supplierId);
+              return (
+                <tr key={e.id} className="border-t">
+                  <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{new Date(e.expenseDate).toLocaleDateString("he-IL")}</td>
+                  <td className="px-5 py-3">{EXPENSE_CATEGORIES[e.category]}</td>
+                  <td className="px-5 py-3 text-slate-500">{supplier?.name || "-"}</td>
+                  <td className="px-5 py-3 text-slate-500">{e.invoiceNumber || "-"}</td>
+                  <td className="px-5 py-3">₪{e.amountExclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-5 py-3 text-slate-500">₪{e.vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-5 py-3 font-bold">₪{e.amountInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-5 py-3"><Badge tone={EXPENSE_PAYMENT_STATUSES[e.paymentStatus]?.tone}>{EXPENSE_PAYMENT_STATUSES[e.paymentStatus]?.label}</Badge></td>
+                  <td className="px-5 py-3 text-left">
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => setPaymentsFor(e)} className="text-emerald-600 hover:underline text-xs font-medium">תשלומים</button>
+                      {isAdmin && <button onClick={() => setModalExpense(e)} className="text-gray-400 hover:text-amber-600"><Pencil size={14} /></button>}
+                      {isAdmin && <button onClick={() => removeExpense(e.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={14} /></button>}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && <tr><td colSpan={9} className="px-5 py-8 text-center text-slate-400">אין עדיין הוצאות רשומות</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {modalExpense && <ExpenseModal data={data} existing={modalExpense.id ? modalExpense : null} onClose={() => setModalExpense(null)} refresh={refresh} />}
+      {paymentsFor && <ExpensePaymentsModal data={data} expense={paymentsFor} onClose={() => setPaymentsFor(null)} refresh={refresh} />}
+    </div>
+  );
+}
+
 // ==================== הזמנות רכש (Purchase Orders) ====================
 function POsScreen({ data, refresh, onPrint }) {
   const [open, setOpen] = useState(false);
@@ -3751,6 +4275,11 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
           <Field label="שם משפטי (אנגלית)"><input className={inputCls} value={company.legalName} onChange={(e) => setCompany({ ...company, legalName: e.target.value })} /></Field>
           <Field label="כתובת"><input className={inputCls} value={company.address} onChange={(e) => setCompany({ ...company, address: e.target.value })} /></Field>
           <Field label="טלפון"><input className={inputCls} value={company.phone} onChange={(e) => setCompany({ ...company, phone: e.target.value })} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label='אחוז מע"מ נוכחי'><input type="number" min="0" step="0.1" className={inputCls} value={company.vatRate ?? 18} onChange={(e) => setCompany({ ...company, vatRate: Number(e.target.value) })} /></Field>
+            <Field label="אחוז מקדמת מס הכנסה"><input type="number" min="0" step="0.1" className={inputCls} value={company.taxAdvanceRate ?? 0} onChange={(e) => setCompany({ ...company, taxAdvanceRate: Number(e.target.value) })} /></Field>
+          </div>
+          <p className="text-xs text-slate-400 -mt-2 mb-3">שני האחוזים האלה משמשים את מנוע חישוב המע"מ בכל המערכת (הזמנות, הוצאות) ואת דוח "מע"מ ומקדמות".</p>
           {companySaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">פרטי העסק עודכנו</div>}
           <button onClick={saveCompany} disabled={companyBusy} className={btnPrimary + " flex items-center gap-2"}>{companyBusy && <Loader2 size={16} className="animate-spin" />}שמירת פרטי עסק</button>
         </div>
@@ -3794,6 +4323,7 @@ const FULL_NAV = [
   { key: "landedCost", label: "מחשבון יבוא ועליות נחיתה", icon: Calculator, adminOnly: true },
   { key: "reports", label: "דוחות וערך מלאי", icon: BarChart3 },
   { key: "po", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
+  { key: "expenses", label: "הוצאות וחשבוניות", icon: Calculator },
   { key: "log", label: "יומן אירועים", icon: ScrollText },
   { key: "settings", label: "הגדרות", icon: Settings },
 ];
@@ -4020,6 +4550,7 @@ export default function App() {
                 {tab === "landedCost" && isAdmin && <LandedCostScreen data={data} refresh={refresh} />}
                 {tab === "reports" && <ReportsScreen data={data} />}
                 {tab === "po" && isAdmin && <POsScreen data={data} refresh={refresh} onPrint={setPrintPOId} />}
+                {tab === "expenses" && <ExpensesScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "log" && <AuditLog data={data} />}
                 {tab === "settings" && <SettingsScreen data={data} refresh={refresh} userEmail={session.user.email} logoUrl={data.logoUrl} isAdmin={isAdmin} onLogoChange={async (dataUrl) => { try { await api.updateLogoUrl(dataUrl); await refresh(); } catch (e) { alert(e.message); } }} />}
               </>
