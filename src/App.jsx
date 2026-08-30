@@ -442,6 +442,34 @@ async function deleteExpensePayment(id) {
   if (error) throw error;
 }
 
+// ---------- סריקת חשבונית חכמה (AI OCR) ----------
+// שולח את התמונה ל-Edge Function פרטי (לא ל-API חיצוני ישירות מהדפדפן!) -
+// המפתח הסודי של ה-AI חי אך ורק בצד השרת, לעולם לא בקוד הלקוח.
+async function analyzeInvoiceImage(file) {
+  const toBase64 = (f) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(f);
+  });
+  const imageBase64 = await toBase64(file);
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+  if (!accessToken) throw new Error("יש להתחבר מחדש כדי להשתמש בסריקה");
+
+  const functionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-invoice`;
+  const res = await fetch(functionsUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ imageBase64, mediaType: file.type || "image/jpeg" }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`שגיאת שרת בסריקה (${res.status}): ${text || "נסו שוב או הזינו ידנית"}`);
+  }
+  return res.json(); // { supplierName, invoiceNumber, invoiceDate, amountExclVat, vatAmount, amountInclVat }
+}
+
 // ---------- Suppliers ----------
 async function addSupplier(supplier) {
   const { error } = await supabase.from("suppliers").insert({
@@ -551,7 +579,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -3477,6 +3505,9 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [scanNotice, setScanNotice] = useState("");
 
   const vatRate = data.companySettings.vatRate ?? 18;
   const computed = computeVat(form.vatMode, form.amount, vatRate);
@@ -3486,6 +3517,40 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
   const vatAmount = form.vatOverride && form.vatAmountOverride !== "" ? Number(form.vatAmountOverride) : computed.vatAmount;
   const amountExclVat = form.vatMode === "incl" ? amountInclVat - vatAmount : (Number(form.amount) || 0);
   const validation = validateVatBalance(amountExclVat, vatAmount, amountInclVat);
+
+  const handleScanFile = async (file) => {
+    if (!file) return;
+    setScanError(""); setScanNotice(""); setScanBusy(true);
+    try {
+      const result = await api.analyzeInvoiceImage(file);
+      // ניסיון התאמה אוטומטית של הספק שזוהה מול רשימת הספקים הקיימת
+      const normalizedName = normalizeText(result.supplierName || "");
+      const matchedSupplier = normalizedName
+        ? data.suppliers.find((s) => normalizeText(s.name) === normalizedName || normalizeText(s.name).includes(normalizedName) || normalizedName.includes(normalizeText(s.name)))
+        : null;
+
+      setForm((f) => ({
+        ...f,
+        supplierId: matchedSupplier ? matchedSupplier.id : f.supplierId,
+        invoiceNumber: result.invoiceNumber || f.invoiceNumber,
+        expenseDate: result.invoiceDate || f.expenseDate,
+        vatMode: "incl",
+        amount: result.amountInclVat != null ? String(result.amountInclVat) : f.amount,
+        vatOverride: true,
+        vatAmountOverride: result.vatAmount != null ? String(result.vatAmount) : f.vatAmountOverride,
+      }));
+
+      if (result.supplierName && !matchedSupplier) {
+        setScanNotice(`זוהה שם הספק "${result.supplierName}" אך הוא לא נמצא ברשימת הספקים - בחרו ידנית או הוסיפו אותו כספק חדש. שאר השדות מולאו אוטומטית.`);
+      } else {
+        setScanNotice("הנתונים מולאו אוטומטית מהחשבונית - בדקו שהכל נכון לפני השמירה.");
+      }
+    } catch (e) {
+      setScanError(e.message || "הסריקה נכשלה - ניתן להמשיך ולמלא את הטופס ידנית.");
+    } finally {
+      setScanBusy(false);
+    }
+  };
 
   const submit = async () => {
     setError("");
@@ -3517,6 +3582,30 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
 
   return (
     <Modal title={existing ? "עריכת הוצאה / חשבונית" : "הוצאה / חשבונית חדשה"} onClose={onClose}>
+      {!existing && (
+        <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Calculator size={16} className="text-violet-600" />
+            <span className="text-sm font-bold text-slate-800">סריקת חשבונית חכמה (AI)</span>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">צלמו או העלו תמונה/PDF של החשבונית - המערכת תזהה ותמלא את השדות אוטומטית. אפשר גם לדלג ולמלא הכל ידנית למטה.</p>
+          <div className="flex gap-2">
+            <label className={btnPrimary + " flex-1 text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
+              {scanBusy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+              צילום חשבונית
+              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={scanBusy} onChange={(e) => handleScanFile(e.target.files?.[0])} />
+            </label>
+            <label className={btnGhost + " flex-1 text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
+              {scanBusy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+              העלאת קובץ
+              <input type="file" accept="image/*,application/pdf" className="hidden" disabled={scanBusy} onChange={(e) => handleScanFile(e.target.files?.[0])} />
+            </label>
+          </div>
+          {scanBusy && <div className="text-xs text-slate-500 mt-2 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> מנתח את החשבונית...</div>}
+          {scanNotice && <div className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-2.5 py-2 mt-2">{scanNotice}</div>}
+          {scanError && <div className="text-xs text-rose-700 bg-rose-50 rounded-lg px-2.5 py-2 mt-2">{scanError}</div>}
+        </div>
+      )}
       <Field label="קטגוריה">
         <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
           {Object.entries(EXPENSE_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
