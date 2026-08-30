@@ -445,14 +445,16 @@ async function deleteExpensePayment(id) {
 // ---------- סריקת חשבונית חכמה (AI OCR) ----------
 // שולח את התמונה ל-Edge Function פרטי (לא ל-API חיצוני ישירות מהדפדפן!) -
 // המפתח הסודי של ה-AI חי אך ורק בצד השרת, לעולם לא בקוד הלקוח.
-async function analyzeInvoiceImage(file) {
+async function analyzeInvoiceImage(files) {
+  const fileArray = Array.from(files);
+  if (fileArray.length === 0) throw new Error("לא נבחרו תמונות");
   const toBase64 = (f) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result.split(",")[1]);
     reader.onerror = reject;
     reader.readAsDataURL(f);
   });
-  const imageBase64 = await toBase64(file);
+  const images = await Promise.all(fileArray.map(async (f) => ({ data: await toBase64(f), mediaType: f.type || "image/jpeg" })));
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData?.session?.access_token;
   if (!accessToken) throw new Error("יש להתחבר מחדש כדי להשתמש בסריקה");
@@ -461,7 +463,7 @@ async function analyzeInvoiceImage(file) {
   const res = await fetch(functionsUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ imageBase64, mediaType: file.type || "image/jpeg" }),
+    body: JSON.stringify({ images }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -3508,6 +3510,8 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
   const [scanBusy, setScanBusy] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanNotice, setScanNotice] = useState("");
+  const [stagedFiles, setStagedFiles] = useState([]);
+  const [stagedPreviews, setStagedPreviews] = useState([]); // object URLs, אינדקס מקביל ל-stagedFiles
 
   const vatRate = data.companySettings.vatRate ?? 18;
   const computed = computeVat(form.vatMode, form.amount, vatRate);
@@ -3518,11 +3522,29 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
   const amountExclVat = form.vatMode === "incl" ? amountInclVat - vatAmount : (Number(form.amount) || 0);
   const validation = validateVatBalance(amountExclVat, vatAmount, amountInclVat);
 
-  const handleScanFile = async (file) => {
-    if (!file) return;
+  // בונים ומנקים תצוגות מקדימות (object URLs) בכל שינוי ברשימת העמודים שנצברו,
+  // כדי שלא יישארו כתובות זיכרון פתוחות בדפדפן אחרי שעמוד הוסר או הניתוח הושלם.
+  useEffect(() => {
+    const urls = stagedFiles.map((f) => (f.type && f.type.startsWith("image/") ? URL.createObjectURL(f) : null));
+    setStagedPreviews(urls);
+    return () => { urls.forEach((u) => u && URL.revokeObjectURL(u)); };
+  }, [stagedFiles]);
+
+  // מצלמת נייד תופסת תמונה אחת בלבד לכל הפעלה - אז מצטברים כמה עמודים ברצף
+  // בזה אחר זה, עם תצוגה מקדימה לכל אחד, ורק בלחיצה על "סיים ונתח" כל התמונות
+  // נשלחות יחד כמערך אחד לפונקציית ה-AI, כחשבונית רב-עמודית אחת.
+  const addStagedFiles = (fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length > 0) setStagedFiles((prev) => [...prev, ...files]);
+  };
+  const removeStagedFile = (idx) => setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
+
+  const handleScanFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
     setScanError(""); setScanNotice(""); setScanBusy(true);
     try {
-      const result = await api.analyzeInvoiceImage(file);
+      const result = await api.analyzeInvoiceImage(files);
       // ניסיון התאמה אוטומטית של הספק שזוהה מול רשימת הספקים הקיימת
       const normalizedName = normalizeText(result.supplierName || "");
       const matchedSupplier = normalizedName
@@ -3540,13 +3562,15 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
         vatAmountOverride: result.vatAmount != null ? String(result.vatAmount) : f.vatAmountOverride,
       }));
 
+      const pagesNote = files.length > 1 ? `נותחו ${files.length} עמודים יחד כחשבונית אחת. ` : "";
       if (result.supplierName && !matchedSupplier) {
-        setScanNotice(`זוהה שם הספק "${result.supplierName}" אך הוא לא נמצא ברשימת הספקים - בחרו ידנית או הוסיפו אותו כספק חדש. שאר השדות מולאו אוטומטית.`);
+        setScanNotice(`${pagesNote}זוהה שם הספק "${result.supplierName}" אך הוא לא נמצא ברשימת הספקים - בחרו ידנית או הוסיפו אותו כספק חדש. שאר השדות מולאו אוטומטית.`);
       } else {
-        setScanNotice("הנתונים מולאו אוטומטית מהחשבונית - בדקו שהכל נכון לפני השמירה.");
+        setScanNotice(`${pagesNote}הנתונים מולאו אוטומטית מהחשבונית - בדקו שהכל נכון לפני השמירה.`);
       }
+      setStagedFiles([]);
     } catch (e) {
-      setScanError(e.message || "הסריקה נכשלה - ניתן להמשיך ולמלא את הטופס ידנית.");
+      setScanError(e.message || "הסריקה נכשלה - ניתן להמשיך ולמלא את הטופס ידנית, או ללחוץ שוב על נתח כדי לנסות שנית.");
     } finally {
       setScanBusy(false);
     }
@@ -3588,20 +3612,54 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
             <Calculator size={16} className="text-violet-600" />
             <span className="text-sm font-bold text-slate-800">סריקת חשבונית חכמה (AI)</span>
           </div>
-          <p className="text-xs text-slate-500 mb-3">צלמו או העלו תמונה/PDF של החשבונית - המערכת תזהה ותמלא את השדות אוטומטית. אפשר גם לדלג ולמלא הכל ידנית למטה.</p>
-          <div className="flex gap-2">
-            <label className={btnPrimary + " flex-1 text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
-              {scanBusy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-              צילום חשבונית
-              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={scanBusy} onChange={(e) => handleScanFile(e.target.files?.[0])} />
+          <p className="text-xs text-slate-500 mb-3">חשבונית עם כמה עמודים? צלמו כל עמוד בנפרד (כל לחיצה מוסיפה עמוד לרשימה למטה עם תצוגה מקדימה) - ורק אחרי שכל העמודים נאספו, לחצו "סיים ונתח" כדי לעבד את כולם יחד כמסמך אחד.</p>
+          <div className="flex gap-2 mb-3">
+            <label className={btnGhost + " flex-1 text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
+              <Upload size={16} /> צילום עמוד
+              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={scanBusy} onChange={(e) => { addStagedFiles(e.target.files); e.target.value = ""; }} />
             </label>
             <label className={btnGhost + " flex-1 text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
-              {scanBusy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-              העלאת קובץ
-              <input type="file" accept="image/*,application/pdf" className="hidden" disabled={scanBusy} onChange={(e) => handleScanFile(e.target.files?.[0])} />
+              <Upload size={16} /> העלאת קבצים
+              <input type="file" accept="image/*,application/pdf" multiple className="hidden" disabled={scanBusy} onChange={(e) => { addStagedFiles(e.target.files); e.target.value = ""; }} />
             </label>
           </div>
-          {scanBusy && <div className="text-xs text-slate-500 mt-2 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> מנתח את החשבונית...</div>}
+
+          {stagedFiles.length > 0 && (
+            <div className="mb-3">
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 mb-3">
+                {stagedFiles.map((f, i) => (
+                  <div key={i} className="relative group">
+                    <div className="aspect-square rounded-xl border border-violet-200 bg-white overflow-hidden flex items-center justify-center">
+                      {stagedPreviews[i] ? (
+                        <img src={stagedPreviews[i]} alt={`עמוד ${i + 1}`} className="w-full h-full object-cover" />
+                      ) : (
+                        <FileText size={22} className="text-slate-300" />
+                      )}
+                    </div>
+                    <span className="absolute top-1 right-1 bg-slate-900/70 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">{i + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeStagedFile(i)}
+                      className="absolute -top-1.5 -left-1.5 bg-white border border-gray-300 rounded-full w-5 h-5 flex items-center justify-center text-slate-500 hover:text-rose-600 hover:border-rose-300 shadow-sm"
+                      title="הסרת עמוד זה"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleScanFiles(stagedFiles)}
+                disabled={scanBusy}
+                className={btnPrimary + " w-full flex items-center justify-center gap-2 !py-2.5"}
+              >
+                {scanBusy ? <Loader2 size={16} className="animate-spin" /> : <Calculator size={16} />}
+                {scanBusy ? "מנתח..." : `סיים ונתח (${stagedFiles.length} ${stagedFiles.length === 1 ? "עמוד" : "עמודים"})`}
+              </button>
+            </div>
+          )}
+
           {scanNotice && <div className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-2.5 py-2 mt-2">{scanNotice}</div>}
           {scanError && <div className="text-xs text-rose-700 bg-rose-50 rounded-lg px-2.5 py-2 mt-2">{scanError}</div>}
         </div>
