@@ -3997,7 +3997,17 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [exportBusy, setExportBusy] = useState(false);
 
-  const rows = data.expenses.filter((e) => categoryFilter === "all" || e.category === categoryFilter);
+  const today = ymd(new Date());
+  const [dateFrom, setDateFrom] = useState(startOfMonth(shiftMonths(today, -5)));
+  const [dateTo, setDateTo] = useState(endOfMonth(today));
+  const shiftWindow = (delta) => { setDateFrom(shiftMonths(dateFrom, delta)); setDateTo(shiftMonths(dateTo, delta)); };
+  const applyPreset = (months) => { setDateFrom(startOfMonth(shiftMonths(today, -(months - 1)))); setDateTo(endOfMonth(today)); };
+  const rangeLabel = `${new Date(dateFrom).toLocaleDateString("he-IL", { year: "numeric", month: "short" })} — ${new Date(dateTo).toLocaleDateString("he-IL", { year: "numeric", month: "short" })}`;
+
+  const rows = data.expenses.filter((e) =>
+    (categoryFilter === "all" || e.category === categoryFilter) &&
+    e.expenseDate >= dateFrom && e.expenseDate <= dateTo
+  );
   const removeExpense = async (id) => {
     if (!confirm("למחוק את ההוצאה/החשבונית וכל היסטוריית התשלומים שלה?")) return;
     try { await api.deleteExpense(id); await refresh(); } catch (e) { alert(e.message); }
@@ -4039,7 +4049,23 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
         </div>
       </div>
 
-      <div className="mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-4 mb-4">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <button onClick={() => shiftWindow(-1)} className={btnGhost + " !p-2"} title="חודש אחורה"><ChevronLeft size={16} className="rotate-180" /></button>
+            <span className="font-bold text-slate-700 text-sm min-w-[140px] text-center">{rangeLabel}</span>
+            <button onClick={() => shiftWindow(1)} className={btnGhost + " !p-2"} title="חודש קדימה"><ChevronLeft size={16} /></button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {[3, 6, 12].map((n) => (
+              <button key={n} onClick={() => applyPreset(n)} className="text-xs rounded-lg px-2.5 py-1.5 border border-gray-300 text-slate-600 hover:bg-gray-50">{n} חודשים אחרונים</button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <Field label="מתאריך"><input type="date" className={inputCls} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></Field>
+          <Field label="עד תאריך"><input type="date" className={inputCls} value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></Field>
+        </div>
         <select className={inputCls + " w-auto"} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="all">כל הקטגוריות</option>
           {Object.entries(EXPENSE_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
