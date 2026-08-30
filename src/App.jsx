@@ -2478,8 +2478,32 @@ function LandedCostScreen({ data, refresh }) {
 }
 
 // ==================== דוחות: ערך מלאי + חיזוי וקצב צריכה ====================
+// עוזרי תאריך לניווט ולסינון הטווח - לא נוגעים בשום לוגיקת חישוב קיימת,
+// רק קובעים אילו תנועות/הוצאות נכנסות בכלל לתוך buildMonthlyPL/buildCategoryMonthMatrix.
+function ymd(d) { return d.toISOString().slice(0, 10); }
+function startOfMonth(dateStr) { const d = new Date(dateStr); return ymd(new Date(d.getFullYear(), d.getMonth(), 1)); }
+function endOfMonth(dateStr) { const d = new Date(dateStr); return ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
+function shiftMonths(dateStr, delta) { const d = new Date(dateStr); d.setDate(1); d.setMonth(d.getMonth() + delta); return ymd(d); }
+function filterDataByDateRange(data, from, to) {
+  return {
+    ...data,
+    transactions: data.transactions.filter((t) => { const d = t.date.slice(0, 10); return d >= from && d <= to; }),
+    expenses: data.expenses.filter((e) => e.expenseDate >= from && e.expenseDate <= to),
+  };
+}
+
 function ReportsScreen({ data }) {
   const [sub, setSub] = useState("valuation");
+  const today = ymd(new Date());
+  const [dateFrom, setDateFrom] = useState(startOfMonth(shiftMonths(today, -5)));
+  const [dateTo, setDateTo] = useState(endOfMonth(today));
+
+  const shiftWindow = (delta) => { setDateFrom(shiftMonths(dateFrom, delta)); setDateTo(shiftMonths(dateTo, delta)); };
+  const applyPreset = (months) => { setDateFrom(startOfMonth(shiftMonths(today, -(months - 1)))); setDateTo(endOfMonth(today)); };
+
+  const showDateFilter = sub === "pl" || sub === "vat";
+  const rangeLabel = `${new Date(dateFrom).toLocaleDateString("he-IL", { year: "numeric", month: "short" })} — ${new Date(dateTo).toLocaleDateString("he-IL", { year: "numeric", month: "short" })}`;
+
   return (
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-4">דוחות וערך מלאי</h2>
@@ -2489,10 +2513,32 @@ function ReportsScreen({ data }) {
         <button onClick={() => setSub("pl")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "pl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><TrendingUp size={16} /> רווח והפסד (P&L)</button>
         <button onClick={() => setSub("vat")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "vat" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><Calculator size={16} /> מע"מ ומקדמות</button>
       </div>
+
+      {showDateFilter && (
+        <div className="bg-white rounded-2xl border shadow-sm p-4 mb-5">
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <button onClick={() => shiftWindow(-1)} className={btnGhost + " !p-2"} title="חודש אחורה"><ChevronLeft size={16} className="rotate-180" /></button>
+              <span className="font-bold text-slate-700 text-sm min-w-[140px] text-center">{rangeLabel}</span>
+              <button onClick={() => shiftWindow(1)} className={btnGhost + " !p-2"} title="חודש קדימה"><ChevronLeft size={16} /></button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {[3, 6, 12].map((n) => (
+                <button key={n} onClick={() => applyPreset(n)} className="text-xs rounded-lg px-2.5 py-1.5 border border-gray-300 text-slate-600 hover:bg-gray-50">{n} חודשים אחרונים</button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="מתאריך"><input type="date" className={inputCls} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></Field>
+            <Field label="עד תאריך"><input type="date" className={inputCls} value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></Field>
+          </div>
+        </div>
+      )}
+
       {sub === "valuation" && <ValuationReport data={data} />}
       {sub === "forecast" && <ForecastReport data={data} />}
-      {sub === "pl" && <PLReport data={data} />}
-      {sub === "vat" && <VatSettlementReport data={data} />}
+      {sub === "pl" && <PLReport data={filterDataByDateRange(data, dateFrom, dateTo)} />}
+      {sub === "vat" && <VatSettlementReport data={filterDataByDateRange(data, dateFrom, dateTo)} />}
     </div>
   );
 }
