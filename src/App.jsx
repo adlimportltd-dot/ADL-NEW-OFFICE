@@ -977,11 +977,22 @@ function Dashboard({ data, onExport, isAdmin }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ יחידות במלאי</div><div className="text-2xl font-bold text-slate-800">{totalUnits}</div></div>
-        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">פריטים בקטלוג</div><div className="text-2xl font-bold text-slate-800">{items.length}</div></div>
-        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מיקומים פעילים</div><div className="text-2xl font-bold text-slate-800">{locations.length}</div></div>
-        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מתחת לסף</div><div className="text-2xl font-bold text-rose-600">{lowStock.length}</div></div>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
+        {[
+          { label: "סה\"כ יחידות במלאי", value: totalUnits, icon: Package, iconCls: "bg-sky-50 text-sky-600" },
+          { label: "פריטים בקטלוג", value: items.length, icon: Database, iconCls: "bg-violet-50 text-violet-600" },
+          { label: "מיקומים פעילים", value: locations.length, icon: Warehouse, iconCls: "bg-amber-50 text-amber-600" },
+          { label: "מתחת לסף", value: lowStock.length, icon: TriangleAlert, iconCls: "bg-rose-50 text-rose-600", valueCls: "text-rose-600" },
+        ].map((kpi, i) => {
+          const Icon = kpi.icon;
+          return (
+            <div key={i} className="bg-white rounded-2xl border shadow-sm p-4 sm:p-5 min-w-0">
+              <div className={`inline-flex p-2 rounded-xl mb-2.5 ${kpi.iconCls}`}><Icon size={18} /></div>
+              <div className={`text-xl sm:text-2xl font-bold leading-tight ${kpi.valueCls || "text-slate-800"}`}>{kpi.value}</div>
+              <div className="text-slate-500 text-xs sm:text-sm mt-0.5 leading-snug">{kpi.label}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
@@ -4945,7 +4956,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="p-4 sm:p-6 pb-24 md:pb-6 max-w-6xl mx-auto">
+          <div className="p-4 sm:p-6 pb-44 md:pb-6 max-w-6xl mx-auto">
             {dataError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-4">{dataError}</div>}
             {customerFileId ? (
               <CustomerFile
@@ -4980,13 +4991,19 @@ export default function App() {
           </div>
 
           {tab !== "transaction" && !customerFileId && isAdmin && (
-            <div className="md:hidden fixed inset-x-0 bottom-14 z-20 px-3 pb-2 flex gap-2 pointer-events-none">
+            <div
+              className="md:hidden fixed inset-x-0 z-20 px-4 flex gap-3 pointer-events-none"
+              style={{ bottom: "calc(4rem + env(safe-area-inset-bottom) + 0.75rem)" }}
+            >
               <button onClick={() => runQuickAction("transfer")} className="pointer-events-auto flex-1 bg-sky-600 text-white font-bold rounded-2xl py-3.5 shadow-lg flex items-center justify-center gap-2 active:scale-95 transition"><ArrowLeftRight size={20} /> העברה מהירה</button>
               <button onClick={() => runQuickAction("install")} className="pointer-events-auto flex-1 bg-amber-500 text-white font-bold rounded-2xl py-3.5 shadow-lg flex items-center justify-center gap-2 active:scale-95 transition"><Truck size={20} /> התקנה מהירה</button>
             </div>
           )}
 
-          <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t flex justify-around py-1.5 z-30">
+          <nav
+            className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t flex justify-around items-center z-30"
+            style={{ height: "4rem", paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
             {MOBILE_NAV.filter((key) => nav.some((n) => n.key === key)).map((key) => {
               const item = FULL_NAV.find((n) => n.key === key);
               const Icon = item.icon;
