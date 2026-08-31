@@ -949,27 +949,19 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(initialError || "");
   const [busy, setBusy] = useState(false);
-  const [mfaFactorId, setMfaFactorId] = useState(null); // null = credentials step, set = mfa step
 
   const submit = async () => {
     setError(""); setBusy(true);
     try {
       const result = await api.signIn(email.trim(), password);
-      // בודקים ישירות אם למשתמש יש גורם 2FA מאומת - זו הבדיקה האמינה
-      // (לא מסתמכים על nextLevel שיכול להתעדכן באיטיות אחרי כניסה טרייה).
-      // אם יש גורם כזה, והחיבור הנוכחי עדיין לא הגיע ל-aal2, מבקשים קוד.
-      const factors = await api.mfaListFactors();
-      const totpFactor = factors.totp?.[0];
-      if (totpFactor) {
-        const aal = await api.mfaGetAssuranceLevel();
-        if (aal.currentLevel !== "aal2") { setMfaFactorId(totpFactor.id); return; }
-      }
-      // מעבירים את ה-session ישירות ל-App במקום להסתמך רק על ה-listener הגלובלי -
-      // כך המעבר ללוח הבקרה קורה מיד ובאופן ודאי, גם אם ה-listener מתעכב מסיבה כלשהי.
+      // חשוב: לא מחליטים כאן בעצמנו אם צריך 2FA - מעבירים את ה-session
+      // ל-resolveSession ב-App, שהיא הבדיקה האמינה היחידה לכך (ראו שם למה
+      // חשוב שזו תהיה נקודת אמת יחידה ולא בדיקה כפולה שעלולה להתחרות
+      // ב-listener הגלובלי). busy נשאר דלוק - המסך הזה יוחלף ברגע שההחלטה
+      // תתקבל, בין אם לדשבורד ובין אם למסך קוד ה-2FA.
       onSuccess(result.session);
     } catch (e) {
       setError(e.message === "Invalid login credentials" ? 'דוא"ל או סיסמה שגויים.' : (e.message || "שגיאת התחברות"));
-    } finally {
       setBusy(false);
     }
   };
@@ -978,34 +970,28 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   return (
     <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        {mfaFactorId ? (
-          <MfaCodeStep factorId={mfaFactorId} onVerified={onSuccess} onCancel={() => { setMfaFactorId(null); api.signOut(); }} />
-        ) : (
-          <>
-            <div className="flex items-center gap-2 mb-6">
-              <LogoBadge logoUrl={logoUrl} size={40} />
-              <div>
-                <div className="font-bold text-slate-900 leading-tight">אדל אימפורט</div>
-                <div className="text-xs text-slate-500">ניהול מלאי</div>
-              </div>
-            </div>
+        <div className="flex items-center gap-2 mb-6">
+          <LogoBadge logoUrl={logoUrl} size={40} />
+          <div>
+            <div className="font-bold text-slate-900 leading-tight">אדל אימפורט</div>
+            <div className="text-xs text-slate-500">ניהול מלאי</div>
+          </div>
+        </div>
 
-            <Field label='דוא"ל'>
-              <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} autoFocus />
-            </Field>
-            <Field label="סיסמה">
-              <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} />
-            </Field>
+        <Field label='דוא"ל'>
+          <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} autoFocus />
+        </Field>
+        <Field label="סיסמה">
+          <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} />
+        </Field>
 
-            {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
 
-            <button onClick={submit} disabled={busy || !email || !password} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
-              {busy && <Loader2 size={16} className="animate-spin" />}
-              התחברות
-            </button>
-            <p className="text-xs text-slate-400 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
-          </>
-        )}
+        <button onClick={submit} disabled={busy || !email || !password} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
+          {busy && <Loader2 size={16} className="animate-spin" />}
+          התחברות
+        </button>
+        <p className="text-xs text-slate-400 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
       </div>
     </div>
   );
@@ -5065,31 +5051,46 @@ export default function App() {
     }
   }, []);
 
+  // נקודת אמת יחידה למעבר session -> "מחובר בפועל": חייבים לעבור דרכה בכל
+  // מקרה שבו Supabase מדווח על session חדש/קיים - בין אם ממסך ההתחברות,
+  // ובין אם מה-listener הגלובלי (טעינת עמוד, רענון טוקן וכו'). כך שום נתיב
+  // לא יכול "לעקוף" את בדיקת ה-2FA ולהיכנס ישר בלי לעבור אותה.
+  const resolveSession = useCallback(async (candidateSession) => {
+    if (!candidateSession) { setSession(null); setMfaPendingFactorId(null); return; }
+    try {
+      const factors = await api.mfaListFactors();
+      const totpFactor = factors.totp?.[0];
+      if (totpFactor) {
+        const aal = await api.mfaGetAssuranceLevel();
+        if (aal.currentLevel !== "aal2") {
+          setMfaPendingFactorId(totpFactor.id);
+          setSession(candidateSession);
+          return;
+        }
+      }
+      setMfaPendingFactorId(null);
+      setSession(candidateSession);
+    } catch (e) {
+      // אם בדיקת ה-2FA עצמה נכשלת מסיבה טכנית (לא קוד שגוי - תקלת רשת/API),
+      // לא נועלים את המשתמש מחוץ לחשבון שלו בגלל זה - מכניסים כרגיל.
+      setMfaPendingFactorId(null);
+      setSession(candidateSession);
+    }
+  }, []);
+
   // מסך התחברות אמיתי: בודקים אם כבר יש session פעיל (למשל רענון עמוד),
   // אחרת מציגים את LoginScreen ומחכים שהמשתמש יזין דוא"ל וסיסמה בעצמו.
-  // אם יש session קיים שעדיין לא עבר את שלב ה-2FA (aal1 בלבד, לא aal2) -
-  // מציגים ישירות את שלב הזנת הקוד, בלי לבקש דוא"ל+סיסמה שוב.
+  // גם ה-listener הגלובלי (event 'SIGNED_IN' וכו') וגם הבדיקה הראשונית
+  // בעליית האפליקציה עוברים דרך resolveSession - אף אחד מהם לא קובע session
+  // "רשמי" ישירות, כדי שלא תיווצר תחרות בין נתיב שבודק MFA לנתיב שלא.
   useEffect(() => {
     (async () => {
-      try {
-        const existing = await api.getSession();
-        if (!existing) { setSession(null); return; }
-        // אותה בדיקה אמינה: קודם בודקים אם יש בכלל גורם 2FA מאומת, ורק אז
-        // בודקים אם ה-session הנוכחי כבר עלה ל-aal2 או שהוא עדיין ב-aal1.
-        const factors = await api.mfaListFactors();
-        const totpFactor = factors.totp?.[0];
-        if (totpFactor) {
-          const aal = await api.mfaGetAssuranceLevel();
-          if (aal.currentLevel !== "aal2") { setMfaPendingFactorId(totpFactor.id); setSession(existing); return; }
-        }
-        setSession(existing);
-      } catch (e) {
-        setSession(null);
-      }
+      const existing = await api.getSession();
+      await resolveSession(existing);
     })();
-    const unsubscribe = api.onAuthChange((s) => setSession(s));
+    const unsubscribe = api.onAuthChange((s) => { resolveSession(s); });
     return unsubscribe;
-  }, []);
+  }, [resolveSession]);
 
   // הלוגו נטען בנפרד עוד לפני התחברות, כדי שיוצג במסך ה-Login עצמו
   // (מתאפשר בזכות מדיניות RLS ציבורית ייעודית על app_settings).
@@ -5145,7 +5146,7 @@ export default function App() {
     return <div dir="rtl" className="min-h-screen flex items-center justify-center text-slate-400 bg-slate-900">טוען...</div>;
   }
   if (!session) {
-    return <LoginScreen onSuccess={(newSession) => setSession(newSession)} logoUrl={publicLogoUrl} />;
+    return <LoginScreen onSuccess={(newSession) => resolveSession(newSession)} logoUrl={publicLogoUrl} />;
   }
   if (mfaPendingFactorId) {
     return (
