@@ -89,6 +89,36 @@ async function getSession() {
   const { data } = await supabase.auth.getSession();
   return data.session;
 }
+
+// ---------- אימות דו-שלבי (2FA / TOTP) ----------
+// עוטף אך ורק את ה-API המובנה של Supabase Auth למניעת בניית מנגנון TOTP
+// עצמאי - הסודות של המשתמשים מנוהלים ונשמרים אצל Supabase עצמו, לא בטבלה
+// שלנו, ולכן אין כאן שום שינוי סכימה או השפעה על מדיניות RLS קיימת.
+async function mfaGetAssuranceLevel() {
+  const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error) throw error;
+  return data; // { currentLevel: 'aal1'|'aal2', nextLevel: 'aal1'|'aal2' }
+}
+async function mfaListFactors() {
+  const { data, error } = await supabase.auth.mfa.listFactors();
+  if (error) throw error;
+  return data; // { totp: [...verified factors], all: [...] }
+}
+async function mfaEnroll() {
+  const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "Authenticator App" });
+  if (error) throw error;
+  return data; // { id, totp: { qr_code, secret, uri } }
+}
+async function mfaChallengeAndVerify(factorId, code) {
+  const { data, error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+  if (error) throw error;
+  return data;
+}
+async function mfaUnenroll(factorId) {
+  const { error } = await supabase.auth.mfa.unenroll({ factorId });
+  if (error) throw error;
+}
+
 async function fetchMyProfile(userId) {
   const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
   if (error) throw error;
@@ -614,7 +644,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -865,16 +895,73 @@ function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
 }
 
 // ==================== Login ====================
+// שלב הזנת קוד ה-2FA - רכיב משותף שמשמש גם בתוך מסך ההתחברות (מיד אחרי
+// דוא"ל+סיסמה) וגם ברמת ה-App עצמו (כשיש session שמור שעדיין לא עבר את
+// שלב האימות הדו-שלבי, למשל אחרי רענון עמוד).
+function MfaCodeStep({ factorId, onVerified, onCancel }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setError("");
+    if (code.trim().length !== 6) { setError("יש להזין קוד בן 6 ספרות"); return; }
+    setBusy(true);
+    try {
+      await api.mfaChallengeAndVerify(factorId, code.trim());
+      const session = await api.getSession();
+      onVerified(session);
+    } catch (e) {
+      setError("קוד שגוי או שפג תוקפו. נסו שוב עם הקוד העדכני מהאפליקציה.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const onKeyDown = (e) => { if (e.key === "Enter") submit(); };
+
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-2">
+        <div className="p-2 rounded-xl bg-sky-50 text-sky-600"><KeyRound size={20} /></div>
+        <div className="font-bold text-slate-900">אימות דו-שלבי</div>
+      </div>
+      <p className="text-sm text-slate-500 mb-4">הזינו את הקוד בן 6 הספרות המוצג כרגע באפליקציית ה-Authenticator שלכם.</p>
+      <Field label="קוד אימות">
+        <input
+          type="text" inputMode="numeric" maxLength={6} autoFocus
+          className={inputCls + " text-center text-2xl tracking-[0.5em] font-bold"}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onKeyDown={onKeyDown}
+        />
+      </Field>
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={submit} disabled={busy || code.length !== 6} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
+        {busy && <Loader2 size={16} className="animate-spin" />} אימות
+      </button>
+      {onCancel && <button onClick={onCancel} className="w-full text-center text-sm text-slate-400 hover:text-slate-600 mt-3">חזרה להתחברות</button>}
+    </>
+  );
+}
+
 function LoginScreen({ onSuccess, logoUrl, initialError }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(initialError || "");
   const [busy, setBusy] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState(null); // null = credentials step, set = mfa step
 
   const submit = async () => {
     setError(""); setBusy(true);
     try {
       const result = await api.signIn(email.trim(), password);
+      // בודקים אם החשבון הזה דורש קוד 2FA לפני מתן גישה מלאה (aal1 -> aal2).
+      const aal = await api.mfaGetAssuranceLevel();
+      if (aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
+        const factors = await api.mfaListFactors();
+        const totpFactor = factors.totp?.[0];
+        if (totpFactor) { setMfaFactorId(totpFactor.id); return; }
+      }
       // מעבירים את ה-session ישירות ל-App במקום להסתמך רק על ה-listener הגלובלי -
       // כך המעבר ללוח הבקרה קורה מיד ובאופן ודאי, גם אם ה-listener מתעכב מסיבה כלשהי.
       onSuccess(result.session);
@@ -887,30 +974,36 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   const onKeyDown = (e) => { if (e.key === "Enter") submit(); };
 
   return (
-    <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
+    <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <LogoBadge logoUrl={logoUrl} size={40} />
-          <div>
-            <div className="font-bold text-slate-900 leading-tight">אדל אימפורט</div>
-            <div className="text-xs text-slate-500">ניהול מלאי</div>
-          </div>
-        </div>
+        {mfaFactorId ? (
+          <MfaCodeStep factorId={mfaFactorId} onVerified={onSuccess} onCancel={() => { setMfaFactorId(null); api.signOut(); }} />
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-6">
+              <LogoBadge logoUrl={logoUrl} size={40} />
+              <div>
+                <div className="font-bold text-slate-900 leading-tight">אדל אימפורט</div>
+                <div className="text-xs text-slate-500">ניהול מלאי</div>
+              </div>
+            </div>
 
-        <Field label='דוא"ל'>
-          <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} autoFocus />
-        </Field>
-        <Field label="סיסמה">
-          <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} />
-        </Field>
+            <Field label='דוא"ל'>
+              <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} autoFocus />
+            </Field>
+            <Field label="סיסמה">
+              <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} />
+            </Field>
 
-        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+            {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
 
-        <button onClick={submit} disabled={busy || !email || !password} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
-          {busy && <Loader2 size={16} className="animate-spin" />}
-          התחברות
-        </button>
-        <p className="text-xs text-slate-400 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
+            <button onClick={submit} disabled={busy || !email || !password} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
+              {busy && <Loader2 size={16} className="animate-spin" />}
+              התחברות
+            </button>
+            <p className="text-xs text-slate-400 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -4672,6 +4765,42 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
   const [logoBusy, setLogoBusy] = useState(false);
   const logoInputRef = React.useRef(null);
 
+  // ---------- אימות דו-שלבי (2FA) ----------
+  const [mfaFactors, setMfaFactors] = useState(null); // null = טוען, [] = אין, [factor] = פעיל
+  const [mfaEnrollData, setMfaEnrollData] = useState(null); // { id, totp: { qr_code, secret } } בזמן הרשמה
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaError, setMfaError] = useState("");
+  const [mfaBusy, setMfaBusy] = useState(false);
+
+  const loadMfaFactors = async () => {
+    try { const result = await api.mfaListFactors(); setMfaFactors(result.totp || []); }
+    catch (e) { setMfaFactors([]); }
+  };
+  useEffect(() => { loadMfaFactors(); }, []);
+
+  const startMfaEnroll = async () => {
+    setMfaError(""); setMfaBusy(true);
+    try { const result = await api.mfaEnroll(); setMfaEnrollData(result); }
+    catch (e) { setMfaError(e.message); } finally { setMfaBusy(false); }
+  };
+  const confirmMfaEnroll = async () => {
+    setMfaError("");
+    if (mfaCode.trim().length !== 6) { setMfaError("יש להזין קוד בן 6 ספרות"); return; }
+    setMfaBusy(true);
+    try {
+      await api.mfaChallengeAndVerify(mfaEnrollData.id, mfaCode.trim());
+      setMfaEnrollData(null); setMfaCode("");
+      await loadMfaFactors();
+    } catch (e) { setMfaError("קוד שגוי - ודאו שהזנתם את הקוד הנוכחי מהאפליקציה ונסו שוב."); } finally { setMfaBusy(false); }
+  };
+  const cancelMfaEnroll = () => { setMfaEnrollData(null); setMfaCode(""); setMfaError(""); };
+  const disableMfa = async (factorId) => {
+    if (!confirm("לבטל את האימות הדו-שלבי? החשבון יהיה מוגן רק בסיסמה.")) return;
+    setMfaBusy(true);
+    try { await api.mfaUnenroll(factorId); await loadMfaFactors(); }
+    catch (e) { alert(e.message); } finally { setMfaBusy(false); }
+  };
+
   const saveCompany = async () => {
     setCompanyBusy(true);
     try { await api.updateCompanySettings(company); await refresh(); setCompanySaved(true); setTimeout(() => setCompanySaved(false), 2500); }
@@ -4789,6 +4918,64 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm p-5">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><KeyRound size={18} /> אימות דו-שלבי (2FA)</h3>
+        <p className="text-slate-500 text-sm mb-4">שכבת הגנה נוספת מעבר לסיסמה, דרך אפליקציית Authenticator (Google Authenticator, Microsoft Authenticator וכדומה).</p>
+
+        {mfaFactors === null && <div className="text-sm text-slate-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> בודק סטטוס...</div>}
+
+        {mfaFactors && mfaFactors.length > 0 && !mfaEnrollData && (
+          <div>
+            <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
+              <CircleCheck size={16} /> אימות דו-שלבי פעיל על החשבון שלכם
+            </div>
+            <button onClick={() => disableMfa(mfaFactors[0].id)} disabled={mfaBusy} className={btnGhost + " flex items-center gap-2 text-rose-600"}>
+              {mfaBusy && <Loader2 size={16} className="animate-spin" />} ביטול אימות דו-שלבי
+            </button>
+          </div>
+        )}
+
+        {mfaFactors && mfaFactors.length === 0 && !mfaEnrollData && (
+          <div>
+            <div className="flex items-center gap-2 bg-amber-50 text-amber-700 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
+              <TriangleAlert size={16} /> אימות דו-שלבי אינו מופעל
+            </div>
+            <button onClick={startMfaEnroll} disabled={mfaBusy} className={btnPrimary + " flex items-center gap-2"}>
+              {mfaBusy && <Loader2 size={16} className="animate-spin" />} הפעלת אימות דו-שלבי
+            </button>
+          </div>
+        )}
+
+        {mfaEnrollData && (
+          <div>
+            <p className="text-sm text-slate-600 mb-3">1. סרקו את הקוד עם אפליקציית ה-Authenticator, או הזינו את המפתח הסודי ידנית:</p>
+            <div className="flex justify-center bg-gray-50 rounded-xl p-4 mb-3">
+              <img src={mfaEnrollData.totp.qr_code} alt="QR Code" className="w-44 h-44" />
+            </div>
+            <div className="bg-gray-50 rounded-xl px-3 py-2 mb-4 text-center">
+              <div className="text-xs text-slate-400 mb-1">מפתח סודי להזנה ידנית</div>
+              <div className="font-mono text-sm text-slate-700 break-all">{mfaEnrollData.totp.secret}</div>
+            </div>
+            <p className="text-sm text-slate-600 mb-2">2. הזינו את הקוד בן 6 הספרות שמופיע כרגע באפליקציה:</p>
+            <Field label="קוד אימות">
+              <input
+                type="text" inputMode="numeric" maxLength={6}
+                className={inputCls + " text-center text-2xl tracking-[0.5em] font-bold"}
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              />
+            </Field>
+            {mfaError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{mfaError}</div>}
+            <div className="flex gap-2">
+              <button onClick={confirmMfaEnroll} disabled={mfaBusy || mfaCode.length !== 6} className={btnPrimary + " flex-1 flex items-center justify-center gap-2"}>
+                {mfaBusy && <Loader2 size={16} className="animate-spin" />} אימות והפעלה
+              </button>
+              <button onClick={cancelMfaEnroll} className={btnGhost}>ביטול</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Database size={18} /> חיבור מסד נתונים</h3>
         <div className="flex items-center gap-2 mt-2 mb-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
@@ -4836,6 +5023,7 @@ export default function App() {
   const [quoteBuilderFor, setQuoteBuilderFor] = useState(null); // { customerId, leadId }
   const [saleInitialCustomerId, setSaleInitialCustomerId] = useState(null);
   const [printQuoteId, setPrintQuoteId] = useState(null);
+  const [mfaPendingFactorId, setMfaPendingFactorId] = useState(null); // אם קיים, יש session אמיתי אבל הוא עדיין ב-aal1 וצריך קוד 2FA
 
   const loadEverything = useCallback(async (userId) => {
     try {
@@ -4859,11 +5047,20 @@ export default function App() {
 
   // מסך התחברות אמיתי: בודקים אם כבר יש session פעיל (למשל רענון עמוד),
   // אחרת מציגים את LoginScreen ומחכים שהמשתמש יזין דוא"ל וסיסמה בעצמו.
+  // אם יש session קיים שעדיין לא עבר את שלב ה-2FA (aal1 בלבד, לא aal2) -
+  // מציגים ישירות את שלב הזנת הקוד, בלי לבקש דוא"ל+סיסמה שוב.
   useEffect(() => {
     (async () => {
       try {
         const existing = await api.getSession();
-        setSession(existing || null);
+        if (!existing) { setSession(null); return; }
+        const aal = await api.mfaGetAssuranceLevel();
+        if (aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
+          const factors = await api.mfaListFactors();
+          const totpFactor = factors.totp?.[0];
+          if (totpFactor) { setMfaPendingFactorId(totpFactor.id); setSession(existing); return; }
+        }
+        setSession(existing);
       } catch (e) {
         setSession(null);
       }
@@ -4927,6 +5124,19 @@ export default function App() {
   }
   if (!session) {
     return <LoginScreen onSuccess={(newSession) => setSession(newSession)} logoUrl={publicLogoUrl} />;
+  }
+  if (mfaPendingFactorId) {
+    return (
+      <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <MfaCodeStep
+            factorId={mfaPendingFactorId}
+            onVerified={() => setMfaPendingFactorId(null)}
+            onCancel={() => { setMfaPendingFactorId(null); api.signOut(); setSession(null); }}
+          />
+        </div>
+      </div>
+    );
   }
   if (!data || !profile) {
     return (
