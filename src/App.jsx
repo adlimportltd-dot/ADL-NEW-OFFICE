@@ -443,11 +443,44 @@ async function deleteExpensePayment(id) {
 }
 
 // ---------- סריקת חשבונית חכמה (AI OCR) ----------
+// ה-API של קלוד מקבל ל-image רק image/jpeg, image/png, image/gif, image/webp -
+// PDF חייב להיות מומר לתמונה אמיתית (rendering ל-canvas) לפני שהוא נשלח,
+// אחרת מתקבלת שגיאת תקינות מה-API. כל עמוד ב-PDF הופך לקובץ תמונה נפרד,
+// ומצטרף לרשימת העמודים הצבורה בדיוק כמו תמונה שצולמה/הועלתה ישירות.
+async function convertPdfFileToImages(file) {
+  const pdfjsLib = await import("https://esm.sh/pdfjs-dist@4.0.379/build/pdf.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.mjs";
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const baseName = file.name ? file.name.replace(/\.pdf$/i, "") : "invoice";
+  const images = [];
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 2 }); // רזולוציה גבוהה מספיק לזיהוי טקסט
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    images.push(new File([blob], `${baseName}-עמוד-${pageNum}.png`, { type: "image/png" }));
+  }
+  return images;
+}
+
 // שולח את התמונה ל-Edge Function פרטי (לא ל-API חיצוני ישירות מהדפדפן!) -
 // המפתח הסודי של ה-AI חי אך ורק בצד השרת, לעולם לא בקוד הלקוח.
 async function analyzeInvoiceImage(files) {
-  const fileArray = Array.from(files);
-  if (fileArray.length === 0) throw new Error("לא נבחרו תמונות");
+  const rawFiles = Array.from(files);
+  if (rawFiles.length === 0) throw new Error("לא נבחרו תמונות");
+  // הגנה כפולה: גם אם איכשהו הגיע לכאן PDF שלא עבר המרה קודם (למשל קריאה
+  // ישירה לפונקציה הזו ממקום אחר בעתיד), הוא מומר כאן - ה-API לעולם לא
+  // מקבל PDF, רק image/jpeg|png|gif|webp כפי שהוא דורש.
+  const fileArray = [];
+  for (const f of rawFiles) {
+    if (f.type === "application/pdf") fileArray.push(...(await convertPdfFileToImages(f)));
+    else fileArray.push(f);
+  }
   const toBase64 = (f) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result.split(",")[1]);
@@ -3763,6 +3796,7 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
   const [scanNotice, setScanNotice] = useState("");
   const [stagedFiles, setStagedFiles] = useState([]);
   const [stagedPreviews, setStagedPreviews] = useState([]); // object URLs, אינדקס מקביל ל-stagedFiles
+  const [pdfConverting, setPdfConverting] = useState(false);
 
   const vatRate = data.companySettings.vatRate ?? 18;
   const computed = computeVat(form.vatMode, form.amount, vatRate);
@@ -3784,9 +3818,30 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
   // מצלמת נייד תופסת תמונה אחת בלבד לכל הפעלה - אז מצטברים כמה עמודים ברצף
   // בזה אחר זה, עם תצוגה מקדימה לכל אחד, ורק בלחיצה על "סיים ונתח" כל התמונות
   // נשלחות יחד כמערך אחד לפונקציית ה-AI, כחשבונית רב-עמודית אחת.
-  const addStagedFiles = (fileList) => {
+  // קובץ PDF מומר כאן לתמונות אמיתיות (עמוד אחד = תמונה אחת) - ה-API לעולם
+  // לא מקבל PDF ישירות, כי הוא תומך רק ב-jpeg/png/gif/webp.
+  const addStagedFiles = async (fileList) => {
     const files = Array.from(fileList || []);
-    if (files.length > 0) setStagedFiles((prev) => [...prev, ...files]);
+    if (files.length === 0) return;
+    const expanded = [];
+    const hasPdf = files.some((f) => f.type === "application/pdf");
+    if (hasPdf) setPdfConverting(true);
+    try {
+      for (const f of files) {
+        if (f.type === "application/pdf") {
+          try {
+            expanded.push(...(await convertPdfFileToImages(f)));
+          } catch (e) {
+            setScanError('המרת קובץ ה-PDF לתמונה נכשלה - נסו לצלם או להעלות תמונה (JPG/PNG) במקום.');
+          }
+        } else {
+          expanded.push(f);
+        }
+      }
+    } finally {
+      if (hasPdf) setPdfConverting(false);
+    }
+    if (expanded.length > 0) setStagedFiles((prev) => [...prev, ...expanded]);
   };
   const removeStagedFile = (idx) => setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
 
@@ -3867,13 +3922,14 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
           <div className="flex gap-2 mb-3">
             <label className={btnGhost + " flex-1 text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
               <Upload size={16} /> צילום עמוד
-              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={scanBusy} onChange={(e) => { addStagedFiles(e.target.files); e.target.value = ""; }} />
+              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={scanBusy || pdfConverting} onChange={(e) => { addStagedFiles(e.target.files); e.target.value = ""; }} />
             </label>
             <label className={btnGhost + " flex-1 text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
               <Upload size={16} /> העלאת קבצים
-              <input type="file" accept="image/*,application/pdf" multiple className="hidden" disabled={scanBusy} onChange={(e) => { addStagedFiles(e.target.files); e.target.value = ""; }} />
+              <input type="file" accept="image/*,application/pdf" multiple className="hidden" disabled={scanBusy || pdfConverting} onChange={(e) => { addStagedFiles(e.target.files); e.target.value = ""; }} />
             </label>
           </div>
+          {pdfConverting && <div className="text-xs text-violet-600 mb-3 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> ממיר PDF לתמונות...</div>}
 
           {stagedFiles.length > 0 && (
             <div className="mb-3">
@@ -3902,7 +3958,7 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
               <button
                 type="button"
                 onClick={() => handleScanFiles(stagedFiles)}
-                disabled={scanBusy}
+                disabled={scanBusy || pdfConverting}
                 className={btnPrimary + " w-full flex items-center justify-center gap-2 !py-2.5"}
               >
                 {scanBusy ? <Loader2 size={16} className="animate-spin" /> : <Calculator size={16} />}
