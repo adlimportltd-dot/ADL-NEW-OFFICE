@@ -884,7 +884,7 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
 }
 
 // ==================== Dashboard ====================
-function Dashboard({ data, onExport }) {
+function Dashboard({ data, onExport, isAdmin }) {
   const { items, locations, stock } = data;
   const warehouse = locations.find((l) => l.type === "warehouse");
   const vehicles = locations.filter((l) => l.type === "vehicle");
@@ -938,7 +938,7 @@ function Dashboard({ data, onExport }) {
 
   return (
     <div className="space-y-5">
-      {cashflowAlerts.length > 0 && (
+      {isAdmin && cashflowAlerts.length > 0 && (
         <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b flex items-center gap-2"><Database size={18} className="text-amber-600" /><h3 className="font-bold text-slate-800">מרכז התראות תזרים</h3></div>
           <div className="divide-y">
@@ -4958,7 +4958,7 @@ export default function App() {
               />
             ) : (
               <>
-                {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} />}
+                {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} />}
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
