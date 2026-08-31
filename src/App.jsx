@@ -977,19 +977,22 @@ function Dashboard({ data, onExport, isAdmin }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 sm:gap-4 sm:grid-cols-4">
         {[
-          { label: "סה\"כ יחידות במלאי", value: totalUnits, icon: Package, iconCls: "bg-sky-50 text-sky-600" },
-          { label: "פריטים בקטלוג", value: items.length, icon: Database, iconCls: "bg-violet-50 text-violet-600" },
-          { label: "מיקומים פעילים", value: locations.length, icon: Warehouse, iconCls: "bg-amber-50 text-amber-600" },
-          { label: "מתחת לסף", value: lowStock.length, icon: TriangleAlert, iconCls: "bg-rose-50 text-rose-600", valueCls: "text-rose-600" },
+          { label: "סה\"כ יחידות במלאי", value: totalUnits, icon: Package, iconCls: "bg-sky-50/80 text-sky-600" },
+          { label: "פריטים בקטלוג", value: items.length, icon: Database, iconCls: "bg-violet-50/80 text-violet-600" },
+          { label: "מיקומים פעילים", value: locations.length, icon: Warehouse, iconCls: "bg-amber-50/80 text-amber-600" },
+          { label: "מתחת לסף", value: lowStock.length, icon: TriangleAlert, iconCls: "bg-rose-50/80 text-rose-600", valueCls: "text-rose-600" },
         ].map((kpi, i) => {
           const Icon = kpi.icon;
           return (
-            <div key={i} className="bg-white rounded-2xl border shadow-sm p-4 sm:p-5 min-w-0">
-              <div className={`inline-flex p-2 rounded-xl mb-2.5 ${kpi.iconCls}`}><Icon size={18} /></div>
-              <div className={`text-xl sm:text-2xl font-bold leading-tight ${kpi.valueCls || "text-slate-800"}`}>{kpi.value}</div>
-              <div className="text-slate-500 text-xs sm:text-sm mt-0.5 leading-snug">{kpi.label}</div>
+            <div
+              key={i}
+              className="rounded-[1.25rem] border border-white/60 bg-white/70 backdrop-blur-xl p-4 sm:p-5 min-w-0 shadow-[0_8px_30px_rgba(15,23,42,0.06)]"
+            >
+              <div className={`inline-flex p-2.5 rounded-2xl mb-3 ${kpi.iconCls}`}><Icon size={18} /></div>
+              <div className={`text-xl sm:text-2xl font-bold leading-tight tracking-tight ${kpi.valueCls || "text-slate-800"}`}>{kpi.value}</div>
+              <div className="text-slate-500 text-xs sm:text-sm mt-1 leading-snug font-medium">{kpi.label}</div>
             </div>
           );
         })}
@@ -4889,8 +4892,9 @@ export default function App() {
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (
-    <div dir="rtl" lang="he" className="min-h-screen bg-gray-50 text-slate-800" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
+    <div dir="rtl" lang="he" className="min-h-screen bg-gray-50 text-slate-800" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         .sidebar-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
         .sidebar-scroll:hover { scrollbar-color: rgba(255,255,255,0.25) transparent; }
         .sidebar-scroll::-webkit-scrollbar { width: 5px; }
@@ -4928,12 +4932,15 @@ export default function App() {
         </aside>
 
         <main className="flex-1 min-w-0">
-          <div className="md:hidden flex items-center justify-between bg-slate-900 text-white px-4 py-3 sticky top-0 z-30">
-            <div className="flex items-center gap-2">
-              <LogoBadge logoUrl={data.logoUrl} size={32} />
-              <span className="font-bold">אדל אימפורט - ניהול מלאי</span>
+          <div className="md:hidden flex flex-row-reverse items-center justify-between bg-gradient-to-l from-slate-900 to-slate-800 text-white px-4 py-3.5 sticky top-0 z-30 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <LogoBadge logoUrl={data.logoUrl} size={34} />
+              <div className="leading-tight">
+                <div className="font-bold text-[15px] tracking-tight">אדל אימפורט</div>
+                <div className="text-[11px] text-slate-400 font-medium">ניהול מלאי</div>
+              </div>
             </div>
-            <button onClick={() => setMobileMenuOpen(true)} className="p-1.5"><Menu size={22} /></button>
+            <button onClick={() => setMobileMenuOpen(true)} className="p-1.5 rounded-lg hover:bg-white/10 transition"><Menu size={22} /></button>
           </div>
 
           {mobileMenuOpen && (
@@ -4956,7 +4963,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="p-4 sm:p-6 pb-44 md:pb-6 max-w-6xl mx-auto">
+          <div className="p-4 sm:p-6 pb-48 md:pb-6 max-w-6xl mx-auto">
             {dataError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-4">{dataError}</div>}
             {customerFileId ? (
               <CustomerFile
@@ -4992,11 +4999,19 @@ export default function App() {
 
           {tab !== "transaction" && !customerFileId && isAdmin && (
             <div
-              className="md:hidden fixed inset-x-0 z-20 px-4 flex gap-3 pointer-events-none"
-              style={{ bottom: "calc(4rem + env(safe-area-inset-bottom) + 0.75rem)" }}
+              className="md:hidden fixed inset-x-0 z-20 bg-white/90 backdrop-blur-xl border-t border-gray-100"
+              style={{ bottom: "calc(4rem + env(safe-area-inset-bottom))", height: "4rem" }}
             >
-              <button onClick={() => runQuickAction("transfer")} className="pointer-events-auto flex-1 bg-sky-600 text-white font-bold rounded-2xl py-3.5 shadow-lg flex items-center justify-center gap-2 active:scale-95 transition"><ArrowLeftRight size={20} /> העברה מהירה</button>
-              <button onClick={() => runQuickAction("install")} className="pointer-events-auto flex-1 bg-amber-500 text-white font-bold rounded-2xl py-3.5 shadow-lg flex items-center justify-center gap-2 active:scale-95 transition"><Truck size={20} /> התקנה מהירה</button>
+              <div className="flex h-full divide-x divide-x-reverse divide-gray-100">
+                <button onClick={() => runQuickAction("transfer")} className="flex-1 flex items-center justify-center gap-2.5 active:bg-gray-50 transition">
+                  <div className="p-2 rounded-xl bg-sky-50 text-sky-600"><ArrowLeftRight size={17} /></div>
+                  <span className="text-sm font-semibold text-slate-700">העברה מהירה</span>
+                </button>
+                <button onClick={() => runQuickAction("install")} className="flex-1 flex items-center justify-center gap-2.5 active:bg-gray-50 transition">
+                  <div className="p-2 rounded-xl bg-amber-50 text-amber-600"><Truck size={17} /></div>
+                  <span className="text-sm font-semibold text-slate-700">התקנה מהירה</span>
+                </button>
+              </div>
             </div>
           )}
 
