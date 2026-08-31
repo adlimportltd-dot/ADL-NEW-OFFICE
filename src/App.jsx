@@ -955,12 +955,14 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
     setError(""); setBusy(true);
     try {
       const result = await api.signIn(email.trim(), password);
-      // בודקים אם החשבון הזה דורש קוד 2FA לפני מתן גישה מלאה (aal1 -> aal2).
-      const aal = await api.mfaGetAssuranceLevel();
-      if (aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
-        const factors = await api.mfaListFactors();
-        const totpFactor = factors.totp?.[0];
-        if (totpFactor) { setMfaFactorId(totpFactor.id); return; }
+      // בודקים ישירות אם למשתמש יש גורם 2FA מאומת - זו הבדיקה האמינה
+      // (לא מסתמכים על nextLevel שיכול להתעדכן באיטיות אחרי כניסה טרייה).
+      // אם יש גורם כזה, והחיבור הנוכחי עדיין לא הגיע ל-aal2, מבקשים קוד.
+      const factors = await api.mfaListFactors();
+      const totpFactor = factors.totp?.[0];
+      if (totpFactor) {
+        const aal = await api.mfaGetAssuranceLevel();
+        if (aal.currentLevel !== "aal2") { setMfaFactorId(totpFactor.id); return; }
       }
       // מעבירים את ה-session ישירות ל-App במקום להסתמך רק על ה-listener הגלובלי -
       // כך המעבר ללוח הבקרה קורה מיד ובאופן ודאי, גם אם ה-listener מתעכב מסיבה כלשהי.
@@ -4771,6 +4773,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
   const [mfaCode, setMfaCode] = useState("");
   const [mfaError, setMfaError] = useState("");
   const [mfaBusy, setMfaBusy] = useState(false);
+  const [mfaJustEnabled, setMfaJustEnabled] = useState(false);
 
   const loadMfaFactors = async () => {
     try { const result = await api.mfaListFactors(); setMfaFactors(result.totp || []); }
@@ -4790,8 +4793,19 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
     try {
       await api.mfaChallengeAndVerify(mfaEnrollData.id, mfaCode.trim());
       setMfaEnrollData(null); setMfaCode("");
-      await loadMfaFactors();
-    } catch (e) { setMfaError("קוד שגוי - ודאו שהזנתם את הקוד הנוכחי מהאפליקציה ונסו שוב."); } finally { setMfaBusy(false); }
+      // מוודאים בפועל שהגורם באמת נשמר כ"מאומת" אחרי ה-verify, ולא רק
+      // מסתמכים על כך שהקריאה לא זרקה שגיאה - זה בדיוק המקום שבו הרשמה
+      // עלולה "להצליח" חיצונית בלי שבאמת נוצר גורם מאומת לשימוש בכניסה.
+      const result = await api.mfaListFactors();
+      if ((result.totp || []).length > 0) {
+        setMfaFactors(result.totp);
+        setMfaJustEnabled(true);
+        setTimeout(() => setMfaJustEnabled(false), 5000);
+      } else {
+        setMfaError('האימות עבר אך הגורם לא מופיע כמאומת. נסו להפעיל מחדש את התהליך ("הפעלת אימות דו-שלבי") מהתחלה.');
+        await loadMfaFactors();
+      }
+    } catch (e) { setMfaError(e.message || "קוד שגוי - ודאו שהזנתם את הקוד הנוכחי מהאפליקציה ונסו שוב."); } finally { setMfaBusy(false); }
   };
   const cancelMfaEnroll = () => { setMfaEnrollData(null); setMfaCode(""); setMfaError(""); };
   const disableMfa = async (factorId) => {
@@ -4920,6 +4934,12 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
       <div className="bg-white rounded-2xl border shadow-sm p-5">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><KeyRound size={18} /> אימות דו-שלבי (2FA)</h3>
         <p className="text-slate-500 text-sm mb-4">שכבת הגנה נוספת מעבר לסיסמה, דרך אפליקציית Authenticator (Google Authenticator, Microsoft Authenticator וכדומה).</p>
+
+        {mfaJustEnabled && (
+          <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
+            <CircleCheck size={16} /> אומת ונשמר בהצלחה! מעכשיו תתבקשו להזין קוד גם בכניסה הבאה.
+          </div>
+        )}
 
         {mfaFactors === null && <div className="text-sm text-slate-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> בודק סטטוס...</div>}
 
@@ -5054,11 +5074,13 @@ export default function App() {
       try {
         const existing = await api.getSession();
         if (!existing) { setSession(null); return; }
-        const aal = await api.mfaGetAssuranceLevel();
-        if (aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
-          const factors = await api.mfaListFactors();
-          const totpFactor = factors.totp?.[0];
-          if (totpFactor) { setMfaPendingFactorId(totpFactor.id); setSession(existing); return; }
+        // אותה בדיקה אמינה: קודם בודקים אם יש בכלל גורם 2FA מאומת, ורק אז
+        // בודקים אם ה-session הנוכחי כבר עלה ל-aal2 או שהוא עדיין ב-aal1.
+        const factors = await api.mfaListFactors();
+        const totpFactor = factors.totp?.[0];
+        if (totpFactor) {
+          const aal = await api.mfaGetAssuranceLevel();
+          if (aal.currentLevel !== "aal2") { setMfaPendingFactorId(totpFactor.id); setSession(existing); return; }
         }
         setSession(existing);
       } catch (e) {
