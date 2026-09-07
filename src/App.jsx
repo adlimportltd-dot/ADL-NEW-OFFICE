@@ -503,6 +503,10 @@ async function voidInvoice(id) {
   const { error } = await supabase.from("customer_invoices").update({ status: "void" }).eq("id", id);
   if (error) throw error;
 }
+async function updateInvoiceNotes(id, notes) {
+  const { error } = await supabase.from("customer_invoices").update({ notes: notes || null }).eq("id", id);
+  if (error) throw error;
+}
 async function addInvoicePayment(invoiceId, amount, paidDate, method, note) {
   const { error } = await supabase.from("customer_invoice_payments").insert({
     invoice_id: invoiceId, amount, paid_date: paidDate, method: method || null, note: note || null,
@@ -686,7 +690,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, addInvoicePayment, deleteInvoicePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -5072,6 +5076,48 @@ function NewInvoiceModal({ data, refresh, onClose }) {
   );
 }
 
+// תא הערות ניתן לעריכה בשורת החוב - קליק פותח עריכה, Enter/יציאה מהשדה שומר.
+// כך מעקב הגבייה (מי דיברתם איתו, מתי הבטיח לשלם וכו') נראה ישירות בטבלה,
+// בלי לפתוח את חלון התשלומים בשביל כל עדכון קטן.
+function InvoiceNoteCell({ data, refresh, invoice }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(invoice.notes || "");
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    if (draft === (invoice.notes || "")) { setEditing(false); return; }
+    setBusy(true);
+    try { await api.updateInvoiceNotes(invoice.id, draft.trim()); await refresh(); }
+    catch (e) { alert(e.message); }
+    finally { setBusy(false); setEditing(false); }
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        className="w-full border border-amber-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400"
+        value={draft}
+        disabled={busy}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(invoice.notes || ""); setEditing(false); } }}
+        onClick={(e) => e.stopPropagation()}
+        placeholder="הוספת הערה..."
+      />
+    );
+  }
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); setDraft(invoice.notes || ""); setEditing(true); }}
+      className={`text-right w-full px-2 py-1 rounded-lg hover:bg-amber-50 transition ${invoice.notes ? "text-slate-700" : "text-slate-300 italic"}`}
+      title="לחיצה לעריכת הערה"
+    >
+      {invoice.notes || "הוספת הערה..."}
+    </button>
+  );
+}
+
 function ReceivablesScreen({ data, refresh }) {
   const [openNewInvoice, setOpenNewInvoice] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
@@ -5147,7 +5193,8 @@ function ReceivablesScreen({ data, refresh }) {
                           <thead>
                             <tr className="text-slate-500">
                               <th className="text-right font-medium py-1">חשבונית</th><th className="text-right font-medium py-1">הופקה</th>
-                              <th className="text-right font-medium py-1">מועד פירעון</th><th className="text-right font-medium py-1">יתרה</th><th></th>
+                              <th className="text-right font-medium py-1">מועד פירעון</th><th className="text-right font-medium py-1">יתרה</th>
+                              <th className="text-right font-medium py-1">הערות</th><th></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -5157,8 +5204,9 @@ function ReceivablesScreen({ data, refresh }) {
                                 <td className="py-2 text-slate-500">{new Date(inv.issueDate).toLocaleDateString("he-IL")}</td>
                                 <td className="py-2 text-slate-500">{new Date(inv.dueDate).toLocaleDateString("he-IL")}</td>
                                 <td className="py-2 font-bold">₪{inv.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                <td className="py-2 min-w-[160px]"><InvoiceNoteCell data={data} refresh={refresh} invoice={inv} /></td>
                                 <td className="py-2 text-left">
-                                  <button onClick={(e) => { e.stopPropagation(); setSelectedInvoice(inv); }} className="text-amber-600 hover:underline font-medium flex items-center gap-1">
+                                  <button onClick={(e) => { e.stopPropagation(); setSelectedInvoice(inv); }} className="text-amber-600 hover:underline font-medium flex items-center gap-1 whitespace-nowrap">
                                     <Banknote size={14} /> רישום תשלום
                                   </button>
                                 </td>
