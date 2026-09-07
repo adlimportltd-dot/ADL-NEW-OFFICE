@@ -24,6 +24,25 @@ jobs:
       - name: Set backup timestamp
         run: echo "STAMP=$(date -u +%Y-%m-%d_%H-%M-%SZ)" >> "$GITHUB_ENV"
 
+      # GitHub-hosted runners לא יודעים לנתב ל-IPv6, וה-hostname של החיבור
+      # הישיר של Supabase (db.<ref>.supabase.co) הוא IPv6-only ברוב הפרויקטים
+      # כיום - pg_dump נכשל שם עם "Network is unreachable". חובה להשתמש
+      # ב-Session Pooler (host בסגנון *.pooler.supabase.com, פורט 5432).
+      # לא ב-Transaction Pooler (פורט 6543) - הוא לא תומך ב-prepared statements
+      # ש-pg_dump צריך, והגיבוי עלול "להצליח" בזמן שהוא בפועל חלקי/פגום.
+      - name: Validate connection string points at the Session pooler
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [[ "$SUPABASE_DB_URL" == *"db."*".supabase.co"* ]]; then
+            echo "::error::SUPABASE_DB_URL points at the direct connection host (db.<ref>.supabase.co). GitHub-hosted runners have no IPv6 route to it, so pg_dump will fail with 'Network is unreachable'. Fix: Supabase Dashboard -> Project Settings -> Database -> Connection string -> Session pooler, and update this secret with that URI (port 5432, host *.pooler.supabase.com)."
+            exit 1
+          fi
+          if [[ "$SUPABASE_DB_URL" == *":6543"* ]]; then
+            echo "::error::SUPABASE_DB_URL uses the Transaction pooler (port 6543). pg_dump needs the Session pooler (port 5432) - transaction-mode pooling doesn't support the session-level features pg_dump relies on, so the dump can be silently incomplete. Update the secret to the Session pooler URI instead."
+            exit 1
+          fi
+
       - name: Dump database (schema + data)
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
