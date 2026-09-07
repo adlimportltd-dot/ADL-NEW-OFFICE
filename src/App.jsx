@@ -5,6 +5,7 @@ import {
   CircleCheck, CircleX, Trash2, ChevronLeft, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
+  Wallet, Banknote, Ban,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
@@ -64,6 +65,13 @@ const mapExpense = (r) => ({
   paymentStatus: r.payment_status, paymentMethod: r.payment_method || "", notes: r.notes || "", date: r.created_at,
 });
 const mapExpensePayment = (r) => ({ id: r.id, expenseId: r.expense_id, amount: Number(r.amount), paidDate: r.paid_date, method: r.method || "", note: r.note || "" });
+const mapInvoice = (r) => ({
+  id: r.id, invoiceNumber: r.invoice_number, customerId: r.customer_id,
+  issueDate: r.issue_date, dueDate: r.due_date, totalAmount: Number(r.total_amount),
+  status: r.status, notes: r.notes || "",
+  lines: (r.customer_invoice_lines || []).map((l) => ({ itemId: l.item_id, description: l.description || "", qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
+});
+const mapInvoicePayment = (r) => ({ id: r.id, invoiceId: r.invoice_id, amount: Number(r.amount), paidDate: r.paid_date, method: r.method || "", note: r.note || "" });
 
 // ---------- Auth ----------
 async function signIn(email, password) {
@@ -139,7 +147,7 @@ async function fetchMyProfile(userId) {
 
 // ---------- Fetch everything needed for the app ----------
 async function fetchAllData() {
-  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, expensesRes, expensePaymentsRes, settingsRes] = await Promise.all([
+  const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, expensesRes, expensePaymentsRes, invoicesRes, invoicePaymentsRes, settingsRes] = await Promise.all([
     supabase.from("items").select("*").order("category").order("name"),
     supabase.from("locations").select("*").order("type"),
     supabase.from("customers").select("*").order("name"),
@@ -154,10 +162,12 @@ async function fetchAllData() {
     supabase.from("quotes").select("*, quote_lines(*)").order("created_at", { ascending: false }),
     supabase.from("expenses").select("*").order("expense_date", { ascending: false }),
     supabase.from("expense_payments").select("*").order("paid_date", { ascending: false }),
+    supabase.from("customer_invoices").select("*, customer_invoice_lines(*)").order("due_date", { ascending: true }),
+    supabase.from("customer_invoice_payments").select("*").order("paid_date", { ascending: false }),
     supabase.from("app_settings").select("*"),
   ]);
 
-  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, expensesRes, expensePaymentsRes, settingsRes]) {
+  for (const r of [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, expensesRes, expensePaymentsRes, invoicesRes, invoicePaymentsRes, settingsRes]) {
     if (r.error) throw r.error;
   }
 
@@ -188,6 +198,8 @@ async function fetchAllData() {
     quotes: (quotesRes.data || []).map(mapQuote),
     expenses: (expensesRes.data || []).map(mapExpense),
     expensePayments: (expensePaymentsRes.data || []).map(mapExpensePayment),
+    customerInvoices: (invoicesRes.data || []).map(mapInvoice),
+    invoicePayments: (invoicePaymentsRes.data || []).map(mapInvoicePayment),
     logoUrl: settings.logo_url || null,
     companySettings,
   };
@@ -472,6 +484,43 @@ async function deleteExpensePayment(id) {
   if (error) throw error;
 }
 
+// ---------- Customer invoices (חובות לקוחות / AR) ----------
+async function createCustomerInvoice(customerId, lines, extra = {}) {
+  const invoiceNumber = extra.invoiceNumber || `ADL-INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 900 + 100)}`;
+  const totalAmount = lines.reduce((s, l) => s + Number(l.qty) * Number(l.unitPrice), 0);
+  const { data: invoice, error } = await supabase
+    .from("customer_invoices")
+    .insert({
+      invoice_number: invoiceNumber, customer_id: customerId,
+      issue_date: extra.issueDate || new Date().toISOString().slice(0, 10),
+      due_date: extra.dueDate, total_amount: totalAmount, notes: extra.notes || null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  if (lines.length > 0) {
+    const { error: linesError } = await supabase.from("customer_invoice_lines").insert(
+      lines.map((l) => ({ invoice_id: invoice.id, item_id: l.itemId || null, description: l.description || null, qty: l.qty, unit_price: l.unitPrice }))
+    );
+    if (linesError) throw linesError;
+  }
+  return invoice.id;
+}
+async function voidInvoice(id) {
+  const { error } = await supabase.from("customer_invoices").update({ status: "void" }).eq("id", id);
+  if (error) throw error;
+}
+async function addInvoicePayment(invoiceId, amount, paidDate, method, note) {
+  const { error } = await supabase.from("customer_invoice_payments").insert({
+    invoice_id: invoiceId, amount, paid_date: paidDate, method: method || null, note: note || null,
+  });
+  if (error) throw error;
+}
+async function deleteInvoicePayment(id) {
+  const { error } = await supabase.from("customer_invoice_payments").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ---------- סריקת חשבונית חכמה (AI OCR) ----------
 // ה-API של קלוד מקבל ל-image רק image/jpeg, image/png, image/gif, image/webp -
 // PDF חייב להיות מומר לתמונה אמיתית (rendering ל-canvas) לפני שהוא נשלח,
@@ -644,7 +693,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, addInvoicePayment, deleteInvoicePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -656,6 +705,9 @@ const PACKAGE_SIZES = ["25 ליטר", "5 ליטר", "1 ליטר", "0.5 ליטר"
 const LARGE_PACKAGES = ["25 ליטר"];
 const SMALL_PACKAGES = ["5 ליטר", "1 ליטר", "0.5 ליטר", '250 מ"ל'];
 const PACKAGE_SIZE_VOLUMES = { "25 ליטר": 25, "5 ליטר": 5, "1 ליטר": 1, "0.5 ליטר": 0.5, '250 מ"ל': 0.25 };
+// סדר קבוע לגדלי אריזה בכל מקום שמציג אותם יחד (25 -> 5 -> 1 -> 0.5 -> 0.25) - במקום
+// הסדר האלפביתי המקרי שיוצא מ-data.items (ממוין לפי שם הפריט, לא לפי גודל האריזה)
+const sortBySizeDesc = (a, b) => (PACKAGE_SIZE_VOLUMES[b.unit] ?? -1) - (PACKAGE_SIZE_VOLUMES[a.unit] ?? -1);
 
 // זיהוי גודל אריזה עמיד - לא תלוי בהתאמת מחרוזת מדויקת. תומך גם בערכים
 // שהוזנו ישירות ב-DB או בניסוח שונה מהרשימה הסגורה (למשל "25 ק"ג" במקום "25 ליטר").
@@ -784,6 +836,32 @@ function validateVatBalance(amountExclVat, vatAmount, amountInclVat) {
 const poTotalAmount = (po) => po.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
 const poPaidAmount = (data, poId) => (data.poPayments || []).filter((p) => p.poId === poId).reduce((s, p) => s + p.amount, 0);
 const poBalance = (data, po) => poTotalAmount(po) - poPaidAmount(data, po.id);
+
+// ---------- חובות לקוחות / גיול חובות (AR aging) ----------
+const invoicePaidAmount = (data, invoiceId) => (data.invoicePayments || []).filter((p) => p.invoiceId === invoiceId).reduce((s, p) => s + p.amount, 0);
+const invoiceBalance = (data, invoice) => invoice.totalAmount - invoicePaidAmount(data, invoice.id);
+// חשבונית "פתוחה" לצורך גיול חובות: לא בוטלה, ויש לה יתרה ממשית לגבייה
+// (סף אגורה בודדת מונע רעש עיגול מלוות שנרשמו ידנית)
+const isOpenInvoice = (data, invoice) => invoice.status !== "void" && invoiceBalance(data, invoice) > 0.01;
+const AGING_BUCKETS = [
+  { key: "current", label: "שוטף (טרם הגיע מועד)", tone: "emerald" },
+  { key: "b1_30", label: "1-30 יום באיחור", tone: "amber" },
+  { key: "b31_60", label: "31-60 יום באיחור", tone: "amber" },
+  { key: "b61_90", label: "61-90 יום באיחור", tone: "rose" },
+  { key: "b90_plus", label: "90+ יום באיחור", tone: "rose" },
+];
+// שמות מחלקות מלאים ומפורשים (לא בנויים דינמית) - Tailwind סורק את קובץ ה-JS
+// כטקסט חופשי בזמן build ומרכיב מחדש רק את המחלקות שהוא רואה שם כמחרוזת
+// שלמה; `text-${tone}-600` לא היה נכלל ב-CSS הסופי ונשאר בלי צבע בפועל.
+const TONE_TEXT_CLS = { emerald: "text-emerald-600", amber: "text-amber-600", rose: "text-rose-600" };
+function agingBucketOf(dueDate) {
+  const daysOverdue = Math.floor((new Date(new Date().toDateString()) - new Date(dueDate)) / 86400000);
+  if (daysOverdue <= 0) return "current";
+  if (daysOverdue <= 30) return "b1_30";
+  if (daysOverdue <= 60) return "b31_60";
+  if (daysOverdue <= 90) return "b61_90";
+  return "b90_plus";
+}
 const TX_TYPES = {
   receive: { label: "קבלת סחורה מספק", icon: Download, color: "emerald" },
   transfer: { label: "העברה למחסן/רכב", icon: ArrowLeftRight, color: "sky" },
@@ -840,6 +918,14 @@ function AddToGoogleCalendarButton({ title, description, date, label = "הוסף
 }
 
 function Modal({ title, onClose, children }) {
+  // בלי זה, גלילת העמוד הראשי נשארת פעילה מתחת למודל - כל שינוי שגורם ל-reflow
+  // (כמו הקלדה בשדה כמות שמפעילה חישוב מחדש של הטופס) עלול לגרום לדפדפן "לתקן"
+  // את מיקום הגלילה של הדף הראשי בטעות, ונראה כאילו העמוד קופץ לראש בזמן הקלדה.
+  React.useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, []);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -1030,21 +1116,35 @@ function Dashboard({ data, onExport, isAdmin }) {
       const due = new Date(po.dueDate);
       if (due < now) {
         const daysOverdue = Math.round((now - due) / 86400000);
-        cashflowAlerts.push({ type: "overdue", po, supplier, text: `${supplier?.name || "ספק"} - עברו ${daysOverdue} ימים מיום היעד, יתרה לתשלום ${balanceLabel}` });
+        cashflowAlerts.push({ type: "overdue", refNumber: po.poNumber, text: `${supplier?.name || "ספק"} - עברו ${daysOverdue} ימים מיום היעד, יתרה לתשלום ${balanceLabel}` });
       } else if (due <= in7) {
-        cashflowAlerts.push({ type: "due_week", po, supplier, text: `${supplier?.name || "ספק"} - תשלום ${balanceLabel} מגיע ב-${due.toLocaleDateString("he-IL")}` });
+        cashflowAlerts.push({ type: "due_week", refNumber: po.poNumber, text: `${supplier?.name || "ספק"} - תשלום ${balanceLabel} מגיע ב-${due.toLocaleDateString("he-IL")}` });
       } else if (due <= in30) {
-        cashflowAlerts.push({ type: "due_month", po, supplier, text: `${supplier?.name || "ספק"} - תשלום ${balanceLabel} מגיע ב-${due.toLocaleDateString("he-IL")}` });
+        cashflowAlerts.push({ type: "due_month", refNumber: po.poNumber, text: `${supplier?.name || "ספק"} - תשלום ${balanceLabel} מגיע ב-${due.toLocaleDateString("he-IL")}` });
       }
     }
     if (po.paymentTerms === "deposit_balance" && (po.status === "in_production" || po.status === "in_transit")) {
-      cashflowAlerts.push({ type: "shipping", po, supplier, text: `${supplier?.name || "ספק"} - הסחורה ${PO_STATUSES[po.status]?.label}, יתרה ${balanceLabel} ממתינה לשחרור` });
+      cashflowAlerts.push({ type: "shipping", refNumber: po.poNumber, text: `${supplier?.name || "ספק"} - הסחורה ${PO_STATUSES[po.status]?.label}, יתרה ${balanceLabel} ממתינה לשחרור` });
     }
   });
-  const alertOrder = { overdue: 0, shipping: 1, due_week: 2, due_month: 3 };
+  // חובות לקוחות שעברו את מועד הפירעון - אותו מרכז התראות, כדי שמנהל יראה
+  // במבט אחד גם מה הוא חייב לספקים וגם מה לקוחות חייבים לו
+  data.customerInvoices.filter((inv) => isOpenInvoice(data, inv)).forEach((inv) => {
+    const due = new Date(inv.dueDate);
+    if (due >= now) return;
+    const daysOverdue = Math.round((now - due) / 86400000);
+    const customer = data.customers.find((c) => c.id === inv.customerId);
+    const balance = invoiceBalance(data, inv);
+    cashflowAlerts.push({
+      type: "receivable_overdue", refNumber: inv.invoiceNumber,
+      text: `${customer?.name || "לקוח"} חייב ₪${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} - עברו ${daysOverdue} ימים ממועד הפירעון`,
+    });
+  });
+  const alertOrder = { overdue: 0, receivable_overdue: 0, shipping: 1, due_week: 2, due_month: 3 };
   cashflowAlerts.sort((a, b) => alertOrder[a.type] - alertOrder[b.type]);
   const alertMeta = {
     overdue: { label: "פג תוקף - חובה לשלם", tone: "rose", icon: TriangleAlert },
+    receivable_overdue: { label: "חוב לקוח באיחור", tone: "rose", icon: Wallet },
     due_week: { label: "לתשלום השבוע", tone: "amber", icon: Database },
     due_month: { label: "לתשלום החודש", tone: "sky", icon: Database },
     shipping: { label: "שחרור יתרה לפני משלוח", tone: "violet", icon: Ship },
@@ -1065,7 +1165,7 @@ function Dashboard({ data, onExport, isAdmin }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge tone={meta.tone}>{meta.label}</Badge>
-                      <span className="text-xs text-slate-400">{a.po.poNumber}</span>
+                      <span className="text-xs text-slate-400">{a.refNumber}</span>
                     </div>
                     <div className="text-sm text-slate-700 mt-0.5">{a.text}</div>
                   </div>
@@ -1233,6 +1333,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
     fragranceGroups[groupName].sizes.push({ itemId: it.id, unit: it.unit, qty });
     fragranceGroups[groupName].totalWeighted += qty * volumePerUnit;
   });
+  Object.values(fragranceGroups).forEach((g) => g.sizes.sort(sortBySizeDesc));
   const fragranceGroupList = Object.values(fragranceGroups).sort((a, b) => a.name.localeCompare(b.name, "he"));
 
   const [repackFor, setRepackFor] = useState(null); // fragrance name, or "" for open-picker mode
@@ -1436,7 +1537,8 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
         name: fragranceName,
         sizes: data.items
           .filter((it) => it.category === "consumable" && guessFragranceName(it) === normalizeText(fragranceName))
-          .map((it) => ({ itemId: it.id, unit: it.unit, qty: totalStockOf(it.id) })),
+          .map((it) => ({ itemId: it.id, unit: it.unit, qty: totalStockOf(it.id) }))
+          .sort(sortBySizeDesc),
       }
     : null;
   const existingUnits = group ? group.sizes.map((s) => s.unit) : [];
@@ -1750,6 +1852,8 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   const [note, setNote] = useState("");
   const [priceMode, setPriceMode] = useState("excl"); // excl = prices before VAT, incl = prices include VAT
   const [vatRate, setVatRate] = useState(String(data.companySettings.vatRate ?? 18));
+  const [paidNow, setPaidNow] = useState(true); // false = מכירה בחשבון פתוח (חוב), נכנס לדוח חובות וגבייה
+  const [paymentTermsDays, setPaymentTermsDays] = useState("14");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(null); // { customerId, total }
@@ -1814,13 +1918,29 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
     try {
       const batchTag = `הזמנה #${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
       const vatNote = priceMode === "excl" ? `מחיר לפני מע"מ (${vatPct}%)` : `מחיר כולל מע"מ (${vatPct}%)`;
+      const invoiceLines = [];
       for (const l of validLines) {
+        const roundedUnitPrice = Math.round(finalUnitPrice(l.unitPrice) * 100) / 100;
         await api.insertTransaction({
           type: "install", itemId: l.itemId, qty: Number(l.qty),
           fromLocationId: sourceLocationId, customerId,
-          unitPrice: Math.round(finalUnitPrice(l.unitPrice) * 100) / 100,
+          unitPrice: roundedUnitPrice,
           note: note ? `${batchTag} - ${note} - ${vatNote}` : `${batchTag} - ${vatNote}`,
         });
+        invoiceLines.push({ itemId: l.itemId, qty: Number(l.qty), unitPrice: roundedUnitPrice });
+      }
+      // כל מכירה יוצרת חשבונית לקוח (customer_invoices), גם אם שולמה במלואה כעת -
+      // כך שגם מכירות מיידיות מופיעות בהיסטוריית התיק וב"חובות וגבייה" (עם יתרה 0),
+      // ולא רק מכירות בחשבון פתוח. תנועות המלאי (למעלה) הן מה שבאמת מוריד מהמלאי -
+      // החשבונית היא רק שכבת מעקב תשלום מעליהן, לא חלק מלוגיקת המלאי.
+      const today = new Date().toISOString().slice(0, 10);
+      const dueDate = paidNow ? today : new Date(Date.now() + Number(paymentTermsDays) * 86400000).toISOString().slice(0, 10);
+      const invoiceId = await api.createCustomerInvoice(customerId, invoiceLines, {
+        issueDate: today, dueDate,
+        notes: note ? `${batchTag} - ${note}` : batchTag,
+      });
+      if (paidNow) {
+        await api.addInvoicePayment(invoiceId, Math.round(total * 100) / 100, today, "immediate", "שולם במלואו בעת המכירה");
       }
       await refresh();
       setSuccess({ customerId, total });
@@ -1936,6 +2056,25 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
           <span className="font-bold text-slate-800">סה"כ הזמנה (כולל מע"מ)</span>
           <span className="font-bold text-slate-800 text-lg">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <span className="text-sm font-bold text-slate-700 block mb-2">תשלום</span>
+        <div className="flex gap-2 mb-3">
+          <button type="button" onClick={() => setPaidNow(true)} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${paidNow ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>שולם עכשיו במלואו</button>
+          <button type="button" onClick={() => setPaidNow(false)} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${!paidNow ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>מכירה בחשבון פתוח (חוב)</button>
+        </div>
+        {!paidNow && (
+          <Field label="תנאי תשלום - מספר ימים עד למועד הפירעון">
+            <select className={inputCls} value={paymentTermsDays} onChange={(e) => setPaymentTermsDays(e.target.value)}>
+              <option value="7">שוטף + 7</option>
+              <option value="14">שוטף + 14</option>
+              <option value="30">שוטף + 30</option>
+              <option value="60">שוטף + 60</option>
+            </select>
+            <p className="text-xs text-slate-400 mt-1.5">היתרה תופיע כחוב פתוח במסך "חובות וגבייה" עד שתירשם תשלום מולה.</p>
+          </Field>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
@@ -4302,6 +4441,247 @@ function ExpensePaymentsModal({ data, expense, onClose, refresh }) {
   );
 }
 
+// ==================== חובות וגבייה (Accounts Receivable / Aging) ====================
+function InvoicePaymentsModal({ data, invoice, refresh, onClose }) {
+  const [amount, setAmount] = useState("");
+  const [paidDate, setPaidDate] = useState(new Date().toISOString().slice(0, 10));
+  const [method, setMethod] = useState("bank_transfer");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const customer = data.customers.find((c) => c.id === invoice.customerId);
+  const total = invoice.totalAmount;
+  const payments = (data.invoicePayments || []).filter((p) => p.invoiceId === invoice.id).sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate));
+  const paid = payments.reduce((s, p) => s + p.amount, 0);
+  const balance = total - paid;
+
+  const addPayment = async () => {
+    setError("");
+    if (!amount || Number(amount) <= 0) { setError("יש להזין סכום תקין"); return; }
+    setBusy(true);
+    try {
+      await api.addInvoicePayment(invoice.id, Number(amount), paidDate, method, note);
+      await refresh();
+      setAmount(""); setNote("");
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  const removePayment = async (id) => {
+    if (!confirm("למחוק את רישום התשלום?")) return;
+    try { await api.deleteInvoicePayment(id); await refresh(); } catch (e) { alert(e.message); }
+  };
+
+  const voidThisInvoice = async () => {
+    if (!confirm(`לבטל את חשבונית ${invoice.invoiceNumber}? החוב יוסר מדוח הגבייה.`)) return;
+    try { await api.voidInvoice(invoice.id); await refresh(); onClose(); } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <Modal title={`תשלומים - ${invoice.invoiceNumber}`} onClose={onClose}>
+      <div className="text-sm text-slate-500 mb-3">{customer?.name} · לתשלום עד {new Date(invoice.dueDate).toLocaleDateString("he-IL")}</div>
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ חשבונית</div><div className="font-bold text-slate-800">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-emerald-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שולם</div><div className="font-bold text-emerald-700">₪{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-amber-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">יתרה</div><div className="font-bold text-amber-700">₪{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+      </div>
+
+      <div className="mb-4">
+        <div className="text-sm font-medium text-slate-600 mb-2">היסטוריית תשלומים</div>
+        {payments.length === 0 && <div className="text-sm text-slate-400 text-center py-3">עדיין לא נרשמו תשלומים</div>}
+        {payments.map((p) => (
+          <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
+            <div>
+              <div className="font-medium text-slate-800">₪{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+              <div className="text-xs text-slate-500">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
+            </div>
+            <button onClick={() => removePayment(p.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={15} /></button>
+          </div>
+        ))}
+      </div>
+
+      {balance > 0.01 && (
+        <div className="border-t pt-3 mb-3">
+          <div className="text-sm font-bold text-slate-700 mb-2">רישום תשלום חדש</div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <Field label="סכום (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+            <Field label="תאריך תשלום"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
+          </div>
+          <Field label="אמצעי תשלום">
+            <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+              <option value="cash">מזומן</option><option value="bank_transfer">העברה בנקאית</option>
+              <option value="credit_card">כרטיס אשראי</option><option value="check">צ'ק</option>
+            </select>
+          </Field>
+          <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום תשלום</button>
+        </div>
+      )}
+
+      <button onClick={voidThisInvoice} className="text-xs text-gray-400 hover:text-rose-600 flex items-center gap-1"><Ban size={13} /> ביטול חשבונית (למשל: נרשמה בטעות)</button>
+    </Modal>
+  );
+}
+
+function NewInvoiceModal({ data, refresh, onClose }) {
+  const [customerId, setCustomerId] = useState("");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [termsDays, setTermsDays] = useState("14");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setError("");
+    if (!customerId) { setError("יש לבחור לקוח"); return; }
+    if (!amount || Number(amount) <= 0) { setError("יש להזין סכום תקין"); return; }
+    setBusy(true);
+    try {
+      const dueDate = new Date(new Date(issueDate).getTime() + Number(termsDays) * 86400000).toISOString().slice(0, 10);
+      await api.createCustomerInvoice(customerId, [{ description: description || "חוב פתוח", qty: 1, unitPrice: Number(amount) }], { issueDate, dueDate, notes: description });
+      await refresh();
+      onClose();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title="הוספת חוב פתוח" onClose={onClose}>
+      <Field label="לקוח">
+        <select className={inputCls} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+          <option value="">בחר לקוח...</option>
+          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </Field>
+      <Field label="תיאור החוב"><input className={inputCls} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="לדוגמה: יתרת חוב מהזמנה קודמת" /></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="סכום (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+        <Field label="תאריך פתיחה"><input type="date" className={inputCls} value={issueDate} onChange={(e) => setIssueDate(e.target.value)} /></Field>
+      </div>
+      <Field label="תנאי תשלום">
+        <select className={inputCls} value={termsDays} onChange={(e) => setTermsDays(e.target.value)}>
+          <option value="0">מיידי</option><option value="7">שוטף + 7</option>
+          <option value="14">שוטף + 14</option><option value="30">שוטף + 30</option><option value="60">שוטף + 60</option>
+        </select>
+      </Field>
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}הוספת חוב</button>
+    </Modal>
+  );
+}
+
+function ReceivablesScreen({ data, refresh }) {
+  const [openNewInvoice, setOpenNewInvoice] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [expandedCustomerId, setExpandedCustomerId] = useState(null);
+
+  const openInvoices = data.customerInvoices.filter((inv) => isOpenInvoice(data, inv));
+
+  const byCustomer = {};
+  openInvoices.forEach((inv) => {
+    const bucket = agingBucketOf(inv.dueDate);
+    const balance = invoiceBalance(data, inv);
+    if (!byCustomer[inv.customerId]) {
+      byCustomer[inv.customerId] = { customerId: inv.customerId, total: 0, buckets: {}, oldestDue: inv.dueDate, invoices: [] };
+    }
+    const c = byCustomer[inv.customerId];
+    c.total += balance;
+    c.buckets[bucket] = (c.buckets[bucket] || 0) + balance;
+    if (new Date(inv.dueDate) < new Date(c.oldestDue)) c.oldestDue = inv.dueDate;
+    c.invoices.push({ ...inv, balance, bucket });
+  });
+  const customerRows = Object.values(byCustomer)
+    .map((c) => ({ ...c, customer: data.customers.find((cu) => cu.id === c.customerId) }))
+    .sort((a, b) => b.total - a.total);
+
+  const grandTotal = customerRows.reduce((s, c) => s + c.total, 0);
+  const bucketTotals = AGING_BUCKETS.map((b) => ({ ...b, total: customerRows.reduce((s, c) => s + (c.buckets[b.key] || 0), 0) }));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h2 className="font-bold text-xl text-slate-800 flex items-center gap-2"><Wallet size={22} className="text-amber-600" /> חובות וגבייה</h2>
+          <p className="text-slate-500 text-sm mt-1">גיול חובות לקוחות (Aging) לפי טווחי איחור, וניהול תשלומים.</p>
+        </div>
+        <button onClick={() => setOpenNewInvoice(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> הוספת חוב פתוח</button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-5">
+        <div className="bg-white rounded-2xl border shadow-sm p-4"><div className="text-slate-500 text-sm mb-1">סה"כ חוב פתוח</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
+        {bucketTotals.map((b) => (
+          <div key={b.key} className="bg-white rounded-2xl border shadow-sm p-4">
+            <div className="text-slate-500 text-xs mb-1">{b.label}</div>
+            <div className={`text-lg font-bold ${b.total > 0 ? TONE_TEXT_CLS[b.tone] : "text-slate-300"}`}>₪{b.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-slate-500 text-right">
+              <th className="px-5 py-3 font-medium">לקוח</th><th className="px-5 py-3 font-medium">יתרת חוב</th>
+              <th className="px-5 py-3 font-medium">מועד הפירעון הישן ביותר</th><th className="px-5 py-3 font-medium">סטטוס</th><th className="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {customerRows.map((c) => {
+              const worstBucket = AGING_BUCKETS.slice().reverse().find((b) => c.buckets[b.key] > 0) || AGING_BUCKETS[0];
+              const isOpen = expandedCustomerId === c.customerId;
+              return (
+                <React.Fragment key={c.customerId}>
+                  <tr className="border-t cursor-pointer hover:bg-gray-50" onClick={() => setExpandedCustomerId(isOpen ? null : c.customerId)}>
+                    <td className="px-5 py-3 font-medium text-slate-800">{c.customer?.name || "-"}</td>
+                    <td className="px-5 py-3 font-bold">₪{c.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td className="px-5 py-3 text-slate-500">{new Date(c.oldestDue).toLocaleDateString("he-IL")}</td>
+                    <td className="px-5 py-3"><Badge tone={worstBucket.tone}>{worstBucket.label}</Badge></td>
+                    <td className="px-5 py-3 text-left"><ChevronLeft size={16} className={`text-gray-300 transition ${isOpen ? "-rotate-90" : ""}`} /></td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="border-t bg-gray-50/60">
+                      <td colSpan={5} className="px-5 py-3">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-slate-400">
+                              <th className="text-right font-medium py-1">חשבונית</th><th className="text-right font-medium py-1">הופקה</th>
+                              <th className="text-right font-medium py-1">מועד פירעון</th><th className="text-right font-medium py-1">יתרה</th><th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {c.invoices.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map((inv) => (
+                              <tr key={inv.id} className="border-t border-gray-200">
+                                <td className="py-2">{inv.invoiceNumber}</td>
+                                <td className="py-2 text-slate-500">{new Date(inv.issueDate).toLocaleDateString("he-IL")}</td>
+                                <td className="py-2 text-slate-500">{new Date(inv.dueDate).toLocaleDateString("he-IL")}</td>
+                                <td className="py-2 font-bold">₪{inv.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                <td className="py-2 text-left">
+                                  <button onClick={(e) => { e.stopPropagation(); setSelectedInvoice(inv); }} className="text-amber-600 hover:underline font-medium flex items-center gap-1">
+                                    <Banknote size={14} /> רישום תשלום
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            {customerRows.length === 0 && <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">אין כרגע חובות פתוחים - כל הלקוחות מסודרים</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {openNewInvoice && <NewInvoiceModal data={data} refresh={refresh} onClose={() => setOpenNewInvoice(false)} />}
+      {selectedInvoice && <InvoicePaymentsModal data={data} invoice={selectedInvoice} refresh={refresh} onClose={() => setSelectedInvoice(null)} />}
+    </div>
+  );
+}
+
 function ExpensesScreen({ data, refresh, isAdmin }) {
   const [modalExpense, setModalExpense] = useState(null); // {} for new, object for edit, null for closed
   const [paymentsFor, setPaymentsFor] = useState(null);
@@ -5120,6 +5500,7 @@ const FULL_NAV = [
   { key: "reports", label: "דוחות וערך מלאי", icon: BarChart3 },
   { key: "po", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
   { key: "expenses", label: "הוצאות וחשבוניות", icon: Calculator },
+  { key: "receivables", label: "חובות וגבייה", icon: Wallet, adminOnly: true },
   { key: "log", label: "יומן אירועים", icon: ScrollText },
   { key: "settings", label: "הגדרות", icon: Settings },
 ];
@@ -5405,6 +5786,7 @@ export default function App() {
                 {tab === "reports" && <ReportsScreen data={data} />}
                 {tab === "po" && isAdmin && <POsScreen data={data} refresh={refresh} onPrint={setPrintPOId} />}
                 {tab === "expenses" && <ExpensesScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
+                {tab === "receivables" && isAdmin && <ReceivablesScreen data={data} refresh={refresh} />}
                 {tab === "log" && <AuditLog data={data} />}
                 {tab === "settings" && <SettingsScreen data={data} refresh={refresh} userEmail={session.user.email} logoUrl={data.logoUrl} isAdmin={isAdmin} onLogoChange={async (dataUrl) => { try { await api.updateLogoUrl(dataUrl); await refresh(); } catch (e) { alert(e.message); } }} />}
               </>
