@@ -5,7 +5,7 @@ import {
   CircleCheck, CircleX, Trash2, ChevronLeft, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
-  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt,
+  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
@@ -740,6 +740,67 @@ const canOpenForRepack = (item) => {
 // נירמול טקסט לצורך השוואת שמות ריח: מסיר רווחים כפולים/קצה ומאחד ייצוג יוניקוד,
 // כדי ששני מחרוזות שנראות זהות לעין (אבל לא זהות בייט-לבייט בגלל איך שהוקלדו) יתאמו.
 const normalizeText = (s) => (s || "").normalize("NFC").trim().replace(/\s+/g, " ");
+
+// ---------- ייבוא הוצאות מקובץ CSV ----------
+// בכוונה CSV בלבד ולא .xlsx בינארי: חבילת ה-npm הסטנדרטית לקריאת אקסל (xlsx/SheetJS)
+// נושאת כרגע 2 חולשות אבטחה ברמת חומרה גבוהה בלי תיקון זמין (Prototype Pollution,
+// ReDoS) - לא ראוי להכניס את זה לנקודת קליטת נתונים כספיים במערכת production.
+// CSV הוא הפורמט הסטנדרטי שאקסל/Google Sheets/תוכנות הנהלת חשבונות מייצאות אליו
+// ישירות (File -> Save As -> CSV), ונקרא כאן עם parser פשוט בלי תלות חיצונית כלל.
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // BOM שאקסל מוסיף לקבצי CSV בעברית
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    // מרכאות בודדות באמצע שדה (כמו "בע"מ" בשם ספק) הן נפוצות מאוד בקבצים
+    // עסקיים בעברית ולא באמת פותחות ציטוט - רק מרכאה בתחילת שדה ריק נחשבת
+    // כפתיחת ציטוט אמיתי (כך גם אקסל עצמו מתייחס לזה בפועל)
+    } else if (c === '"' && field.length === 0) inQuotes = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\r") { /* skip, \n מטופל בנפרד */ }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else field += c;
+  }
+  if (field !== "" || row.length > 0) { row.push(field); rows.push(row); }
+  if (rows.length === 0) return { headers: [], rows: [] };
+  const headers = rows[0].map((h) => normalizeText(h));
+  const dataRows = rows.slice(1)
+    .filter((r) => r.some((c) => c.trim() !== ""))
+    .map((r) => {
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h] = (r[idx] || "").trim(); });
+      return obj;
+    });
+  return { headers, rows: dataRows };
+}
+const pickField = (row, aliases) => {
+  const keys = Object.keys(row);
+  for (const alias of aliases) {
+    const key = keys.find((k) => normalizeText(k).toLowerCase() === normalizeText(alias).toLowerCase());
+    if (key && row[key]) return row[key];
+  }
+  return "";
+};
+function parseDateFlexible(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+const CSV_DATE_ALIASES = ["תאריך", "תאריך הוצאה", "Date", "date"];
+const CSV_AMOUNT_ALIASES = ["סכום", 'סכום כולל מע"מ', "Amount", "amount", "Total"];
+const CSV_SUPPLIER_ALIASES = ["ספק", "שם ספק", "Supplier", "supplier"];
+const CSV_CATEGORY_ALIASES = ["קטגוריה", "Category", "category"];
+const CSV_DESCRIPTION_ALIASES = ["תיאור", "פירוט", "Description", "description"];
+const CSV_INVOICE_ALIASES = ["מספר חשבונית", "חשבונית", "Invoice", "Invoice Number", "invoice"];
 const guessFragranceName = (item) => {
   if (item.fragranceGroup) return normalizeText(item.fragranceGroup);
   return normalizeText(item.name.replace(/^תמצית ריח - /, "").replace(/\s*\([^)]*\)\s*$/, ""));
@@ -4179,6 +4240,9 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
   const [stagedFiles, setStagedFiles] = useState([]);
   const [stagedPreviews, setStagedPreviews] = useState([]); // object URLs, אינדקס מקביל ל-stagedFiles
   const [pdfConverting, setPdfConverting] = useState(false);
+  const [csvBusy, setCsvBusy] = useState(false);
+  const [csvError, setCsvError] = useState("");
+  const [csvSuccess, setCsvSuccess] = useState("");
 
   const vatRate = data.companySettings.vatRate ?? 18;
   const computed = computeVat(form.vatMode, form.amount, vatRate);
@@ -4261,6 +4325,75 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
       setScanError(e.message || "הסריקה נכשלה - ניתן להמשיך ולמלא את הטופס ידנית, או ללחוץ שוב על נתח כדי לנסות שנית.");
     } finally {
       setScanBusy(false);
+    }
+  };
+
+  // ייבוא מרוכז: כל שורה בקובץ ה-CSV הופכת לרשומת הוצאה משלה (לא רק ממלאת
+  // טופס אחד) - הסכום מטופל כ"כולל מע"מ" ומפוצל אוטומטית לפי שיעור המע"מ
+  // הנוכחי בהגדרות החברה, וכל שורה שנכשלת (תאריך/סכום לא תקין) לא עוצרת
+  // את שאר הייבוא - רק נספרת ומדווחת בסוף עם מספר השורה בקובץ.
+  const handleCsvImport = async (file) => {
+    if (!file) return;
+    setCsvError(""); setCsvSuccess(""); setCsvBusy(true);
+    try {
+      const text = await file.text();
+      const { headers, rows } = parseCSV(text);
+      if (rows.length === 0) throw new Error("הקובץ ריק, או שלא הצלחנו לקרוא ממנו שורות נתונים.");
+
+      const hasDateCol = CSV_DATE_ALIASES.some((a) => headers.some((h) => normalizeText(h).toLowerCase() === a.toLowerCase()));
+      const hasAmountCol = CSV_AMOUNT_ALIASES.some((a) => headers.some((h) => normalizeText(h).toLowerCase() === a.toLowerCase()));
+      if (!hasDateCol || !hasAmountCol) {
+        throw new Error(`מבנה העמודות בקובץ לא זוהה - חובה שיהיו עמודות בשם "תאריך" (או Date) ו"סכום" (או Amount). העמודות שנמצאו בקובץ: ${headers.join(", ") || "(לא זוהו כלל כותרות)"}`);
+      }
+
+      let success = 0;
+      const failures = [];
+      const vatRateLocal = data.companySettings.vatRate ?? 18;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        try {
+          const expenseDate = parseDateFlexible(pickField(r, CSV_DATE_ALIASES));
+          const amountInclVat = Number(String(pickField(r, CSV_AMOUNT_ALIASES)).replace(/[^\d.-]/g, ""));
+          if (!expenseDate) throw new Error("תאריך לא תקין");
+          if (!amountInclVat || amountInclVat <= 0) throw new Error("סכום לא תקין");
+
+          const supplierRaw = pickField(r, CSV_SUPPLIER_ALIASES);
+          const normalizedSupplier = normalizeText(supplierRaw);
+          const matchedSupplier = normalizedSupplier
+            ? data.suppliers.find((s) => normalizeText(s.name) === normalizedSupplier || normalizeText(s.name).includes(normalizedSupplier) || normalizedSupplier.includes(normalizeText(s.name)))
+            : null;
+
+          const categoryRaw = normalizeText(pickField(r, CSV_CATEGORY_ALIASES)).toLowerCase();
+          const matchedCategoryKey = (categoryRaw && Object.entries(EXPENSE_CATEGORIES).find(
+            ([k, label]) => k === categoryRaw || normalizeText(label).toLowerCase().includes(categoryRaw) || (categoryRaw && categoryRaw.includes(normalizeText(label).toLowerCase()))
+          )?.[0]) || "other";
+
+          const vatAmount = Math.round((amountInclVat * vatRateLocal / (100 + vatRateLocal)) * 100) / 100;
+          const amountExclVat = Math.round((amountInclVat - vatAmount) * 100) / 100;
+          const description = pickField(r, CSV_DESCRIPTION_ALIASES) || (supplierRaw ? `יובא מקובץ - ${supplierRaw}` : "יובא מקובץ CSV");
+
+          await api.addExpense({
+            category: matchedCategoryKey, supplierId: matchedSupplier ? matchedSupplier.id : null,
+            description, invoiceNumber: pickField(r, CSV_INVOICE_ALIASES), expenseDate,
+            vatMode: "incl", amountExclVat, vatAmount, amountInclVat,
+            paymentStatus: "pending", paymentMethod: null, notes: "",
+          });
+          success++;
+        } catch (rowErr) {
+          failures.push(`שורה ${i + 2} בקובץ: ${rowErr.message}`);
+        }
+      }
+      await refresh();
+      if (success > 0) {
+        setCsvSuccess(`יובאו בהצלחה ${success} מתוך ${rows.length} שורות כהוצאות חדשות (סטטוס "ממתין לתשלום").${failures.length > 0 ? ` ${failures.length} שורות נכשלו - פירוט למטה.` : ""}`);
+      }
+      if (failures.length > 0) {
+        setCsvError(failures.slice(0, 12).join(" | ") + (failures.length > 12 ? ` ... ועוד ${failures.length - 12} שגיאות` : ""));
+      }
+    } catch (e) {
+      setCsvError(e.message || "קריאת הקובץ נכשלה.");
+    } finally {
+      setCsvBusy(false);
     }
   };
 
@@ -4351,6 +4484,29 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
 
           {scanNotice && <div className="text-xs text-emerald-300 bg-emerald-500/10 rounded-lg px-2.5 py-2 mt-2">{scanNotice}</div>}
           {scanError && <div className="text-xs text-rose-300 bg-rose-500/10 rounded-lg px-2.5 py-2 mt-2">{scanError}</div>}
+        </div>
+      )}
+
+      {!existing && (
+        <div className={cardCls + " p-4 mb-4"}>
+          <div className="flex items-center gap-2 mb-2">
+            <FileSpreadsheet size={16} className="text-emerald-400" />
+            <span className="text-sm font-bold text-zinc-100">ייבוא מרוכז מקובץ הוצאות (Excel/CSV)</span>
+          </div>
+          <p className="text-xs text-zinc-300 mb-3">
+            כל שורה בקובץ הופכת להוצאה נפרדת (לא רק ממלאת את הטופס למעלה). עמודות נדרשות: <b>תאריך</b> ו<b>סכום</b> (כולל מע"מ) - ואופציונלי: ספק, קטגוריה, תיאור, מספר חשבונית.
+            אם יש לכם קובץ Excel: שמרו אותו קודם כ-CSV (File → Save As → CSV) והעלו את הקובץ הזה.
+          </p>
+          <label className={btnGhost + " w-full text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
+            {csvBusy ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+            {csvBusy ? "מייבא..." : "העלאת קובץ הוצאות (Excel/CSV)"}
+            <input
+              type="file" accept=".csv,text/csv" className="hidden" disabled={csvBusy}
+              onChange={(e) => { const f = e.target.files?.[0]; handleCsvImport(f); e.target.value = ""; }}
+            />
+          </label>
+          {csvSuccess && <div className="text-xs text-emerald-300 bg-emerald-500/10 rounded-lg px-2.5 py-2 mt-2">{csvSuccess}</div>}
+          {csvError && <div className="text-xs text-rose-300 bg-rose-500/10 rounded-lg px-2.5 py-2 mt-2 whitespace-pre-line">{csvError}</div>}
         </div>
       )}
       <Field label="קטגוריה">
