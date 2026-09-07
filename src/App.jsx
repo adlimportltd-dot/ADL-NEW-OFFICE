@@ -910,7 +910,7 @@ function PaymentMethodPicker({ value, onChange }) {
         return (
           <button
             key={key} type="button" onClick={() => onChange(key)}
-            className={`flex flex-col items-center gap-1.5 rounded-xl py-2.5 border text-xs font-semibold tracking-tight transition ${active ? "bg-amber-500 text-zinc-950 border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300 hover:bg-white/[0.07]"}`}
+            className={`flex flex-col items-center gap-1.5 rounded-xl py-2.5 border text-xs font-semibold tracking-tight transition ${active ? "bg-amber-500 text-slate-900 border-amber-500" : "bg-white border-gray-300 text-slate-600 hover:bg-gray-100"}`}
           >
             <Icon size={18} /> {meta.label}
           </button>
@@ -925,7 +925,7 @@ function PaymentMethodTag({ method }) {
   if (!meta) return null;
   const Icon = meta.icon;
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium ${TONE_TEXT_CLS[meta.tone] || "text-zinc-300"}`}>
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${TONE_TEXT_CLS[meta.tone] || "text-slate-500"}`}>
       <Icon size={12} /> {meta.label}
     </span>
   );
@@ -997,16 +997,16 @@ const AUDIT_TX_LABELS = { ...TX_TYPES, repack: { label: "המרת אריזות /
 // בזמן build) יראה את כל צירופי הגוון/שקיפות שמורכבים דינמית במקומות אחרים
 // (למשל bg-${tone}-500/15) ויכלול אותם ב-CSS הסופי, גם אם המחרוזת השלמה
 // לא מופיעה מילולית באף className בפועל.
-const _TW_DYNAMIC_TONE_SAFELIST = "bg-emerald-500/15 text-emerald-300 ring-emerald-500/25 bg-sky-500/15 text-sky-300 ring-sky-500/25 bg-amber-500/15 text-amber-300 ring-amber-500/25 bg-violet-500/15 text-violet-300 ring-violet-500/25 bg-rose-500/15 text-rose-300 ring-rose-500/25 bg-zinc-500/15 text-zinc-300 ring-zinc-500/25 bg-emerald-500/10 border-emerald-500/25 bg-sky-500/10 border-sky-500/25 bg-amber-500/10 border-amber-500/25 bg-violet-500/10 border-violet-500/25 bg-rose-500/10 border-rose-500/25";
+const _TW_DYNAMIC_TONE_SAFELIST = "bg-emerald-100 text-emerald-700 bg-sky-100 text-sky-700 bg-amber-100 text-amber-700 bg-violet-100 text-violet-700 bg-rose-100 text-rose-700 bg-gray-100 text-gray-700 bg-emerald-50 border-emerald-200 bg-sky-50 border-sky-200 bg-amber-50 border-amber-200 bg-violet-50 border-violet-200 bg-rose-50 border-rose-200";
 
 function Badge({ children, tone = "gray" }) {
   const tones = {
-    gray: "bg-zinc-500/15 text-zinc-300 ring-1 ring-inset ring-zinc-500/25",
-    emerald: "bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/25",
-    sky: "bg-sky-500/15 text-sky-300 ring-1 ring-inset ring-sky-500/25",
-    amber: "bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/25",
-    violet: "bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-500/25",
-    rose: "bg-rose-500/15 text-rose-300 ring-1 ring-inset ring-rose-500/25",
+    gray: "bg-gray-100 text-gray-700",
+    emerald: "bg-emerald-100 text-emerald-800",
+    sky: "bg-sky-100 text-sky-800",
+    amber: "bg-amber-100 text-amber-800",
+    violet: "bg-violet-100 text-violet-800",
+    rose: "bg-rose-100 text-rose-800",
   };
   return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-tight ${tones[tone]}`}>{children}</span>;
 }
@@ -1056,11 +1056,11 @@ function Modal({ title, onClose, children }) {
     return () => { document.body.style.overflow = prevOverflow; };
   }, []);
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-zinc-900 border border-white/[0.08] w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-[0_1px_0_0_rgba(255,255,255,0.06)_inset,0_24px_48px_-12px_rgba(0,0,0,0.8)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.08] sticky top-0 bg-zinc-900/95 backdrop-blur-sm">
-          <h3 className="font-bold text-lg tracking-tight text-zinc-100">{title}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-100 transition"><X size={20} /></button>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-5 border-b sticky top-0 bg-white">
+          <h3 className="font-bold text-lg tracking-tight text-slate-800">{title}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-slate-800 transition"><X size={20} /></button>
         </div>
         <div className="p-6">{children}</div>
       </div>
@@ -1071,17 +1071,17 @@ function Modal({ title, onClose, children }) {
 function Field({ label, children }) {
   return (
     <div className="mb-4">
-      <label className="block text-sm font-semibold text-zinc-300 mb-1.5 tracking-tight">{label}</label>
+      <label className="block text-sm font-semibold text-slate-600 mb-1.5 tracking-tight">{label}</label>
       {children}
     </div>
   );
 }
 
-// ==================== Design tokens - עיצוב כהה, elite SaaS ====================
-const cardCls = "bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)]";
-const inputCls = "w-full bg-zinc-950/60 border border-white/[0.08] rounded-xl px-3.5 py-2.5 text-[15px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500/50 transition";
-const btnPrimary = "bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold tracking-tight rounded-xl px-4 py-3 text-[15px] transition disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_1px_0_0_rgba(255,255,255,0.25)_inset,0_4px_12px_-4px_rgba(245,158,11,0.5)]";
-const btnGhost = "bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.14] text-zinc-200 font-semibold tracking-tight rounded-xl px-5 py-3 text-[15px] transition";
+// ==================== Design tokens - עיצוב בהיר וקלאסי ====================
+const cardCls = "bg-white rounded-2xl border shadow-sm";
+const inputCls = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[15px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition";
+const btnPrimary = "bg-amber-500 hover:bg-amber-600 text-white font-bold tracking-tight rounded-xl px-4 py-3 text-[15px] transition disabled:opacity-40 disabled:cursor-not-allowed";
+const btnGhost = "bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 font-semibold tracking-tight rounded-xl px-5 py-3 text-[15px] transition";
 
 // לוגו החברה: תמונה שהועלתה (נשמרת ב-app_settings) אם קיימת, אחרת התג "A"
 function LogoBadge({ logoUrl, size = 36, editable = false, onChange }) {
@@ -1139,10 +1139,10 @@ function MfaCodeStep({ factorId, onVerified, onCancel }) {
   return (
     <>
       <div className="flex items-center gap-2 mb-2">
-        <div className="p-2 rounded-xl bg-sky-500/15 text-sky-300"><KeyRound size={20} /></div>
-        <div className="font-bold text-zinc-100 tracking-tight">אימות דו-שלבי</div>
+        <div className="p-2 rounded-xl bg-sky-100 text-sky-600"><KeyRound size={20} /></div>
+        <div className="font-bold text-slate-900 tracking-tight">אימות דו-שלבי</div>
       </div>
-      <p className="text-sm text-zinc-400 mb-4">הזינו את הקוד בן 6 הספרות המוצג כרגע באפליקציית ה-Authenticator שלכם.</p>
+      <p className="text-sm text-slate-500 mb-4">הזינו את הקוד בן 6 הספרות המוצג כרגע באפליקציית ה-Authenticator שלכם.</p>
       <Field label="קוד אימות">
         <input
           type="text" inputMode="numeric" maxLength={6} autoFocus
@@ -1152,11 +1152,11 @@ function MfaCodeStep({ factorId, onVerified, onCancel }) {
           onKeyDown={onKeyDown}
         />
       </Field>
-      {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2.5 mb-3">{error}</div>}
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2.5 mb-3">{error}</div>}
       <button onClick={submit} disabled={busy || code.length !== 6} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
         {busy && <Loader2 size={16} className="animate-spin" />} אימות
       </button>
-      {onCancel && <button onClick={onCancel} className="w-full text-center text-sm text-zinc-500 hover:text-zinc-300 mt-3 transition">חזרה להתחברות</button>}
+      {onCancel && <button onClick={onCancel} className="w-full text-center text-sm text-slate-400 hover:text-slate-600 mt-3 transition">חזרה להתחברות</button>}
     </>
   );
 }
@@ -1185,14 +1185,13 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   const onKeyDown = (e) => { if (e.key === "Enter") submit(); };
 
   return (
-    <div dir="rtl" lang="he" className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 relative overflow-hidden" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
-      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(600px circle at 50% 0%, rgba(245,158,11,0.08), transparent 70%)" }} />
-      <div className={cardCls + " w-full max-w-sm p-7 relative"}>
-        <div className="flex items-center gap-2.5 mb-7">
-          <LogoBadge logoUrl={logoUrl} size={42} />
+    <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
+      <div className={cardCls + " w-full max-w-sm p-6"}>
+        <div className="flex items-center gap-2 mb-6">
+          <LogoBadge logoUrl={logoUrl} size={40} />
           <div>
-            <div className="font-bold text-zinc-100 leading-tight tracking-tight">אדל אימפורט</div>
-            <div className="text-xs text-zinc-400">ניהול מלאי</div>
+            <div className="font-bold text-slate-900 leading-tight">אדל אימפורט</div>
+            <div className="text-xs text-slate-500">ניהול מלאי</div>
           </div>
         </div>
 
@@ -1203,13 +1202,13 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
           <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} />
         </Field>
 
-        {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2.5 mb-3">{error}</div>}
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2.5 mb-3">{error}</div>}
 
         <button onClick={submit} disabled={busy || !email || !password} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
           {busy && <Loader2 size={16} className="animate-spin" />}
           התחברות
         </button>
-        <p className="text-xs text-zinc-500 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
+        <p className="text-xs text-slate-400 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
       </div>
     </div>
   );
@@ -1285,21 +1284,21 @@ function Dashboard({ data, onExport, isAdmin }) {
   return (
     <div className="space-y-5">
       {isAdmin && cashflowAlerts.length > 0 && (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
-          <div className="px-4 py-3 border-b flex items-center gap-2"><Database size={18} className="text-amber-600" /><h3 className="font-bold text-zinc-100">מרכז התראות תזרים</h3></div>
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b flex items-center gap-2"><Database size={18} className="text-amber-600" /><h3 className="font-bold text-slate-800">מרכז התראות תזרים</h3></div>
           <div className="divide-y">
             {cashflowAlerts.map((a, i) => {
               const meta = alertMeta[a.type];
               const Icon = meta.icon;
               return (
                 <div key={i} className="flex items-center gap-3 px-4 py-3">
-                  <div className={`p-2 rounded-xl bg-${meta.tone}-500/15 text-${meta.tone}-300 shrink-0`}><Icon size={16} /></div>
+                  <div className={`p-2 rounded-xl bg-${meta.tone}-100 text-${meta.tone}-700 shrink-0`}><Icon size={16} /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge tone={meta.tone}>{meta.label}</Badge>
-                      <span className="text-xs text-zinc-300">{a.refNumber}</span>
+                      <span className="text-xs text-slate-500">{a.refNumber}</span>
                     </div>
-                    <div className="text-sm text-zinc-200 mt-0.5">{a.text}</div>
+                    <div className="text-sm text-slate-700 mt-0.5">{a.text}</div>
                   </div>
                 </div>
               );
@@ -1309,13 +1308,13 @@ function Dashboard({ data, onExport, isAdmin }) {
       )}
 
       {lowStock.length > 0 && (
-        <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-rose-300 font-bold mb-2">
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 text-rose-700 font-bold mb-2">
             <TriangleAlert size={18} /><span>{lowStock.length} פריטים מתחת לסף המלאי המינימלי</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {lowStock.map((r) => (
-              <span key={r.item.id} className="bg-rose-500/10 border border-rose-500/25 rounded-lg px-3 py-1.5 text-sm text-rose-300">
+              <span key={r.item.id} className="bg-white border border-rose-200 rounded-lg px-3 py-1.5 text-sm text-rose-700">
                 {r.item.name}: <b>{r.total}</b> / סף {r.item.minThreshold}
               </span>
             ))}
@@ -1325,10 +1324,10 @@ function Dashboard({ data, onExport, isAdmin }) {
 
       <div className="grid grid-cols-2 gap-3.5 sm:gap-4 sm:grid-cols-4">
         {[
-          { label: "סה\"כ יחידות במלאי", value: totalUnits, icon: Package, iconCls: "bg-sky-500/15 text-sky-300" },
-          { label: "פריטים בקטלוג", value: items.length, icon: Database, iconCls: "bg-violet-500/15 text-violet-300" },
-          { label: "מיקומים פעילים", value: locations.length, icon: Warehouse, iconCls: "bg-amber-500/15 text-amber-300" },
-          { label: "מתחת לסף", value: lowStock.length, icon: TriangleAlert, iconCls: "bg-rose-500/15 text-rose-300", valueCls: "text-rose-400" },
+          { label: "סה\"כ יחידות במלאי", value: totalUnits, icon: Package, iconCls: "bg-sky-100 text-sky-700" },
+          { label: "פריטים בקטלוג", value: items.length, icon: Database, iconCls: "bg-violet-100 text-violet-700" },
+          { label: "מיקומים פעילים", value: locations.length, icon: Warehouse, iconCls: "bg-amber-100 text-amber-800" },
+          { label: "מתחת לסף", value: lowStock.length, icon: TriangleAlert, iconCls: "bg-rose-100 text-rose-700", valueCls: "text-rose-400" },
         ].map((kpi, i) => {
           const Icon = kpi.icon;
           return (
@@ -1337,22 +1336,22 @@ function Dashboard({ data, onExport, isAdmin }) {
               className={cardCls + " p-4 sm:p-6 min-w-0"}
             >
               <div className={`inline-flex p-2.5 rounded-2xl mb-4 ${kpi.iconCls}`}><Icon size={18} /></div>
-              <div className={`text-2xl sm:text-3xl font-bold leading-none tracking-tight ${kpi.valueCls || "text-zinc-50"}`}>{kpi.value.toLocaleString()}</div>
-              <div className="text-zinc-400 text-xs sm:text-sm mt-2 leading-snug font-semibold tracking-tight">{kpi.label}</div>
+              <div className={`text-2xl sm:text-3xl font-bold leading-none tracking-tight ${kpi.valueCls || "text-slate-800"}`}>{kpi.value.toLocaleString()}</div>
+              <div className="text-slate-400 text-xs sm:text-sm mt-2 leading-snug font-semibold tracking-tight">{kpi.label}</div>
             </div>
           );
         })}
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h3 className="font-bold text-zinc-100">מבט-על מלאי לפי פריט ומיקום</h3>
+          <h3 className="font-bold text-slate-800">מבט-על מלאי לפי פריט ומיקום</h3>
           <button onClick={onExport} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Download size={16} /> ייצוא ל-CSV</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-white/[0.03] text-zinc-300 text-right">
+              <tr className="bg-gray-50 text-slate-500 text-right">
                 <th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">קטגוריה</th>
                 <th className="px-5 py-4 font-medium">מחסן מרכזי</th><th className="px-5 py-4 font-medium">ברכבים</th>
                 <th className="px-5 py-4 font-medium">סה"כ</th><th className="px-5 py-4 font-medium">סטטוס</th>
@@ -1361,8 +1360,8 @@ function Dashboard({ data, onExport, isAdmin }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.item.id} className="border-t">
-                  <td className="px-5 py-4 font-medium text-zinc-100">{r.item.name}</td>
-                  <td className="px-5 py-4 text-zinc-300">{CATEGORIES[r.item.category]}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800">{r.item.name}</td>
+                  <td className="px-5 py-4 text-slate-500">{CATEGORIES[r.item.category]}</td>
                   <td className="px-5 py-4">{r.whQty} {r.item.unit}</td>
                   <td className="px-5 py-4">{r.vehicleQty} {r.item.unit}</td>
                   <td className="px-5 py-4 font-bold">{r.total} {r.item.unit}</td>
@@ -1475,7 +1474,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl text-zinc-100">פריטים</h2>
+        <h2 className="font-bold text-xl text-slate-800">פריטים</h2>
         <div className="flex items-center gap-2">
           {isAdmin && fragranceGroupList.length > 0 && (
             <button onClick={() => setRepackFor("")} className={btnGhost + " flex items-center gap-1.5 !py-2"}><Calculator size={16} /> המרת אריזות / מזיגה</button>
@@ -1486,12 +1485,12 @@ function ItemsScreen({ data, refresh, isAdmin }) {
 
       {fragranceGroupList.length > 0 && (
         <div className="mb-6">
-          <h3 className="font-bold text-zinc-100 mb-2">תמציות ריח - כרטיס אחד לכל ריח</h3>
+          <h3 className="font-bold text-slate-800 mb-2">תמציות ריח - כרטיס אחד לכל ריח</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {fragranceGroupList.map((g) => (
-              <div key={g.name} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
+              <div key={g.name} className="bg-white rounded-2xl border shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="font-bold text-zinc-100">{g.name}</div>
+                  <div className="font-bold text-slate-800">{g.name}</div>
                   <Badge tone="violet">סה"כ {g.totalWeighted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ל'/ק"ג</Badge>
                 </div>
                 <div className="space-y-1.5 mb-2">
@@ -1499,11 +1498,11 @@ function ItemsScreen({ data, refresh, isAdmin }) {
                     const item = data.items.find((i) => i.id === s.itemId);
                     return (
                       <div key={s.itemId} className="flex items-center justify-between text-sm group">
-                        <span className="text-zinc-300">{s.unit}</span>
+                        <span className="text-slate-500">{s.unit}</span>
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-zinc-200">{s.qty} יח'</span>
+                          <span className="font-medium text-slate-700">{s.qty} יח'</span>
                           {isAdmin && item && (
-                            <button onClick={() => openEdit(item)} className="text-zinc-500 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition" title="עריכת אריזה זו"><Pencil size={13} /></button>
+                            <button onClick={() => openEdit(item)} className="text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition" title="עריכת אריזה זו"><Pencil size={13} /></button>
                           )}
                         </div>
                       </div>
@@ -1519,11 +1518,11 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         </div>
       )}
 
-      <h3 className="font-bold text-zinc-100 mb-2">מכשירים</h3>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+      <h3 className="font-bold text-slate-800 mb-2">מכשירים</h3>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">שם פריט</th><th className="px-5 py-4 font-medium">SKU ספק</th>
               <th className="px-5 py-4 font-medium">יחידת מידה</th><th className="px-5 py-4 font-medium">סף מינימום</th>
               <th className="px-5 py-4 font-medium">עלות נחיתה ליח'</th><th className="px-4 py-2"></th>
@@ -1531,23 +1530,23 @@ function ItemsScreen({ data, refresh, isAdmin }) {
           </thead>
           <tbody>
             {deviceItems.map((it) => (
-              <tr key={it.id} className="border-t hover:bg-white/[0.04] cursor-pointer" onClick={() => isAdmin && openEdit(it)}>
-                <td className="px-5 py-4 font-medium text-zinc-100">{it.name}</td>
-                <td className="px-5 py-4 text-zinc-300">{it.supplierSku || <span className="text-zinc-600">-</span>}</td>
+              <tr key={it.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => isAdmin && openEdit(it)}>
+                <td className="px-5 py-4 font-medium text-slate-800">{it.name}</td>
+                <td className="px-5 py-4 text-slate-500">{it.supplierSku || <span className="text-slate-300">-</span>}</td>
                 <td className="px-5 py-4">{it.unit}</td>
                 <td className="px-5 py-4">{it.minThreshold}</td>
-                <td className="px-5 py-4">{it.unitCost ? `₪${Number(it.unitCost).toFixed(2)}` : <span className="text-zinc-600">-</span>}</td>
+                <td className="px-5 py-4">{it.unitCost ? `₪${Number(it.unitCost).toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
                 <td className="px-5 py-4 text-left" onClick={(e) => e.stopPropagation()}>
                   {isAdmin && (
                     <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => openEdit(it)} className="text-zinc-500 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
-                      <button onClick={() => removeItem(it.id)} className="text-zinc-500 hover:text-rose-600" title="מחיקה"><Trash2 size={16} /></button>
+                      <button onClick={() => openEdit(it)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
+                      <button onClick={() => removeItem(it.id)} className="text-gray-400 hover:text-rose-600" title="מחיקה"><Trash2 size={16} /></button>
                     </div>
                   )}
                 </td>
               </tr>
             ))}
-            {deviceItems.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-zinc-300">אין מכשירים עדיין</td></tr>}
+            {deviceItems.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">אין מכשירים עדיין</td></tr>}
           </tbody>
         </table>
       </div>
@@ -1577,20 +1576,20 @@ function ItemsScreen({ data, refresh, isAdmin }) {
               <select className={inputCls} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
                 {PACKAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
               </select>
-              <div className="text-xs text-zinc-300 mt-1">ניתן להוסיף אותו ריח כמה פעמים בגדלים שונים - כל גודל יתנהל כמלאי נפרד, ויסוכם יחד בתצוגה למעלה.</div>
+              <div className="text-xs text-slate-500 mt-1">ניתן להוסיף אותו ריח כמה פעמים בגדלים שונים - כל גודל יתנהל כמלאי נפרד, ויסוכם יחד בתצוגה למעלה.</div>
             </Field>
           ) : (
-            <Field label="יחידת מידה"><input className={inputCls + " bg-white/[0.02] text-zinc-500"} value="יחידה" disabled readOnly /></Field>
+            <Field label="יחידת מידה"><input className={inputCls + " bg-gray-100 text-slate-400"} value="יחידה" disabled readOnly /></Field>
           )}
           <Field label="כינוי / SKU אצל הספק (לא חובה)"><input className={inputCls} value={form.supplierSku} onChange={(e) => setForm({ ...form, supplierSku: e.target.value })} placeholder='למשל: A300' /></Field>
           <div className="border-t pt-3 mt-1 mb-1">
-            <div className="text-xs font-bold text-zinc-300 mb-2">מלאי בפועל במחסן המרכזי (מספר יחידות, לא היחידה עצמה)</div>
+            <div className="text-xs font-bold text-slate-500 mb-2">מלאי בפועל במחסן המרכזי (מספר יחידות, לא היחידה עצמה)</div>
             <Field label={`כמה ${form.category === "consumable" ? form.unit || "יחידות" : "יחידות"} יש כרגע במחסן`}>
               <input type="number" min="0" className={inputCls} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} placeholder="0" />
             </Field>
           </div>
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: e.target.value })} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} className={btnPrimary + " w-full"}>שמירת פריט</button>
         </Modal>
       )}
@@ -1622,18 +1621,18 @@ function ItemsScreen({ data, refresh, isAdmin }) {
               </select>
             </Field>
           ) : (
-            <Field label="יחידת מידה"><input className={inputCls + " bg-white/[0.02] text-zinc-500"} value="יחידה" disabled readOnly /></Field>
+            <Field label="יחידת מידה"><input className={inputCls + " bg-gray-100 text-slate-400"} value="יחידה" disabled readOnly /></Field>
           )}
           <Field label="כינוי / SKU אצל הספק (לא חובה)"><input className={inputCls} value={editForm.supplierSku} onChange={(e) => setEditForm({ ...editForm, supplierSku: e.target.value })} placeholder='למשל: A300' /></Field>
           <div className="border-t pt-3 mt-1 mb-1">
-            <div className="text-xs font-bold text-zinc-300 mb-2">מלאי בפועל במחסן המרכזי (מספר יחידות, לא היחידה עצמה)</div>
+            <div className="text-xs font-bold text-slate-500 mb-2">מלאי בפועל במחסן המרכזי (מספר יחידות, לא היחידה עצמה)</div>
             <Field label={`כמה ${editForm.category === "consumable" ? editForm.unit || "יחידות" : "יחידות"} יש כרגע במחסן`}>
               <input type="number" min="0" className={inputCls} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
             </Field>
           </div>
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={editForm.minThreshold} onChange={(e) => setEditForm({ ...editForm, minThreshold: e.target.value })} /></Field>
           <Field label="עלות נחיתה ליח' (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={editForm.unitCost} onChange={(e) => setEditForm({ ...editForm, unitCost: e.target.value })} placeholder="לא הוגדר" /></Field>
-          {editError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
@@ -1733,29 +1732,29 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
       {group && (
         <>
           <div className="mb-3">
-            <div className="text-sm font-bold text-zinc-200 mb-1">אריזות לגריעה מהמחסן (פתיחה)</div>
-            <p className="text-xs text-zinc-300 mb-2">רק אריזות גדולות (ג'ריקן 25 ליטר / חבית 5 ליטר) עם מלאי גדול מ-0 מוצגות כאן. אריזות קטנות ניתן רק להוסיף למטה.</p>
+            <div className="text-sm font-bold text-slate-700 mb-1">אריזות לגריעה מהמחסן (פתיחה)</div>
+            <p className="text-xs text-slate-500 mb-2">רק אריזות גדולות (ג'ריקן 25 ליטר / חבית 5 ליטר) עם מלאי גדול מ-0 מוצגות כאן. אריזות קטנות ניתן רק להוסיף למטה.</p>
             <div className="space-y-2">
               {group.sizes.filter((s) => canOpenForRepack(itemFor(s.itemId)) && s.qty > 0).map((s) => (
                 <div key={s.itemId} className="flex items-center gap-2">
-                  <span className="text-sm text-zinc-300 w-28 shrink-0">{s.unit}</span>
-                  <span className="text-xs text-zinc-300 w-20 shrink-0">זמין: {s.qty}</span>
+                  <span className="text-sm text-slate-500 w-28 shrink-0">{s.unit}</span>
+                  <span className="text-xs text-slate-500 w-20 shrink-0">זמין: {s.qty}</span>
                   <input type="number" min="0" max={s.qty} className={inputCls + " !py-1.5"} value={consumedQtys[s.itemId] || ""} onChange={(e) => setConsumedQtys({ ...consumedQtys, [s.itemId]: e.target.value })} placeholder="0" />
                 </div>
               ))}
               {group.sizes.filter((s) => canOpenForRepack(itemFor(s.itemId)) && s.qty > 0).length === 0 && (
-                <div className="text-sm text-zinc-300 py-2">אין מלאי אריזה גדולה (ג'ריקן/חבית) זמין לריח הזה כרגע - אי אפשר לבצע המרה עד שיתקבל מלאי גדול.</div>
+                <div className="text-sm text-slate-500 py-2">אין מלאי אריזה גדולה (ג'ריקן/חבית) זמין לריח הזה כרגע - אי אפשר לבצע המרה עד שיתקבל מלאי גדול.</div>
               )}
             </div>
           </div>
 
           <div className="mb-3">
-            <div className="text-sm font-bold text-zinc-200 mb-1">אריזות להוספה למלאי (מזיגה)</div>
-            <p className="text-xs text-zinc-300 mb-2">רק אריזות קטנות - ליטר, חצי ליטר, 250 מ"ל - נוצרות מהמזיגה.</p>
+            <div className="text-sm font-bold text-slate-700 mb-1">אריזות להוספה למלאי (מזיגה)</div>
+            <p className="text-xs text-slate-500 mb-2">רק אריזות קטנות - ליטר, חצי ליטר, 250 מ"ל - נוצרות מהמזיגה.</p>
             <div className="space-y-2">
               {SMALL_PACKAGES.map((size) => (
                 <div key={size} className="flex items-center gap-2">
-                  <span className="text-sm text-zinc-300 w-28 shrink-0">{size}{!existingUnits.includes(size) && <span className="text-xs text-amber-500"> (חדש)</span>}</span>
+                  <span className="text-sm text-slate-500 w-28 shrink-0">{size}{!existingUnits.includes(size) && <span className="text-xs text-amber-500"> (חדש)</span>}</span>
                   <input type="number" min="0" className={inputCls + " !py-1.5"} value={producedQtys[size] || ""} onChange={(e) => setProducedQtys({ ...producedQtys, [size]: e.target.value })} placeholder="0" />
                 </div>
               ))}
@@ -1763,12 +1762,12 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
           </div>
 
           {(consumedLines.length > 0 || producedLines.length > 0) && (
-            <div className="bg-white/[0.04] rounded-xl p-3 mb-3 text-sm">
-              <div className="flex items-center justify-between"><span className="text-zinc-300">נגרע</span><span className="font-medium">{consumedVolume.toLocaleString()} ל'/ק"ג</span></div>
-              <div className="flex items-center justify-between"><span className="text-zinc-300">מופק</span><span className="font-medium">{producedVolume.toLocaleString()} ל'/ק"ג</span></div>
+            <div className="bg-gray-50 rounded-xl p-3 mb-3 text-sm">
+              <div className="flex items-center justify-between"><span className="text-slate-500">נגרע</span><span className="font-medium">{consumedVolume.toLocaleString()} ל'/ק"ג</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-500">מופק</span><span className="font-medium">{producedVolume.toLocaleString()} ל'/ק"ג</span></div>
               <div className="flex items-center justify-between border-t mt-1 pt-1">
-                <span className="text-zinc-300">הפרש (איבוד/רווח מזיגה)</span>
-                <span className={`font-bold ${Math.abs(volumeDiff) > consumedVolume * 0.05 ? "text-amber-600" : "text-zinc-200"}`}>{volumeDiff > 0 ? "+" : ""}{volumeDiff.toLocaleString(undefined, { maximumFractionDigits: 2 })} ל'/ק"ג</span>
+                <span className="text-slate-500">הפרש (איבוד/רווח מזיגה)</span>
+                <span className={`font-bold ${Math.abs(volumeDiff) > consumedVolume * 0.05 ? "text-amber-600" : "text-slate-700"}`}>{volumeDiff > 0 ? "+" : ""}{volumeDiff.toLocaleString(undefined, { maximumFractionDigits: 2 })} ל'/ק"ג</span>
               </div>
             </div>
           )}
@@ -1777,7 +1776,7 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
         </>
       )}
 
-      {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
       <button onClick={submit} disabled={busy || !group} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}ביצוע ההמרה</button>
     </Modal>
   );
@@ -1816,23 +1815,23 @@ function LocationsScreen({ data, refresh, isAdmin, onOpenFile }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl text-zinc-100">מיקומים</h2>
+        <h2 className="font-bold text-xl text-slate-800">מיקומים</h2>
         {isAdmin && <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> מיקום חדש</button>}
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {data.locations.map((loc) => (
-          <div key={loc.id} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 flex items-center gap-3 cursor-pointer hover:shadow-md transition" onClick={() => onOpenFile(loc.id)}>
-            <div className={`p-2.5 rounded-xl ${loc.type === "warehouse" ? "bg-sky-500/15 text-sky-300" : "bg-amber-500/15 text-amber-300"}`}>
+          <div key={loc.id} className="bg-white rounded-2xl border shadow-sm p-5 flex items-center gap-3 cursor-pointer hover:shadow-md transition" onClick={() => onOpenFile(loc.id)}>
+            <div className={`p-2.5 rounded-xl ${loc.type === "warehouse" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-800"}`}>
               {loc.type === "warehouse" ? <Building2 size={20} /> : <Truck size={20} />}
             </div>
             <div className="flex-1">
-              <div className="font-bold text-zinc-100">{loc.name}</div>
-              <div className="text-sm text-zinc-300">{loc.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {stockAt(loc.id)} יח' סה"כ</div>
+              <div className="font-bold text-slate-800">{loc.name}</div>
+              <div className="text-sm text-slate-500">{loc.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {stockAt(loc.id)} יח' סה"כ</div>
             </div>
             {isAdmin && (
               <button
                 onClick={(e) => { e.stopPropagation(); openEdit(loc); }}
-                className="p-1.5 rounded-full hover:bg-white/[0.08] text-zinc-500 hover:text-zinc-200"
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-slate-700"
                 title="עריכת מיקום"
               >
                 <Pencil size={16} />
@@ -1850,7 +1849,7 @@ function LocationsScreen({ data, refresh, isAdmin, onOpenFile }) {
             </select>
           </Field>
           <Field label="שם המיקום"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת מיקום</button>
         </Modal>
       )}
@@ -1863,7 +1862,7 @@ function LocationsScreen({ data, refresh, isAdmin, onOpenFile }) {
             </select>
           </Field>
           <Field label="שם המיקום"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} autoFocus /></Field>
-          {editError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
@@ -1896,17 +1895,17 @@ function LocationFile({ data, locationId, onBack, isAdmin, onQuickAction }) {
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-1 text-zinc-300 hover:text-zinc-100 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת מיקומים</button>
+      <button onClick={onBack} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת מיקומים</button>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${location.type === "warehouse" ? "bg-sky-500/15 text-sky-300" : "bg-amber-500/15 text-amber-300"}`}>
+            <div className={`p-2.5 rounded-xl ${location.type === "warehouse" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-800"}`}>
               {location.type === "warehouse" ? <Building2 size={22} /> : <Truck size={22} />}
             </div>
             <div>
-              <h2 className="font-bold text-xl text-zinc-100">{location.name}</h2>
-              <p className="text-zinc-300 text-sm">{location.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {totalUnits} יח' סה"כ במלאי כרגע</p>
+              <h2 className="font-bold text-xl text-slate-800">{location.name}</h2>
+              <p className="text-slate-500 text-sm">{location.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {totalUnits} יח' סה"כ במלאי כרגע</p>
             </div>
           </div>
           {isAdmin && (
@@ -1918,11 +1917,11 @@ function LocationFile({ data, locationId, onBack, isAdmin, onQuickAction }) {
         </div>
       </div>
 
-      <h3 className="font-bold text-zinc-100 mb-2">מה יש כרגע פיזית ב{location.type === "warehouse" ? "מחסן" : "רכב"}</h3>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden mb-5">
+      <h3 className="font-bold text-slate-800 mb-2">מה יש כרגע פיזית ב{location.type === "warehouse" ? "מחסן" : "רכב"}</h3>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-5">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">קטגוריה</th>
               <th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">מתחת לסף?</th>
             </tr>
@@ -1930,22 +1929,22 @@ function LocationFile({ data, locationId, onBack, isAdmin, onQuickAction }) {
           <tbody>
             {stockRows.map((r) => (
               <tr key={r.item.id} className="border-t">
-                <td className="px-5 py-4 font-medium text-zinc-100">{r.item.name}</td>
+                <td className="px-5 py-4 font-medium text-slate-800">{r.item.name}</td>
                 <td className="px-5 py-4"><Badge tone={r.item.category === "device" ? "sky" : "violet"}>{CATEGORIES[r.item.category]}</Badge></td>
                 <td className="px-5 py-4 font-bold">{r.qty} {r.item.unit}</td>
-                <td className="px-5 py-4">{r.qty < r.item.minThreshold ? <Badge tone="rose">מתחת לסף</Badge> : <span className="text-zinc-600">-</span>}</td>
+                <td className="px-5 py-4">{r.qty < r.item.minThreshold ? <Badge tone="rose">מתחת לסף</Badge> : <span className="text-slate-300">-</span>}</td>
               </tr>
             ))}
-            {stockRows.length === 0 && <tr><td colSpan={4} className="px-5 py-8 text-center text-zinc-300">אין כרגע שום פריט במיקום הזה</td></tr>}
+            {stockRows.length === 0 && <tr><td colSpan={4} className="px-5 py-8 text-center text-slate-500">אין כרגע שום פריט במיקום הזה</td></tr>}
           </tbody>
         </table>
       </div>
 
-      <h3 className="font-bold text-zinc-100 mb-2">תנועות מלאי אחרונות</h3>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+      <h3 className="font-bold text-slate-800 mb-2">תנועות מלאי אחרונות</h3>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">כיוון</th>
               <th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th>
               <th className="px-5 py-4 font-medium">סוג</th><th className="px-5 py-4 font-medium">מול מיקום</th><th className="px-5 py-4 font-medium">הערה</th>
@@ -1956,17 +1955,17 @@ function LocationFile({ data, locationId, onBack, isAdmin, onQuickAction }) {
               const item = data.items.find((i) => i.id === t.itemId);
               return (
                 <tr key={t.id} className="border-t">
-                  <td className="px-5 py-4 text-zinc-300 whitespace-nowrap">{fmtDate(t.date)}</td>
+                  <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
                   <td className="px-5 py-4"><Badge tone={direction(t) === "נכנס" ? "emerald" : "amber"}>{direction(t)}</Badge></td>
-                  <td className="px-5 py-4 font-medium text-zinc-100">{item?.name || "-"}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800">{item?.name || "-"}</td>
                   <td className="px-5 py-4">{t.qty}</td>
                   <td className="px-5 py-4"><Badge tone={AUDIT_TX_LABELS[t.type]?.color}>{AUDIT_TX_LABELS[t.type]?.label}</Badge></td>
-                  <td className="px-5 py-4 text-zinc-300">{otherLocationName(t)}</td>
-                  <td className="px-5 py-4 text-zinc-300">{t.note || "-"}</td>
+                  <td className="px-5 py-4 text-slate-500">{otherLocationName(t)}</td>
+                  <td className="px-5 py-4 text-slate-500">{t.note || "-"}</td>
                 </tr>
               );
             })}
-            {history.length === 0 && <tr><td colSpan={7} className="px-5 py-8 text-center text-zinc-300">אין עדיין תנועות מלאי למיקום הזה</td></tr>}
+            {history.length === 0 && <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-500">אין עדיין תנועות מלאי למיקום הזה</td></tr>}
           </tbody>
         </table>
       </div>
@@ -2001,9 +2000,33 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
+
+  // "זיכרון מחירים" ללקוח: מוצא את התנועה האחרונה (install) שבה הלקוח הנוכחי
+  // קנה בדיוק את הפריט הזה, ומחזיר את המחיר שנגבה בפועל אז (unit_price נשמר
+  // תמיד כולל מע"מ). ברירת המחדל של המחיר בשורה חדשה היא תמיד המחיר הזה אם
+  // קיים - המשתמש עדיין חופשי לשנות אותו ידנית לפני השמירה.
+  const lastPriceFor = (custId, itemId) => {
+    if (!custId || !itemId) return null;
+    const history = data.transactions
+      .filter((t) => t.customerId === custId && t.itemId === itemId && t.type === "install" && t.unitPrice != null)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    return history[0]?.unitPrice ?? null;
+  };
+
   const onPickItem = (id, itemId) => {
     const it = data.items.find((i) => i.id === itemId);
-    setLine(id, { itemId, unitPrice: it?.unitCost ? String(Math.round(it.unitCost * 1.4 * 100) / 100) : "" });
+    const lastPriceInclVat = lastPriceFor(customerId, itemId);
+    let unitPrice;
+    if (lastPriceInclVat != null) {
+      // lastPriceInclVat נשמר כולל מע"מ - ממירים לפי מצב התצוגה הנוכחי של הטופס
+      // (לפני/אחרי מע"מ) כדי שהשדה יציג מספר עקבי עם שאר השורות בטופס.
+      const vatPctNow = Number(vatRate) || 0;
+      const converted = priceMode === "incl" ? lastPriceInclVat : lastPriceInclVat / (1 + vatPctNow / 100);
+      unitPrice = String(Math.round(converted * 100) / 100);
+    } else {
+      unitPrice = it?.unitCost ? String(Math.round(it.unitCost * 1.4 * 100) / 100) : "";
+    }
+    setLine(id, { itemId, unitPrice, lastPriceInclVat });
   };
 
   const stockOf = (itemId) => (sourceLocationId ? data.stock[`${itemId}|${sourceLocationId}`] || 0 : 0);
@@ -2087,10 +2110,10 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
     const customer = data.customers.find((c) => c.id === success.customerId);
     return (
       <div className="max-w-lg mx-auto text-center py-10">
-        <div className="w-16 h-16 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center mx-auto mb-4"><CircleCheck size={32} /></div>
-        <h2 className="font-bold text-xl text-zinc-100 mb-1">ההזמנה נשמרה בהצלחה</h2>
-        <p className="text-zinc-300 mb-1">עבור {customer?.name} · סה"כ ₪{success.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-        <p className="text-zinc-300 text-sm mb-6">המלאי עודכן אוטומטית - אין צורך בפעולה נוספת.</p>
+        <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4"><CircleCheck size={32} /></div>
+        <h2 className="font-bold text-xl text-slate-800 mb-1">ההזמנה נשמרה בהצלחה</h2>
+        <p className="text-slate-500 mb-1">עבור {customer?.name} · סה"כ ₪{success.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+        <p className="text-slate-500 text-sm mb-6">המלאי עודכן אוטומטית - אין צורך בפעולה נוספת.</p>
         <div className="flex gap-2 justify-center">
           <button onClick={newSale} className={btnPrimary}>הזמנה חדשה</button>
           <button onClick={() => onOpenCustomer(success.customerId)} className={btnGhost}>צפייה בתיק הלקוח</button>
@@ -2101,12 +2124,12 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
 
   return (
     <div className="max-w-2xl">
-      <h2 className="font-bold text-xl text-zinc-100 mb-1">מכירה / הזמנה חדשה</h2>
-      <p className="text-zinc-300 text-sm mb-4">בחרו לקוח, הוסיפו שורות מוצרים (מכשירים ותמציות), ושמרו - המלאי במחסן המרכזי יתעדכן אוטומטית, בלי צורך בעדכון ידני.</p>
+      <h2 className="font-bold text-xl text-slate-800 mb-1">מכירה / הזמנה חדשה</h2>
+      <p className="text-slate-500 text-sm mb-4">בחרו לקוח, הוסיפו שורות מוצרים (מכשירים ותמציות), ושמרו - המלאי במחסן המרכזי יתעדכן אוטומטית, בלי צורך בעדכון ידני.</p>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-bold text-zinc-200">לקוח</span>
+          <span className="text-sm font-bold text-slate-700">לקוח</span>
           <button onClick={() => setNewCustomerMode(!newCustomerMode)} className="text-xs text-amber-600 hover:underline font-medium flex items-center gap-1"><Plus size={12} /> {newCustomerMode ? "בחירת לקוח קיים" : "לקוח חדש"}</button>
         </div>
         {!newCustomerMode ? (
@@ -2129,17 +2152,17 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
         )}
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
-        <span className="text-sm font-bold text-zinc-200 block mb-2">מקור המלאי</span>
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <span className="text-sm font-bold text-slate-700 block mb-2">מקור המלאי</span>
         <select className={inputCls} value={sourceLocationId} onChange={(e) => setSourceLocationId(e.target.value)}>
           {warehouse && <option value={warehouse.id}>{warehouse.name}</option>}
           {vehicles.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-bold text-zinc-200">שורות מוצרים</span>
+          <span className="text-sm font-bold text-slate-700">שורות מוצרים</span>
           <button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button>
         </div>
         <div className="space-y-2">
@@ -2155,46 +2178,51 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
                   </select>
                   <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
                   <input type="number" min="0" step="0.01" placeholder="מחיר (₪)" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
-                  {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-zinc-500 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
+                  {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
                 </div>
-                {l.itemId && <div className={`text-xs mt-0.5 ${overLimit ? "text-rose-500" : "text-zinc-300"}`}>זמין במקור שנבחר: {available}{overLimit ? " - לא מספיק!" : ""}</div>}
+                {l.itemId && <div className={`text-xs mt-0.5 ${overLimit ? "text-rose-500" : "text-slate-500"}`}>זמין במקור שנבחר: {available}{overLimit ? " - לא מספיק!" : ""}</div>}
+                {l.itemId && l.lastPriceInclVat != null && (
+                  <div className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
+                    <Banknote size={11} /> המחיר מולא אוטומטית לפי המחיר האחרון שנמכר ללקוח זה (₪{l.lastPriceInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })} כולל מע"מ) - ניתן לשנות ידנית
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
-        <span className="text-sm font-bold text-zinc-200 block mb-2">מע"מ</span>
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <span className="text-sm font-bold text-slate-700 block mb-2">מע"מ</span>
         <div className="flex gap-2 mb-3">
-          <button type="button" onClick={() => setPriceMode("excl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "excl" ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}>המחירים למעלה לפני מע"מ</button>
-          <button type="button" onClick={() => setPriceMode("incl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "incl" ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}>המחירים למעלה כוללים מע"מ</button>
+          <button type="button" onClick={() => setPriceMode("excl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "excl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למעלה לפני מע"מ</button>
+          <button type="button" onClick={() => setPriceMode("incl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "incl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למעלה כוללים מע"מ</button>
         </div>
         <Field label={'אחוז מע"מ נוכחי'}>
           <input type="number" min="0" step="0.1" className={inputCls + " w-28"} value={vatRate} onChange={(e) => setVatRate(e.target.value)} />
         </Field>
       </div>
 
-      <div className="bg-white/[0.04] rounded-2xl p-4 mb-4 space-y-1.5">
+      <div className="bg-gray-50 rounded-2xl p-4 mb-4 space-y-1.5">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-zinc-300">סכום לפני מע"מ</span>
-          <span className="font-medium text-zinc-200">₪{preVatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          <span className="text-slate-500">סכום לפני מע"מ</span>
+          <span className="font-medium text-slate-700">₪{preVatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-zinc-300">מע"מ ({vatPct}%)</span>
-          <span className="font-medium text-zinc-200">₪{vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          <span className="text-slate-500">מע"מ ({vatPct}%)</span>
+          <span className="font-medium text-slate-700">₪{vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
         </div>
         <div className="flex items-center justify-between pt-1.5 border-t">
-          <span className="font-bold text-zinc-100">סה"כ הזמנה (כולל מע"מ)</span>
-          <span className="font-bold text-zinc-100 text-lg">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          <span className="font-bold text-slate-800">סה"כ הזמנה (כולל מע"מ)</span>
+          <span className="font-bold text-slate-800 text-lg">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
         </div>
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
-        <span className="text-sm font-bold text-zinc-200 block mb-2">תשלום</span>
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <span className="text-sm font-bold text-slate-700 block mb-2">תשלום</span>
         <div className="flex gap-2 mb-3">
-          <button type="button" onClick={() => setPaidNow(true)} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${paidNow ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}>שולם עכשיו במלואו</button>
-          <button type="button" onClick={() => setPaidNow(false)} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${!paidNow ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}>מכירה בחשבון פתוח (חוב)</button>
+          <button type="button" onClick={() => setPaidNow(true)} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${paidNow ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>שולם עכשיו במלואו</button>
+          <button type="button" onClick={() => setPaidNow(false)} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${!paidNow ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>מכירה בחשבון פתוח (חוב)</button>
         </div>
         {!paidNow && (
           <Field label="תנאי תשלום - מספר ימים עד למועד הפירעון">
@@ -2204,16 +2232,16 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
               <option value="30">שוטף + 30</option>
               <option value="60">שוטף + 60</option>
             </select>
-            <p className="text-xs text-zinc-300 mt-1.5">היתרה תופיע כחוב פתוח במסך "חובות וגבייה" עד שתירשם תשלום מולה.</p>
+            <p className="text-xs text-slate-500 mt-1.5">היתרה תופיע כחוב פתוח במסך "חובות וגבייה" עד שתירשם תשלום מולה.</p>
           </Field>
         )}
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
 
-      {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
       <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2 text-lg py-3.5"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת הזמנה ועדכון מלאי אוטומטי</button>
     </div>
   );
@@ -2253,13 +2281,13 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl text-zinc-100">לקוחות</h2>
+        <h2 className="font-bold text-xl text-slate-800">לקוחות</h2>
         {isAdmin && <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> לקוח חדש</button>}
       </div>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">שם לקוח / עסק</th><th className="px-5 py-4 font-medium">סוג</th>
               <th className="px-5 py-4 font-medium">טלפון</th><th className="px-5 py-4 font-medium">אימייל</th>
               <th className="px-5 py-4 font-medium">כתובת</th><th className="px-5 py-4 font-medium">איש קשר</th><th className="px-4 py-2"></th>
@@ -2267,22 +2295,22 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
           </thead>
           <tbody>
             {data.customers.map((c) => (
-              <tr key={c.id} className="border-t hover:bg-white/[0.04]">
-                <td className="px-5 py-4 font-medium text-zinc-100">{c.name}</td>
+              <tr key={c.id} className="border-t hover:bg-gray-50">
+                <td className="px-5 py-4 font-medium text-slate-800">{c.name}</td>
                 <td className="px-5 py-4"><Badge tone={CLIENT_TYPES[c.clientType]?.tone}>{CLIENT_TYPES[c.clientType]?.label}</Badge></td>
-                <td className="px-5 py-4 text-zinc-300">{c.phone || "-"}</td>
-                <td className="px-5 py-4 text-zinc-300">{c.email || "-"}</td>
-                <td className="px-5 py-4 text-zinc-300">{c.address}</td>
-                <td className="px-5 py-4 text-zinc-300">{c.contact}</td>
+                <td className="px-5 py-4 text-slate-500">{c.phone || "-"}</td>
+                <td className="px-5 py-4 text-slate-500">{c.email || "-"}</td>
+                <td className="px-5 py-4 text-slate-500">{c.address}</td>
+                <td className="px-5 py-4 text-slate-500">{c.contact}</td>
                 <td className="px-5 py-4 text-left">
                   <div className="flex items-center gap-3 justify-end">
-                    {isAdmin && <button onClick={() => openEdit(c)} className="text-zinc-500 hover:text-amber-600" title="עריכה"><Pencil size={15} /></button>}
+                    {isAdmin && <button onClick={() => openEdit(c)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={15} /></button>}
                     <button onClick={() => onOpenFile(c.id)} className="text-amber-600 hover:underline font-medium">תיק לקוח</button>
                   </div>
                 </td>
               </tr>
             ))}
-            {data.customers.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-zinc-300">אין לקוחות עדיין</td></tr>}
+            {data.customers.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">אין לקוחות עדיין</td></tr>}
           </tbody>
         </table>
       </div>
@@ -2299,7 +2327,7 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
           <Field label="אימייל"><input type="email" className={inputCls} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
           <Field label="כתובת"><input className={inputCls} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
           <Field label="איש קשר"><input className={inputCls} value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת לקוח</button>
         </Modal>
       )}
@@ -2316,7 +2344,7 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
           <Field label="אימייל"><input type="email" className={inputCls} value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></Field>
           <Field label="כתובת"><input className={inputCls} value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} /></Field>
           <Field label="איש קשר"><input className={inputCls} value={editForm.contact} onChange={(e) => setEditForm({ ...editForm, contact: e.target.value })} /></Field>
-          {editError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
@@ -2337,16 +2365,16 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-1 text-zinc-300 hover:text-zinc-100 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת לקוחות</button>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
+      <button onClick={onBack} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת לקוחות</button>
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-start justify-between flex-wrap gap-2">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h2 className="font-bold text-xl text-zinc-100">{customer.name}</h2>
+              <h2 className="font-bold text-xl text-slate-800">{customer.name}</h2>
               <Badge tone={CLIENT_TYPES[customer.clientType]?.tone}>{CLIENT_TYPES[customer.clientType]?.label}</Badge>
             </div>
-            <p className="text-zinc-300 mt-1">{customer.address}</p>
-            <p className="text-zinc-300">{customer.contact} {customer.phone && `· ${customer.phone}`} {customer.email && `· ${customer.email}`}</p>
+            <p className="text-slate-500 mt-1">{customer.address}</p>
+            <p className="text-slate-500">{customer.contact} {customer.phone && `· ${customer.phone}`} {customer.email && `· ${customer.email}`}</p>
           </div>
           <div className="flex items-center gap-2">
             {isAdmin && onStartSale && <button onClick={() => onStartSale(customer.id)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><ShoppingCart size={16} /> הזמנה חדשה</button>}
@@ -2356,16 +2384,16 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5"><div className="text-zinc-300 text-sm mb-1">סה"כ שולם</div><div className="text-2xl font-bold text-zinc-100">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5"><div className="text-zinc-300 text-sm mb-1">מכשירים שנרכשו</div><div className="text-2xl font-bold text-zinc-100">{deviceCount}</div></div>
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5"><div className="text-zinc-300 text-sm mb-1">תמציות שנרכשו</div><div className="text-2xl font-bold text-zinc-100">{consumableCount}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ שולם</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מכשירים שנרכשו</div><div className="text-2xl font-bold text-slate-800">{deviceCount}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">תמציות שנרכשו</div><div className="text-2xl font-bold text-slate-800">{consumableCount}</div></div>
       </div>
 
-      <h3 className="font-bold text-zinc-100 mb-2">היסטוריית הזמנות ורכישות</h3>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+      <h3 className="font-bold text-slate-800 mb-2">היסטוריית הזמנות ורכישות</h3>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">פריט</th>
               <th className="px-5 py-4 font-medium">קטגוריה</th><th className="px-5 py-4 font-medium">יחידה / גודל</th>
               <th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">מחיר ליח'</th>
@@ -2378,25 +2406,25 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
               const lineTotal = t.unitPrice != null ? t.unitPrice * t.qty : null;
               return (
                 <tr key={t.id} className="border-t">
-                  <td className="px-5 py-4 text-zinc-300 whitespace-nowrap">{fmtDate(t.date)}</td>
-                  <td className="px-5 py-4 font-medium text-zinc-100">{item?.name || "-"}</td>
+                  <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800">{item?.name || "-"}</td>
                   <td className="px-5 py-4">{item ? <Badge tone={item.category === "device" ? "sky" : "violet"}>{CATEGORIES[item.category]}</Badge> : "-"}</td>
-                  <td className="px-5 py-4 text-zinc-300">{item?.unit || "-"}</td>
+                  <td className="px-5 py-4 text-slate-500">{item?.unit || "-"}</td>
                   <td className="px-5 py-4">{t.qty}</td>
-                  <td className="px-5 py-4">{t.unitPrice != null ? `₪${t.unitPrice.toFixed(2)}` : <span className="text-zinc-600">-</span>}</td>
-                  <td className="px-5 py-4 font-bold">{lineTotal != null ? `₪${lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="text-zinc-600">-</span>}</td>
+                  <td className="px-5 py-4">{t.unitPrice != null ? `₪${t.unitPrice.toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
+                  <td className="px-5 py-4 font-bold">{lineTotal != null ? `₪${lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="text-slate-300">-</span>}</td>
                   <td className="px-5 py-4"><Badge tone={TX_TYPES[t.type]?.color}>{TX_TYPES[t.type]?.label}</Badge></td>
-                  <td className="px-5 py-4 text-zinc-300">{t.note || "-"}</td>
+                  <td className="px-5 py-4 text-slate-500">{t.note || "-"}</td>
                 </tr>
               );
             })}
-            {history.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-zinc-300">אין היסטוריה עדיין ללקוח זה</td></tr>}
+            {history.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">אין היסטוריה עדיין ללקוח זה</td></tr>}
           </tbody>
           {purchases.length > 0 && (
             <tfoot>
-              <tr className="border-t bg-white/[0.04]">
-                <td colSpan={6} className="px-5 py-4 text-left font-bold text-zinc-200">סה"כ שולם על ידי הלקוח</td>
-                <td colSpan={3} className="px-5 py-4 font-bold text-amber-300">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+              <tr className="border-t bg-gray-50">
+                <td colSpan={6} className="px-5 py-4 text-left font-bold text-slate-700">סה"כ שולם על ידי הלקוח</td>
+                <td colSpan={3} className="px-5 py-4 font-bold text-amber-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
               </tr>
             </tfoot>
           )}
@@ -2405,15 +2433,15 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
 
       {customerQuotes.length > 0 && (
         <>
-          <h3 className="font-bold text-zinc-100 mb-2 mt-4">הצעות מחיר</h3>
-          <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+          <h3 className="font-bold text-slate-800 mb-2 mt-4">הצעות מחיר</h3>
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
             <table className="w-full text-sm">
-              <thead><tr className="bg-white/[0.03] text-zinc-300 text-right"><th className="px-5 py-4 font-medium">מס' הצעה</th><th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">שורות</th><th className="px-5 py-4 font-medium">סה"כ</th><th className="px-5 py-4 font-medium">סטטוס</th></tr></thead>
+              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">מס' הצעה</th><th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">שורות</th><th className="px-5 py-4 font-medium">סה"כ</th><th className="px-5 py-4 font-medium">סטטוס</th></tr></thead>
               <tbody>
                 {customerQuotes.map((q) => (
                   <tr key={q.id} className="border-t">
-                    <td className="px-5 py-4 font-medium text-zinc-100">{q.quoteNumber}</td>
-                    <td className="px-5 py-4 text-zinc-300">{fmtDate(q.date)}</td>
+                    <td className="px-5 py-4 font-medium text-slate-800">{q.quoteNumber}</td>
+                    <td className="px-5 py-4 text-slate-500">{fmtDate(q.date)}</td>
                     <td className="px-5 py-4">{q.lines.length}</td>
                     <td className="px-5 py-4 font-bold">₪{q.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                     <td className="px-5 py-4"><Badge tone={QUOTE_STATUSES[q.status]?.tone}>{QUOTE_STATUSES[q.status]?.label}</Badge></td>
@@ -2537,14 +2565,14 @@ function TransactionScreen({ data, refresh, quickTx }) {
   if (!type) {
     return (
       <div>
-        <h2 className="font-bold text-xl text-zinc-100 mb-4">תנועת מלאי חדשה</h2>
+        <h2 className="font-bold text-xl text-slate-800 mb-4">תנועת מלאי חדשה</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {Object.entries(TX_TYPES).map(([key, cfg]) => {
             const Icon = cfg.icon;
             return (
               <button key={key} onClick={() => chooseType(key)} className={cardCls + " p-5 sm:p-6 flex flex-col items-center gap-2.5 hover:border-amber-500/40 hover:shadow-lg transition text-center cursor-pointer"}>
-                <div className={`p-3.5 rounded-2xl bg-${cfg.color}-500/15 text-${cfg.color}-300`}><Icon size={26} /></div>
-                <span className="font-bold text-zinc-100 text-[15px]">{cfg.label}</span>
+                <div className={`p-3.5 rounded-2xl bg-${cfg.color}-100 text-${cfg.color}-700`}><Icon size={26} /></div>
+                <span className="font-bold text-slate-800 text-[15px]">{cfg.label}</span>
               </button>
             );
           })}
@@ -2559,9 +2587,9 @@ function TransactionScreen({ data, refresh, quickTx }) {
   const itemOptions = data.items;
   return (
     <div>
-      <button onClick={() => setType(null)} className="flex items-center gap-1 text-zinc-300 hover:text-zinc-100 mb-4 text-sm"><ChevronLeft size={16} /> בחירת סוג תנועה אחרת</button>
-      <div className={`bg-${cfg.color}-500/10 border border-${cfg.color}-500/25 rounded-2xl p-4 sm:p-6 max-w-lg`}>
-        <h2 className="font-bold text-xl text-zinc-100 mb-4">{cfg.label}</h2>
+      <button onClick={() => setType(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> בחירת סוג תנועה אחרת</button>
+      <div className={`bg-${cfg.color}-50 border border-${cfg.color}-200 rounded-2xl p-4 sm:p-6 max-w-lg`}>
+        <h2 className="font-bold text-xl text-slate-800 mb-4">{cfg.label}</h2>
 
         {type === "receive" && (
           <Field label="ספק">
@@ -2581,7 +2609,7 @@ function TransactionScreen({ data, refresh, quickTx }) {
                   key={key}
                   type="button"
                   onClick={() => { setReceiveCategoryFilter(key); setSelectedFragranceName(""); setForm({ ...form, itemId: "" }); }}
-                  className={`flex-1 rounded-xl py-2 border text-sm font-medium ${receiveCategoryFilter === key ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}
+                  className={`flex-1 rounded-xl py-2 border text-sm font-medium ${receiveCategoryFilter === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}
                 >
                   {label}
                 </button>
@@ -2605,8 +2633,8 @@ function TransactionScreen({ data, refresh, quickTx }) {
               <option value="">בחר ריח...</option>
               {fragranceNames.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
-            {resolvingFragrance && <div className="text-xs text-zinc-300 mt-1 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> יוצר אריזת 25 ליטר לריח זה...</div>}
-            {!resolvingFragrance && <div className="text-xs text-zinc-300 mt-1">תמציות ריח מתקבלות מהספק אך ורק בג'ריקן 25 ליטר. אם אין עדיין 25 ליטר לריח זה, ייווצר אוטומטית.</div>}
+            {resolvingFragrance && <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> יוצר אריזת 25 ליטר לריח זה...</div>}
+            {!resolvingFragrance && <div className="text-xs text-slate-500 mt-1">תמציות ריח מתקבלות מהספק אך ורק בג'ריקן 25 ליטר. אם אין עדיין 25 ליטר לריח זה, ייווצר אוטומטית.</div>}
           </Field>
         )}
 
@@ -2663,7 +2691,7 @@ function TransactionScreen({ data, refresh, quickTx }) {
           <Field label="מחיר ליחידה שנגבה מהלקוח (₪)">
             <input type="number" min="0" step="0.01" className={inputCls} value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} />
             {form.qty && form.unitPrice !== "" && (
-              <div className="text-xs text-zinc-300 mt-1">סה"כ להזמנה: ₪{(Number(form.qty) * Number(form.unitPrice)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+              <div className="text-xs text-slate-500 mt-1">סה"כ להזמנה: ₪{(Number(form.qty) * Number(form.unitPrice)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
             )}
           </Field>
         )}
@@ -2671,16 +2699,16 @@ function TransactionScreen({ data, refresh, quickTx }) {
         {type === "return" && (
           <Field label="מצב הפריט המוחזר">
             <div className="flex gap-2">
-              <button onClick={() => setForm({ ...form, condition: "ok" })} className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 border font-medium ${form.condition === "ok" ? "bg-emerald-500 text-white border-emerald-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}><CircleCheck size={16} /> תקין</button>
-              <button onClick={() => setForm({ ...form, condition: "faulty" })} className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 border font-medium ${form.condition === "faulty" ? "bg-rose-500 text-white border-rose-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}><CircleX size={16} /> תקול</button>
+              <button onClick={() => setForm({ ...form, condition: "ok" })} className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 border font-medium ${form.condition === "ok" ? "bg-emerald-500 text-white border-emerald-500" : "bg-white border-gray-300 text-slate-600"}`}><CircleCheck size={16} /> תקין</button>
+              <button onClick={() => setForm({ ...form, condition: "faulty" })} className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 border font-medium ${form.condition === "faulty" ? "bg-rose-500 text-white border-rose-500" : "bg-white border-gray-300 text-slate-600"}`}><CircleX size={16} /> תקול</button>
             </div>
           </Field>
         )}
 
         <Field label="הערה (לא חובה)"><textarea className={inputCls} rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
 
-        {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
-        {success && <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm rounded-xl px-3 py-2 mb-3">{success}</div>}
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+        {success && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">{success}</div>}
 
         <button onClick={submit} disabled={busy} className={btnPrimary + " w-full text-lg py-3.5 flex items-center justify-center gap-2"}>
           {busy && <Loader2 size={18} className="animate-spin" />} אישור וביצוע
@@ -2701,16 +2729,16 @@ function AuditLog({ data }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="font-bold text-xl text-zinc-100">יומן אירועים (Audit Log)</h2>
+        <h2 className="font-bold text-xl text-slate-800">יומן אירועים (Audit Log)</h2>
         <select className={inputCls + " w-auto"} value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">כל התנועות</option>
           {Object.entries(AUDIT_TX_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
       </div>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden overflow-x-auto">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">סוג</th>
               <th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th>
               <th className="px-5 py-4 font-medium">ממיקום</th><th className="px-5 py-4 font-medium">אל מיקום</th>
@@ -2722,14 +2750,14 @@ function AuditLog({ data }) {
               const item = data.items.find((i) => i.id === t.itemId);
               return (
                 <tr key={t.id} className="border-t">
-                  <td className="px-5 py-4 text-zinc-300 whitespace-nowrap">{fmtDate(t.date)}</td>
+                  <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
                   <td className="px-5 py-4"><Badge tone={AUDIT_TX_LABELS[t.type]?.color}>{AUDIT_TX_LABELS[t.type]?.label}</Badge></td>
-                  <td className="px-5 py-4 font-medium text-zinc-100">{item?.name || "-"}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800">{item?.name || "-"}</td>
                   <td className="px-5 py-4">{t.qty}</td>
-                  <td className="px-5 py-4 text-zinc-300">{t.fromLocationId ? locName(t.fromLocationId) : "-"}</td>
-                  <td className="px-5 py-4 text-zinc-300">{t.toLocationId ? locName(t.toLocationId) : "-"}</td>
-                  <td className="px-5 py-4 text-zinc-300">{t.customerId ? custName(t.customerId) : t.supplierId ? supplierName(t.supplierId) : "-"}</td>
-                  <td className="px-5 py-4 text-zinc-300">{t.note || (t.condition === "faulty" ? "התקבל כתקול" : "")}</td>
+                  <td className="px-5 py-4 text-slate-500">{t.fromLocationId ? locName(t.fromLocationId) : "-"}</td>
+                  <td className="px-5 py-4 text-slate-500">{t.toLocationId ? locName(t.toLocationId) : "-"}</td>
+                  <td className="px-5 py-4 text-slate-500">{t.customerId ? custName(t.customerId) : t.supplierId ? supplierName(t.supplierId) : "-"}</td>
+                  <td className="px-5 py-4 text-slate-500">{t.note || (t.condition === "faulty" ? "התקבל כתקול" : "")}</td>
                   <td className="px-5 py-4 text-left">
                     <AddToGoogleCalendarButton
                       title={`${AUDIT_TX_LABELS[t.type]?.label || "תנועת מלאי"} - ${item?.name || ""}`}
@@ -2741,7 +2769,7 @@ function AuditLog({ data }) {
                 </tr>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-zinc-300">אין תנועות תואמות</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">אין תנועות תואמות</td></tr>}
           </tbody>
         </table>
       </div>
@@ -2855,13 +2883,13 @@ function LandedCostScreen({ data, refresh }) {
 
   return (
     <div>
-      <h2 className="font-bold text-xl text-zinc-100 mb-1 flex items-center gap-2"><Ship size={22} className="text-amber-600" /> מחשבון יבוא ועלויות נחיתה (Landed Cost)</h2>
-      <p className="text-zinc-300 text-sm mb-4">חשב את מחיר הנחיתה הסופי ליחידה עבור משלוח, וחלק את עלויות המשלוח בין הפריטים לפי נפח או לפי ערך.</p>
+      <h2 className="font-bold text-xl text-slate-800 mb-1 flex items-center gap-2"><Ship size={22} className="text-amber-600" /> מחשבון יבוא ועלויות נחיתה (Landed Cost)</h2>
+      <p className="text-slate-500 text-sm mb-4">חשב את מחיר הנחיתה הסופי ליחידה עבור משלוח, וחלק את עלויות המשלוח בין הפריטים לפי נפח או לפי ערך.</p>
 
       {shipmentsWithPOs.length > 0 && (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
-          <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><Ship size={16} /> טעינה ממכולה/משלוח משותף</h3>
-          <p className="text-zinc-300 text-sm mb-3">בחירת משלוח תטען אוטומטית את כל הפריטים והכמויות מכל הזמנות הרכש (מכל הספקים) שמשויכות אליו.</p>
+        <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Ship size={16} /> טעינה ממכולה/משלוח משותף</h3>
+          <p className="text-slate-500 text-sm mb-3">בחירת משלוח תטען אוטומטית את כל הפריטים והכמויות מכל הזמנות הרכש (מכל הספקים) שמשויכות אליו.</p>
           <select className={inputCls} value={selectedShipment} onChange={(e) => loadShipment(e.target.value)}>
             <option value="">בחירה ידנית (בלי טעינה)...</option>
             {shipmentsWithPOs.map((s) => {
@@ -2873,9 +2901,9 @@ function LandedCostScreen({ data, refresh }) {
       )}
 
       {data.rateCards.length > 0 && (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
-          <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><Database size={16} /> מחירון שילוח שמור</h3>
-          <p className="text-zinc-300 text-sm mb-3">בחרו מחירון ושורת מחיר כדי למלא אוטומטית את עלות ההובלה - עדיין ניתן לדרוס ידנית אחרי המילוי.</p>
+        <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Database size={16} /> מחירון שילוח שמור</h3>
+          <p className="text-slate-500 text-sm mb-3">בחרו מחירון ושורת מחיר כדי למלא אוטומטית את עלות ההובלה - עדיין ניתן לדרוס ידנית אחרי המילוי.</p>
           <div className="grid sm:grid-cols-2 gap-3 mb-2">
             <Field label="מחירון">
               <select className={inputCls} value={selectedRateCardId} onChange={(e) => { setSelectedRateCardId(e.target.value); setSelectedRateId(""); }}>
@@ -2898,8 +2926,8 @@ function LandedCostScreen({ data, refresh }) {
             <Field label='משקל כולל (ק"ג)'><input type="number" min="0" className={inputCls} value={airWeight} onChange={(e) => setAirWeight(e.target.value)} /></Field>
           )}
           {selectedRate && (
-            <div className="flex items-center justify-between bg-white/[0.04] rounded-xl p-3 mt-2">
-              <span className="text-sm text-zinc-300">עלות מחושבת: ₪{rateAppliedILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3 mt-2">
+              <span className="text-sm text-slate-500">עלות מחושבת: ₪{rateAppliedILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
               <button onClick={applyRateToShipping} className={btnPrimary + " !py-2 !px-4 text-sm"}>החל על עלות הובלה</button>
             </div>
           )}
@@ -2907,9 +2935,9 @@ function LandedCostScreen({ data, refresh }) {
       )}
 
       {currenciesInUse.length > 0 && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-4">
-          <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><Calculator size={16} /> שערי המרה ל-₪</h3>
-          <p className="text-zinc-300 text-sm mb-3">חלק מהפריטים שנטענו הם במטבע ספק שאינו ₪. עדכנו את השער הנוכחי (השער היציג או השער בפועל שקיבלתם) כדי שהחישוב יהיה מדויק.</p>
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Calculator size={16} /> שערי המרה ל-₪</h3>
+          <p className="text-slate-500 text-sm mb-3">חלק מהפריטים שנטענו הם במטבע ספק שאינו ₪. עדכנו את השער הנוכחי (השער היציג או השער בפועל שקיבלתם) כדי שהחישוב יהיה מדויק.</p>
           <div className="grid sm:grid-cols-3 gap-3">
             {currenciesInUse.map((c) => (
               <Field key={c} label={`1 ${c} = ? ₪`}>
@@ -2921,100 +2949,100 @@ function LandedCostScreen({ data, refresh }) {
       )}
 
       {(currencyBreakdown.length > 0 || totalPaymentFees > 0) && (
-        <div className="bg-sky-500/10 border border-sky-500/20 rounded-2xl p-4 mb-4">
-          <h3 className="font-bold text-zinc-100 mb-3 flex items-center gap-2"><Database size={16} /> סיכום תשלום בפועל (סחורה + עמלות)</h3>
+        <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 mb-4">
+          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><Database size={16} /> סיכום תשלום בפועל (סחורה + עמלות)</h3>
           {currencyBreakdown.map((cb) => (
             <div key={cb.currency} className="flex items-center justify-between text-sm py-1 border-b border-sky-100 last:border-0">
-              <span className="text-zinc-300">{cb.currency} {cb.goodsInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })} × שער {cb.rate}</span>
-              <span className="font-medium text-zinc-100">₪{cb.convertedILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              <span className="text-slate-500">{cb.currency} {cb.goodsInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })} × שער {cb.rate}</span>
+              <span className="font-medium text-slate-800">₪{cb.convertedILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
           ))}
           {totalPaymentFees > 0 && (
             <div className="flex items-center justify-between text-sm py-1 border-b border-sky-100">
-              <span className="text-zinc-300">סה"כ עמלות (SWIFT + בנק + אשראי + מט"ח)</span>
-              <span className="font-medium text-zinc-100">₪{totalPaymentFees.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              <span className="text-slate-500">סה"כ עמלות (SWIFT + בנק + אשראי + מט"ח)</span>
+              <span className="font-medium text-slate-800">₪{totalPaymentFees.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
           )}
           <div className="flex items-center justify-between pt-2 mt-1">
-            <span className="font-bold text-zinc-100">סה"כ בפועל בש"ח (סחורה + עמלות)</span>
-            <span className="font-bold text-sky-300 text-lg">₪{totalPaidILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <span className="font-bold text-slate-800">סה"כ בפועל בש"ח (סחורה + עמלות)</span>
+            <span className="font-bold text-sky-700 text-lg">₪{totalPaidILS.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </div>
-          <p className="text-xs text-zinc-300 mt-2">הסכום הזה, יחד עם עלויות ההובלה והמכס למטה, הוא הבסיס שמתחלק באופן יחסי בין הפריטים בטבלת התוצאה.</p>
+          <p className="text-xs text-slate-500 mt-2">הסכום הזה, יחד עם עלויות ההובלה והמכס למטה, הוא הבסיס שמתחלק באופן יחסי בין הפריטים בטבלת התוצאה.</p>
         </div>
       )}
 
       <div className="grid md:grid-cols-2 gap-4 mb-4">
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-          <h3 className="font-bold text-zinc-100 mb-3">עלויות המשלוח (₪)</h3>
+        <div className="bg-white rounded-2xl border shadow-sm p-5">
+          <h3 className="font-bold text-slate-800 mb-3">עלויות המשלוח (₪)</h3>
           <Field label="הובלה ימית / אווירית"><input type="number" min="0" className={inputCls} value={overhead.shipping} onChange={(e) => setOverhead({ ...overhead, shipping: e.target.value })} /></Field>
           <Field label="מכס"><input type="number" min="0" className={inputCls} value={overhead.customs} onChange={(e) => setOverhead({ ...overhead, customs: e.target.value })} /></Field>
           <Field label="עמילות מכס"><input type="number" min="0" className={inputCls} value={overhead.brokerage} onChange={(e) => setOverhead({ ...overhead, brokerage: e.target.value })} /></Field>
           <Field label="הובלה יבשתית"><input type="number" min="0" className={inputCls} value={overhead.inland} onChange={(e) => setOverhead({ ...overhead, inland: e.target.value })} /></Field>
 
-          <h3 className="font-bold text-zinc-100 mb-3 mt-5 pt-4 border-t">עמלות תשלום והמרת מטבע (₪)</h3>
+          <h3 className="font-bold text-slate-800 mb-3 mt-5 pt-4 border-t">עמלות תשלום והמרת מטבע (₪)</h3>
           <Field label="עמלת SWIFT / העברה בנקאית בינלאומית"><input type="number" min="0" className={inputCls} value={overhead.wireFee} onChange={(e) => setOverhead({ ...overhead, wireFee: e.target.value })} /></Field>
           <Field label="עמלת המרה בבנק"><input type="number" min="0" className={inputCls} value={overhead.bankFee} onChange={(e) => setOverhead({ ...overhead, bankFee: e.target.value })} /></Field>
           <Field label="עמלת כרטיס אשראי"><input type="number" min="0" className={inputCls} value={overhead.creditCardFee} onChange={(e) => setOverhead({ ...overhead, creditCardFee: e.target.value })} /></Field>
           <Field label='עמלת מט"ח כללית (על שווי הסחורה)'>
             <div className="flex gap-2">
               <input type="number" min="0" step="0.01" className={inputCls} value={overhead.fxFeeValue} onChange={(e) => setOverhead({ ...overhead, fxFeeValue: e.target.value })} placeholder={overhead.fxFeeMode === "percent" ? "לדוגמה: 1.5" : "לדוגמה: 350"} />
-              <div className="flex shrink-0 rounded-xl border border-white/[0.12] overflow-hidden">
-                <button type="button" onClick={() => setOverhead({ ...overhead, fxFeeMode: "percent" })} className={`px-3 text-sm font-medium ${overhead.fxFeeMode === "percent" ? "bg-amber-500 text-white" : "bg-white/[0.04] text-zinc-300"}`}>%</button>
-                <button type="button" onClick={() => setOverhead({ ...overhead, fxFeeMode: "amount" })} className={`px-3 text-sm font-medium ${overhead.fxFeeMode === "amount" ? "bg-amber-500 text-white" : "bg-white/[0.04] text-zinc-300"}`}>₪</button>
+              <div className="flex shrink-0 rounded-xl border border-gray-300 overflow-hidden">
+                <button type="button" onClick={() => setOverhead({ ...overhead, fxFeeMode: "percent" })} className={`px-3 text-sm font-medium ${overhead.fxFeeMode === "percent" ? "bg-amber-500 text-white" : "bg-white text-slate-600"}`}>%</button>
+                <button type="button" onClick={() => setOverhead({ ...overhead, fxFeeMode: "amount" })} className={`px-3 text-sm font-medium ${overhead.fxFeeMode === "amount" ? "bg-amber-500 text-white" : "bg-white text-slate-600"}`}>₪</button>
               </div>
             </div>
             {overhead.fxFeeMode === "percent" && totalGoodsValue > 0 && (
-              <div className="text-xs text-zinc-300 mt-1">= ₪{fxFeeAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} על שווי סחורה של ₪{totalGoodsValue.toLocaleString()}</div>
+              <div className="text-xs text-slate-500 mt-1">= ₪{fxFeeAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} על שווי סחורה של ₪{totalGoodsValue.toLocaleString()}</div>
             )}
           </Field>
-          <div className="border-t pt-3 mt-1 flex items-center justify-between"><span className="text-zinc-300 font-medium">סה"כ עלויות משלוח + עמלות</span><span className="font-bold text-zinc-100">₪{totalOverhead.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+          <div className="border-t pt-3 mt-1 flex items-center justify-between"><span className="text-slate-500 font-medium">סה"כ עלויות משלוח + עמלות</span><span className="font-bold text-slate-800">₪{totalOverhead.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
         </div>
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-          <h3 className="font-bold text-zinc-100 mb-3">שיטת חלוקת העלויות</h3>
+        <div className="bg-white rounded-2xl border shadow-sm p-5">
+          <h3 className="font-bold text-slate-800 mb-3">שיטת חלוקת העלויות</h3>
           <div className="flex gap-2 mb-4">
-            <button onClick={() => setMethod("value")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "value" ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}>לפי ערך הפריט</button>
-            <button onClick={() => setMethod("volume")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "volume" ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}>לפי נפח</button>
+            <button onClick={() => setMethod("value")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "value" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי ערך הפריט</button>
+            <button onClick={() => setMethod("volume")} className={`flex-1 rounded-xl py-2.5 border font-medium text-sm ${method === "volume" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי נפח</button>
           </div>
-          <p className="text-sm text-zinc-300">{method === "value" ? "עלויות המשלוח יחולקו ביחס לערך הכולל של כל שורה (בש\"ח, אחרי המרה)." : "עלויות המשלוח יחולקו ביחס לנפח הכולל שלהן במכולה."}</p>
+          <p className="text-sm text-slate-500">{method === "value" ? "עלויות המשלוח יחולקו ביחס לערך הכולל של כל שורה (בש\"ח, אחרי המרה)." : "עלויות המשלוח יחולקו ביחס לנפח הכולל שלהן במכולה."}</p>
         </div>
       </div>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
-        <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-zinc-100">פריטים במשלוח</h3><button onClick={addLine} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={16} /> הוספת שורה</button></div>
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-slate-800">פריטים במשלוח</h3><button onClick={addLine} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={16} /> הוספת שורה</button></div>
         <div className="space-y-3">
           {lines.map((l) => (
             <div key={l.id} className="grid grid-cols-2 sm:grid-cols-6 gap-2 items-end border-b pb-3 last:border-0 last:pb-0">
-              <div className="col-span-2"><label className="block text-xs font-medium text-zinc-300 mb-1">פריט</label>
+              <div className="col-span-2"><label className="block text-xs font-medium text-slate-500 mb-1">פריט</label>
                 <select className={inputCls} value={l.itemId} onChange={(e) => setLine(l.id, { itemId: e.target.value })}><option value="">בחר פריט...</option>{data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}</select>
               </div>
-              <div><label className="block text-xs font-medium text-zinc-300 mb-1">כמות</label><input type="number" min="1" className={inputCls} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} /></div>
-              <div><label className="block text-xs font-medium text-zinc-300 mb-1">מטבע</label>
+              <div><label className="block text-xs font-medium text-slate-500 mb-1">כמות</label><input type="number" min="1" className={inputCls} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} /></div>
+              <div><label className="block text-xs font-medium text-slate-500 mb-1">מטבע</label>
                 <select className={inputCls} value={l.currency || "ILS"} onChange={(e) => setLine(l.id, { currency: e.target.value })}>
                   {["ILS", ...CURRENCIES].filter((c, i, arr) => arr.indexOf(c) === i).map((c) => <option key={c} value={c}>{CURRENCY_SYMBOLS[c] || c} {c}</option>)}
                 </select>
               </div>
-              <div><label className="block text-xs font-medium text-zinc-300 mb-1">מחיר ליח' ({CURRENCY_SYMBOLS[l.currency || "ILS"]})</label><input type="number" min="0" step="0.01" className={inputCls} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} /></div>
+              <div><label className="block text-xs font-medium text-slate-500 mb-1">מחיר ליח' ({CURRENCY_SYMBOLS[l.currency || "ILS"]})</label><input type="number" min="0" step="0.01" className={inputCls} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} /></div>
               <div className="flex gap-2 items-end">
-                <div className="flex-1"><label className="block text-xs font-medium text-zinc-300 mb-1">נפח ליח' (CBM)</label><input type="number" min="0" step="0.001" className={inputCls} value={l.unitVolume} onChange={(e) => setLine(l.id, { unitVolume: e.target.value })} disabled={method !== "volume"} /></div>
-                {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-zinc-500 hover:text-rose-600 mb-2.5"><Trash2 size={16} /></button>}
+                <div className="flex-1"><label className="block text-xs font-medium text-slate-500 mb-1">נפח ליח' (CBM)</label><input type="number" min="0" step="0.001" className={inputCls} value={l.unitVolume} onChange={(e) => setLine(l.id, { unitVolume: e.target.value })} disabled={method !== "volume"} /></div>
+                {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 mb-2.5"><Trash2 size={16} /></button>}
               </div>
             </div>
           ))}
         </div>
       </div>
       {canCompute && (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden mb-4">
-          <div className="px-4 py-3 border-b"><h3 className="font-bold text-zinc-100">תוצאת חישוב עלות הנחיתה</h3></div>
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-4">
+          <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">תוצאת חישוב עלות הנחיתה</h3></div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="bg-white/[0.03] text-zinc-300 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">מחיר בסיס (₪)</th><th className="px-5 py-4 font-medium">חלק יחסי</th><th className="px-5 py-4 font-medium">Landed Cost ליח'</th></tr></thead>
+              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">מחיר בסיס (₪)</th><th className="px-5 py-4 font-medium">חלק יחסי</th><th className="px-5 py-4 font-medium">Landed Cost ליח'</th></tr></thead>
               <tbody>
                 {results.map((r) => (
                   <tr key={r.id} className="border-t">
-                    <td className="px-5 py-4 font-medium text-zinc-100">{r.item?.name || "-"}</td>
+                    <td className="px-5 py-4 font-medium text-slate-800">{r.item?.name || "-"}</td>
                     <td className="px-5 py-4">{r.qty}</td>
-                    <td className="px-5 py-4">₪{r.unitPriceILS.toFixed(2)}{r.currency !== "ILS" && <span className="text-zinc-300 text-xs"> ({CURRENCY_SYMBOLS[r.currency]}{Number(r.unitPrice).toFixed(2)})</span>}</td>
+                    <td className="px-5 py-4">₪{r.unitPriceILS.toFixed(2)}{r.currency !== "ILS" && <span className="text-slate-500 text-xs"> ({CURRENCY_SYMBOLS[r.currency]}{Number(r.unitPrice).toFixed(2)})</span>}</td>
                     <td className="px-5 py-4">{(r.share * 100).toFixed(1)}%</td>
-                    <td className="px-5 py-4 font-bold text-amber-300">₪{r.landedPerUnit.toFixed(2)}</td>
+                    <td className="px-5 py-4 font-bold text-amber-800">₪{r.landedPerUnit.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -3059,25 +3087,25 @@ function ReportsScreen({ data }) {
 
   return (
     <div>
-      <h2 className="font-bold text-xl text-zinc-100 mb-4">דוחות וערך מלאי</h2>
+      <h2 className="font-bold text-xl text-slate-800 mb-4">דוחות וערך מלאי</h2>
       <div className="flex gap-2 mb-5 flex-wrap">
-        <button onClick={() => setSub("valuation")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "valuation" ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}><BarChart3 size={16} /> שווי מלאי</button>
-        <button onClick={() => setSub("forecast")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "forecast" ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}><Gauge size={16} /> חיזוי מלאי</button>
-        <button onClick={() => setSub("pl")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "pl" ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}><TrendingUp size={16} /> רווח והפסד (P&L)</button>
-        <button onClick={() => setSub("vat")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "vat" ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}><Calculator size={16} /> מע"מ ומקדמות</button>
+        <button onClick={() => setSub("valuation")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "valuation" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><BarChart3 size={16} /> שווי מלאי</button>
+        <button onClick={() => setSub("forecast")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "forecast" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><Gauge size={16} /> חיזוי מלאי</button>
+        <button onClick={() => setSub("pl")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "pl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><TrendingUp size={16} /> רווח והפסד (P&L)</button>
+        <button onClick={() => setSub("vat")} className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium border ${sub === "vat" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><Calculator size={16} /> מע"מ ומקדמות</button>
       </div>
 
       {showDateFilter && (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-4 mb-5">
+        <div className="bg-white rounded-2xl border shadow-sm p-4 mb-5">
           <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
             <div className="flex items-center gap-2">
               <button onClick={() => shiftWindow(-1)} className={btnGhost + " !p-2"} title="חודש אחורה"><ChevronLeft size={16} className="rotate-180" /></button>
-              <span className="font-bold text-zinc-200 text-sm min-w-[140px] text-center">{rangeLabel}</span>
+              <span className="font-bold text-slate-700 text-sm min-w-[140px] text-center">{rangeLabel}</span>
               <button onClick={() => shiftWindow(1)} className={btnGhost + " !p-2"} title="חודש קדימה"><ChevronLeft size={16} /></button>
             </div>
             <div className="flex items-center gap-1.5">
               {[3, 6, 12].map((n) => (
-                <button key={n} onClick={() => applyPreset(n)} className="text-xs rounded-lg px-2.5 py-1.5 border border-white/[0.12] text-zinc-300 hover:bg-white/[0.04]">{n} חודשים אחרונים</button>
+                <button key={n} onClick={() => applyPreset(n)} className="text-xs rounded-lg px-2.5 py-1.5 border border-gray-300 text-slate-500 hover:bg-gray-50">{n} חודשים אחרונים</button>
               ))}
             </div>
           </div>
@@ -3160,10 +3188,10 @@ function buildCategoryMonthMatrix(data, vatRate) {
 function MoneyPill({ value, kind = "neutral", fmt, size = "sm" }) {
   const isNeg = value < 0;
   let tone;
-  if (kind === "revenue") tone = "bg-emerald-500/10 text-emerald-300";
-  else if (kind === "cost") tone = "bg-amber-500/10 text-amber-300";
-  else if (kind === "profit") tone = value >= 0 ? "bg-emerald-500/10 text-emerald-300" : "bg-rose-500/10 text-rose-300";
-  else tone = "bg-white/[0.06] text-zinc-300";
+  if (kind === "revenue") tone = "bg-emerald-100 text-emerald-700";
+  else if (kind === "cost") tone = "bg-amber-100 text-amber-800";
+  else if (kind === "profit") tone = value >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
+  else tone = "bg-slate-100 text-slate-600";
   const sizeCls = size === "lg" ? "px-3.5 py-1.5 text-base" : "px-2.5 py-1 text-xs";
   const sign = kind === "cost" ? "-" : (kind === "profit" && isNeg ? "-" : "");
   const shown = kind === "cost" ? Math.abs(value) : (kind === "profit" ? Math.abs(value) : value);
@@ -3231,34 +3259,34 @@ function PLReport({ data }) {
             const isNeg = kpi.value < 0;
             const Icon = kpi.icon;
             return (
-              <div key={i} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
+              <div key={i} className="bg-white rounded-2xl border shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <div className={`p-2.5 rounded-xl ${isNeg ? "bg-rose-500/10 text-rose-300" : "bg-emerald-500/10 text-emerald-300"}`}><Icon size={20} /></div>
+                  <div className={`p-2.5 rounded-xl ${isNeg ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}><Icon size={20} /></div>
                   {t && (
                     <span className={`text-xs font-bold flex items-center gap-0.5 ${t.up ? "text-emerald-600" : "text-rose-600"}`}>
                       {t.up ? "▲" : "▼"} {Math.abs(t.pct).toFixed(0)}%
                     </span>
                   )}
                 </div>
-                <div className={`text-2xl font-bold mb-1 ${isNeg ? "text-rose-600" : "text-zinc-100"}`}>{isNeg ? "-" : ""}{fmt(Math.abs(kpi.value))}</div>
-                <div className="text-sm text-zinc-300">{kpi.label}</div>
-                <div className="text-xs text-zinc-300 mt-1">{monthLabel(current.month)}</div>
+                <div className={`text-2xl font-bold mb-1 ${isNeg ? "text-rose-600" : "text-slate-800"}`}>{isNeg ? "-" : ""}{fmt(Math.abs(kpi.value))}</div>
+                <div className="text-sm text-slate-500">{kpi.label}</div>
+                <div className="text-xs text-slate-500 mt-1">{monthLabel(current.month)}</div>
               </div>
             );
           })}
         </div>
       )}
 
-      <div className="bg-sky-500/10 border border-sky-500/20 rounded-2xl p-4 text-sm text-zinc-200">
+      <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-sm text-slate-700">
         <b>הבהרה חשובה:</b> כל הטבלה למטה מוצגת ללא מע"מ (המספרים החשבונאיים האמיתיים). "תזרים מזומנים" בכרטיסים למעלה בלבד הוא כולל מע"מ, לצורך מעקב תזרימי בפועל.
       </div>
 
       {matrix.months.length === 0 ? (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-8 text-center text-zinc-300">אין עדיין מספיק נתונים (מכירות/הוצאות) כדי להציג דוח</div>
+        <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-500">אין עדיין מספיק נתונים (מכירות/הוצאות) כדי להציג דוח</div>
       ) : (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b flex-wrap gap-2">
-            <h3 className="font-bold text-zinc-100">מטריצת קטגוריות מול חודשים (ללא מע"מ)</h3>
+            <h3 className="font-bold text-slate-800">מטריצת קטגוריות מול חודשים (ללא מע"מ)</h3>
             <div className="flex items-center gap-2">
               <button onClick={exportMatrixToExcel} disabled={exportBusy} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}>{exportBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} אקסל</button>
               <button onClick={() => window.print()} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Printer size={14} /> PDF / הדפסה</button>
@@ -3267,31 +3295,31 @@ function PLReport({ data }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="bg-white/[0.04]">
-                  <th className="sticky right-0 bg-white/[0.04] px-4 py-3 text-right font-bold text-zinc-200 whitespace-nowrap border-l">קטגוריה</th>
-                  {matrix.months.map((m) => <th key={m} className="px-4 py-3 text-center font-bold text-zinc-300 whitespace-nowrap min-w-[100px]">{monthLabelShort(m)}</th>)}
+                <tr className="bg-gray-50">
+                  <th className="sticky right-0 bg-gray-50 px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap border-l">קטגוריה</th>
+                  {matrix.months.map((m) => <th key={m} className="px-4 py-3 text-center font-bold text-slate-500 whitespace-nowrap min-w-[100px]">{monthLabelShort(m)}</th>)}
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-t bg-emerald-500/10">
-                  <td className="sticky right-0 bg-emerald-500/10 px-4 py-3 font-bold text-emerald-300 whitespace-nowrap border-l">הכנסות</td>
+                <tr className="border-t bg-emerald-100">
+                  <td className="sticky right-0 bg-emerald-100 px-4 py-3 font-bold text-emerald-700 whitespace-nowrap border-l">הכנסות</td>
                   {matrix.months.map((m) => <td key={m} className="px-4 py-3 text-center"><MoneyPill value={matrix.revenueByMonth[m]} kind="revenue" fmt={fmt} /></td>)}
                 </tr>
                 {Object.entries(EXPENSE_CATEGORIES).map(([cat, label]) => (
                   <tr key={cat} className="border-t">
-                    <td className="sticky right-0 bg-zinc-900 px-4 py-3 text-zinc-300 whitespace-nowrap border-l">{label}</td>
+                    <td className="sticky right-0 bg-white px-4 py-3 text-slate-500 whitespace-nowrap border-l">{label}</td>
                     {matrix.months.map((m) => {
                       const v = matrix.categoryRows[cat][m] || 0;
-                      return <td key={m} className="px-4 py-3 text-center">{v > 0 ? <MoneyPill value={v} kind="cost" fmt={fmt} /> : <span className="text-zinc-600 text-xs">-</span>}</td>;
+                      return <td key={m} className="px-4 py-3 text-center">{v > 0 ? <MoneyPill value={v} kind="cost" fmt={fmt} /> : <span className="text-slate-300 text-xs">-</span>}</td>;
                     })}
                   </tr>
                 ))}
-                <tr className="border-t-2 border-white/[0.12] bg-white/[0.04]">
-                  <td className="sticky right-0 bg-white/[0.04] px-4 py-3 font-bold text-zinc-200 whitespace-nowrap border-l">סה"כ הוצאות</td>
+                <tr className="border-t-2 border-gray-300 bg-gray-50">
+                  <td className="sticky right-0 bg-gray-50 px-4 py-3 font-bold text-slate-700 whitespace-nowrap border-l">סה"כ הוצאות</td>
                   {matrix.months.map((m) => <td key={m} className="px-4 py-3 text-center"><MoneyPill value={matrix.totalCostsByMonth[m]} kind="cost" fmt={fmt} /></td>)}
                 </tr>
-                <tr className="border-t-2 border-white/[0.12]">
-                  <td className="sticky right-0 bg-zinc-900 px-4 py-3 font-bold text-zinc-100 whitespace-nowrap border-l">רווח נקי</td>
+                <tr className="border-t-2 border-gray-300">
+                  <td className="sticky right-0 bg-white px-4 py-3 font-bold text-slate-800 whitespace-nowrap border-l">רווח נקי</td>
                   {matrix.months.map((m) => <td key={m} className="px-4 py-3 text-center"><MoneyPill value={matrix.netProfitByMonth[m]} kind="profit" fmt={fmt} size="lg" /></td>)}
                 </tr>
               </tbody>
@@ -3335,24 +3363,24 @@ function VatSettlementReport({ data }) {
   return (
     <div className="space-y-4">
       {taxAdvanceRate === 0 && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-sm text-amber-300 flex items-center gap-2">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800 flex items-center gap-2">
           <TriangleAlert size={16} /> אחוז מקדמת מס הכנסה עדיין לא הוגדר (0%) - עדכנו אותו במסך "הגדרות" לפי האחוז שנקבע לכם על ידי רשות המסים, אחרת חישוב המקדמה למטה יציג 0.
         </div>
       )}
-      {rows.length === 0 && <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-8 text-center text-zinc-300">אין עדיין מספיק נתונים כדי לחשב מע"מ</div>}
+      {rows.length === 0 && <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-slate-500">אין עדיין מספיק נתונים כדי לחשב מע"מ</div>}
       {rows.map((r) => (
-        <div key={r.key} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-          <h3 className="font-bold text-zinc-100 mb-3">{r.label}</h3>
+        <div key={r.key} className="bg-white rounded-2xl border shadow-sm p-5">
+          <h3 className="font-bold text-slate-800 mb-3">{r.label}</h3>
           <div className="grid sm:grid-cols-2 gap-4 mb-3">
             <div className="space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-zinc-300">מע"מ עסקאות (על מכירות)</span><span className="font-medium">{fmt(r.salesVat)}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-300">מע"מ תשומות (על הוצאות)</span><span className="font-medium text-rose-600">-{fmt(r.purchaseVat)}</span></div>
-              <div className="flex justify-between pt-1 border-t"><span className="font-bold text-zinc-100">מע"מ לתשלום בפועל</span><span className={`font-bold ${r.netVat >= 0 ? "text-rose-600" : "text-emerald-300"}`}>{fmt(Math.abs(r.netVat))} {r.netVat < 0 && "(לזיכוי)"}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">מע"מ עסקאות (על מכירות)</span><span className="font-medium">{fmt(r.salesVat)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">מע"מ תשומות (על הוצאות)</span><span className="font-medium text-rose-600">-{fmt(r.purchaseVat)}</span></div>
+              <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-800">מע"מ לתשלום בפועל</span><span className={`font-bold ${r.netVat >= 0 ? "text-rose-600" : "text-emerald-700"}`}>{fmt(Math.abs(r.netVat))} {r.netVat < 0 && "(לזיכוי)"}</span></div>
             </div>
             <div className="space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-zinc-300">הכנסות התקופה (ללא מע"מ)</span><span className="font-medium">{fmt(r.revenueExcl)}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-300">אחוז מקדמת מס הכנסה</span><span className="font-medium">{taxAdvanceRate}%</span></div>
-              <div className="flex justify-between pt-1 border-t"><span className="font-bold text-zinc-100">מקדמת מס הכנסה נדרשת</span><span className="font-bold text-amber-300">{fmt(r.taxAdvance)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">הכנסות התקופה (ללא מע"מ)</span><span className="font-medium">{fmt(r.revenueExcl)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">אחוז מקדמת מס הכנסה</span><span className="font-medium">{taxAdvanceRate}%</span></div>
+              <div className="flex justify-between pt-1 border-t"><span className="font-bold text-slate-800">מקדמת מס הכנסה נדרשת</span><span className="font-bold text-amber-800">{fmt(r.taxAdvance)}</span></div>
             </div>
           </div>
         </div>
@@ -3379,26 +3407,26 @@ function ValuationReport({ data }) {
 
   return (
     <div className="space-y-5">
-      {missingCost && <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3 text-sm text-amber-300 flex items-center gap-2"><TriangleAlert size={16} /> חלק מהפריטים ללא עלות נחיתה - השווי שלהם לא נכלל.</div>}
+      {missingCost && <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-sm text-amber-800 flex items-center gap-2"><TriangleAlert size={16} /> חלק מהפריטים ללא עלות נחיתה - השווי שלהם לא נכלל.</div>}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5"><div className="text-zinc-300 text-sm mb-1">שווי מלאי כולל</div><div className="text-2xl font-bold text-zinc-100">₪{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
-        {byCategory.map((c) => <div key={c.cat} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5"><div className="text-zinc-300 text-sm mb-1">שווי {CATEGORIES[c.cat]}</div><div className="text-2xl font-bold text-zinc-100">₪{c.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>)}
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">שווי מלאי כולל</div><div className="text-2xl font-bold text-slate-800">₪{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
+        {byCategory.map((c) => <div key={c.cat} className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">שווי {CATEGORIES[c.cat]}</div><div className="text-2xl font-bold text-slate-800">₪{c.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>)}
       </div>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
-        <div className="px-4 py-3 border-b"><h3 className="font-bold text-zinc-100">שווי לפי מוצר (Top 10)</h3></div>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">שווי לפי מוצר (Top 10)</h3></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="bg-white/[0.03] text-zinc-300 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">עלות ליח'</th><th className="px-5 py-4 font-medium">שווי כולל</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">עלות ליח'</th><th className="px-5 py-4 font-medium">שווי כולל</th></tr></thead>
             <tbody>
               {topProducts.map((r) => (
                 <tr key={r.item.id} className="border-t">
-                  <td className="px-5 py-4 font-medium text-zinc-100">{r.item.name}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800">{r.item.name}</td>
                   <td className="px-5 py-4">{r.totalQty}</td>
                   <td className="px-5 py-4">₪{r.unitCost.toFixed(2)}</td>
                   <td className="px-5 py-4 font-bold">₪{r.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                 </tr>
               ))}
-              {topProducts.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-zinc-300">אין עדיין שווי מחושב</td></tr>}
+              {topProducts.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">אין עדיין שווי מחושב</td></tr>}
             </tbody>
           </table>
         </div>
@@ -3435,20 +3463,20 @@ function ForecastReport({ data }) {
 
   return (
     <div className="space-y-5">
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
         <Field label="זמן אספקה (Lead Time) בימים - יבוא מסין/צרפת"><input type="number" min="1" className={inputCls + " w-32"} value={leadTime} onChange={(e) => setLeadTime(Number(e.target.value) || 60)} /></Field>
-        <p className="text-sm text-zinc-300">טווח מקובל: 45-60 יום. פריט עם פחות ימי מלאי מזמן האספקה מסומן דחוף.</p>
+        <p className="text-sm text-slate-500">טווח מקובל: 45-60 יום. פריט עם פחות ימי מלאי מזמן האספקה מסומן דחוף.</p>
       </div>
-      {urgentCount > 0 && <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4"><div className="flex items-center gap-2 text-rose-300 font-bold"><TriangleAlert size={18} /><span>{urgentCount} פריטים דחופים להזמנת רכש</span></div></div>}
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
-        <div className="px-4 py-3 border-b"><h3 className="font-bold text-zinc-100">קצב צריכה וימי מלאי נותרים</h3></div>
+      {urgentCount > 0 && <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4"><div className="flex items-center gap-2 text-rose-700 font-bold"><TriangleAlert size={18} /><span>{urgentCount} פריטים דחופים להזמנת רכש</span></div></div>}
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">קצב צריכה וימי מלאי נותרים</h3></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="bg-white/[0.03] text-zinc-300 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">מלאי נוכחי</th><th className="px-5 py-4 font-medium">קצב חודשי</th><th className="px-5 py-4 font-medium">ימי מלאי נותרים</th><th className="px-5 py-4 font-medium">סטטוס</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">מלאי נוכחי</th><th className="px-5 py-4 font-medium">קצב חודשי</th><th className="px-5 py-4 font-medium">ימי מלאי נותרים</th><th className="px-5 py-4 font-medium">סטטוס</th></tr></thead>
             <tbody>
               {sorted.map((r) => (
                 <tr key={r.item.id} className="border-t">
-                  <td className="px-5 py-4 font-medium text-zinc-100">{r.item.name}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800">{r.item.name}</td>
                   <td className="px-5 py-4">{r.currentStock} {r.item.unit}</td>
                   <td className="px-5 py-4">{r.monthlyRate > 0 ? `${r.monthlyRate.toFixed(1)} ${r.item.unit}/חודש` : "-"}</td>
                   <td className="px-5 py-4">{r.daysRemaining !== null ? Math.round(r.daysRemaining) : "-"}</td>
@@ -3513,13 +3541,13 @@ function SuppliersScreen({ data, refresh }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl text-zinc-100">ספקים</h2>
+        <h2 className="font-bold text-xl text-slate-800">ספקים</h2>
         <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> ספק חדש</button>
       </div>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">שם ספק</th><th className="px-5 py-4 font-medium">מדינה</th>
               <th className="px-5 py-4 font-medium">איש קשר</th><th className="px-5 py-4 font-medium">טלפון</th>
               <th className="px-5 py-4 font-medium">אימייל</th><th className="px-5 py-4 font-medium">מטבע</th><th className="px-4 py-2"></th>
@@ -3527,22 +3555,22 @@ function SuppliersScreen({ data, refresh }) {
           </thead>
           <tbody>
             {data.suppliers.map((s) => (
-              <tr key={s.id} className="border-t hover:bg-white/[0.04] cursor-pointer" onClick={() => openEdit(s)}>
-                <td className="px-5 py-4 font-medium text-zinc-100">{s.name}</td>
-                <td className="px-5 py-4 text-zinc-300">{s.country || "-"}</td>
-                <td className="px-5 py-4 text-zinc-300">{s.contact || "-"}</td>
-                <td className="px-5 py-4 text-zinc-300">{s.phone || "-"}</td>
-                <td className="px-5 py-4 text-zinc-300">{s.email || "-"}</td>
+              <tr key={s.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => openEdit(s)}>
+                <td className="px-5 py-4 font-medium text-slate-800">{s.name}</td>
+                <td className="px-5 py-4 text-slate-500">{s.country || "-"}</td>
+                <td className="px-5 py-4 text-slate-500">{s.contact || "-"}</td>
+                <td className="px-5 py-4 text-slate-500">{s.phone || "-"}</td>
+                <td className="px-5 py-4 text-slate-500">{s.email || "-"}</td>
                 <td className="px-5 py-4"><Badge tone="sky">{CURRENCY_SYMBOLS[s.currency]} {s.currency}</Badge></td>
                 <td className="px-5 py-4 text-left" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-2 justify-end">
-                    <button onClick={() => openEdit(s)} className="text-zinc-500 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
-                    <button onClick={() => removeSupplier(s.id)} className="text-zinc-500 hover:text-rose-600" title="מחיקה"><Trash2 size={16} /></button>
+                    <button onClick={() => openEdit(s)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
+                    <button onClick={() => removeSupplier(s.id)} className="text-gray-400 hover:text-rose-600" title="מחיקה"><Trash2 size={16} /></button>
                   </div>
                 </td>
               </tr>
             ))}
-            {data.suppliers.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-zinc-300">אין ספקים עדיין</td></tr>}
+            {data.suppliers.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">אין ספקים עדיין</td></tr>}
           </tbody>
         </table>
       </div>
@@ -3560,7 +3588,7 @@ function SuppliersScreen({ data, refresh }) {
             </select>
           </Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת ספק</button>
         </Modal>
       )}
@@ -3578,7 +3606,7 @@ function SuppliersScreen({ data, refresh }) {
             </select>
           </Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
-          {editError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
@@ -3647,60 +3675,60 @@ function ShipmentsScreen({ data, refresh }) {
 
     return (
       <div>
-        <button onClick={() => setViewShipmentId(null)} className="flex items-center gap-1 text-zinc-300 hover:text-zinc-100 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת משלוחים</button>
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 mb-4">
+        <button onClick={() => setViewShipmentId(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת משלוחים</button>
+        <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
           <div className="flex items-center gap-3 mb-1">
-            <h2 className="font-bold text-xl text-zinc-100">{shipment.name}</h2>
+            <h2 className="font-bold text-xl text-slate-800">{shipment.name}</h2>
             <Badge tone={SHIPMENT_STATUSES[shipment.status]?.tone}>{SHIPMENT_STATUSES[shipment.status]?.label}</Badge>
           </div>
-          {shipment.notes && <p className="text-zinc-300 mt-1">{shipment.notes}</p>}
+          {shipment.notes && <p className="text-slate-500 mt-1">{shipment.notes}</p>}
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5"><div className="text-zinc-300 text-sm mb-1">הזמנות רכש</div><div className="text-2xl font-bold text-zinc-100">{pos.length}</div></div>
-          <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5"><div className="text-zinc-300 text-sm mb-1">ספקים</div><div className="text-2xl font-bold text-zinc-100">{suppliersFor(viewShipmentId).length}</div></div>
-          <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5"><div className="text-zinc-300 text-sm mb-1">שורות פריטים</div><div className="text-2xl font-bold text-zinc-100">{Object.keys(itemTotals).length}</div></div>
+          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">הזמנות רכש</div><div className="text-2xl font-bold text-slate-800">{pos.length}</div></div>
+          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">ספקים</div><div className="text-2xl font-bold text-slate-800">{suppliersFor(viewShipmentId).length}</div></div>
+          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">שורות פריטים</div><div className="text-2xl font-bold text-slate-800">{Object.keys(itemTotals).length}</div></div>
         </div>
 
-        <h3 className="font-bold text-zinc-100 mb-2">הזמנות הרכש במשלוח זה</h3>
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden mb-4">
+        <h3 className="font-bold text-slate-800 mb-2">הזמנות הרכש במשלוח זה</h3>
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-4">
           <table className="w-full text-sm">
-            <thead><tr className="bg-white/[0.03] text-zinc-300 text-right"><th className="px-5 py-4 font-medium">מס' הזמנה</th><th className="px-5 py-4 font-medium">ספק</th><th className="px-5 py-4 font-medium">מטבע</th><th className="px-5 py-4 font-medium">שורות</th><th className="px-5 py-4 font-medium">סטטוס PO</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">מס' הזמנה</th><th className="px-5 py-4 font-medium">ספק</th><th className="px-5 py-4 font-medium">מטבע</th><th className="px-5 py-4 font-medium">שורות</th><th className="px-5 py-4 font-medium">סטטוס PO</th></tr></thead>
             <tbody>
               {pos.map((po) => {
                 const supplier = data.suppliers.find((s) => s.id === po.supplierId);
                 return (
                   <tr key={po.id} className="border-t">
-                    <td className="px-5 py-4 font-medium text-zinc-100">{po.poNumber}</td>
-                    <td className="px-5 py-4 text-zinc-300">{supplier?.name || "-"} {supplier?.country ? `(${supplier.country})` : ""}</td>
-                    <td className="px-5 py-4 text-zinc-300">{po.currency}</td>
+                    <td className="px-5 py-4 font-medium text-slate-800">{po.poNumber}</td>
+                    <td className="px-5 py-4 text-slate-500">{supplier?.name || "-"} {supplier?.country ? `(${supplier.country})` : ""}</td>
+                    <td className="px-5 py-4 text-slate-500">{po.currency}</td>
                     <td className="px-5 py-4">{po.lines.length}</td>
                     <td className="px-5 py-4"><Badge tone={PO_STATUSES[po.status]?.tone}>{PO_STATUSES[po.status]?.label}</Badge></td>
                   </tr>
                 );
               })}
-              {pos.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-zinc-300">אין עדיין הזמנות רכש משויכות למשלוח זה</td></tr>}
+              {pos.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">אין עדיין הזמנות רכש משויכות למשלוח זה</td></tr>}
             </tbody>
           </table>
         </div>
 
-        <h3 className="font-bold text-zinc-100 mb-2">פריטים וכמויות מרוכזים (כל הספקים יחד)</h3>
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+        <h3 className="font-bold text-slate-800 mb-2">פריטים וכמויות מרוכזים (כל הספקים יחד)</h3>
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
           <table className="w-full text-sm">
-            <thead><tr className="bg-white/[0.03] text-zinc-300 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות כוללת</th><th className="px-5 py-4 font-medium">מגיע מספקים</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות כוללת</th><th className="px-5 py-4 font-medium">מגיע מספקים</th></tr></thead>
             <tbody>
               {Object.values(itemTotals).map((r, i) => (
                 <tr key={i} className="border-t">
-                  <td className="px-5 py-4 font-medium text-zinc-100">{r.item?.name || "-"}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800">{r.item?.name || "-"}</td>
                   <td className="px-5 py-4">{r.qty} {r.item?.unit || ""}</td>
-                  <td className="px-5 py-4 text-zinc-300">{[...r.suppliers].join(", ")}</td>
+                  <td className="px-5 py-4 text-slate-500">{[...r.suppliers].join(", ")}</td>
                 </tr>
               ))}
-              {Object.keys(itemTotals).length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-zinc-300">אין עדיין פריטים</td></tr>}
+              {Object.keys(itemTotals).length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-500">אין עדיין פריטים</td></tr>}
             </tbody>
           </table>
         </div>
-        <p className="text-zinc-300 text-xs mt-3">כדי לחשב עלות נחיתה למשלוח הזה, עברו ל"מחשבון יבוא ועליות נחיתה" ובחרו את המשלוח הזה מהרשימה.</p>
+        <p className="text-slate-500 text-xs mt-3">כדי לחשב עלות נחיתה למשלוח הזה, עברו ל"מחשבון יבוא ועליות נחיתה" ובחרו את המשלוח הזה מהרשימה.</p>
       </div>
     );
   }
@@ -3708,7 +3736,7 @@ function ShipmentsScreen({ data, refresh }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl text-zinc-100">משלוחים / מכולות</h2>
+        <h2 className="font-bold text-xl text-slate-800">משלוחים / מכולות</h2>
         <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> משלוח חדש</button>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -3716,22 +3744,22 @@ function ShipmentsScreen({ data, refresh }) {
           const pos = posFor(s.id);
           const suppliers = suppliersFor(s.id);
           return (
-            <div key={s.id} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5 cursor-pointer hover:shadow-md transition" onClick={() => setViewShipmentId(s.id)}>
+            <div key={s.id} className="bg-white rounded-2xl border shadow-sm p-5 cursor-pointer hover:shadow-md transition" onClick={() => setViewShipmentId(s.id)}>
               <div className="flex items-start justify-between mb-2">
-                <div className="p-2.5 rounded-xl bg-violet-500/15 text-violet-300"><Ship size={20} /></div>
+                <div className="p-2.5 rounded-xl bg-violet-100 text-violet-700"><Ship size={20} /></div>
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => openEdit(s)} className="text-zinc-500 hover:text-amber-600 p-1" title="עריכה"><Pencil size={15} /></button>
-                  <button onClick={() => removeShipment(s.id)} className="text-zinc-500 hover:text-rose-600 p-1" title="מחיקה"><Trash2 size={15} /></button>
+                  <button onClick={() => openEdit(s)} className="text-gray-400 hover:text-amber-600 p-1" title="עריכה"><Pencil size={15} /></button>
+                  <button onClick={() => removeShipment(s.id)} className="text-gray-400 hover:text-rose-600 p-1" title="מחיקה"><Trash2 size={15} /></button>
                 </div>
               </div>
-              <div className="font-bold text-zinc-100 mb-1">{s.name}</div>
+              <div className="font-bold text-slate-800 mb-1">{s.name}</div>
               <Badge tone={SHIPMENT_STATUSES[s.status]?.tone}>{SHIPMENT_STATUSES[s.status]?.label}</Badge>
-              <div className="text-sm text-zinc-300 mt-2">{pos.length} הזמנות · {suppliers.length} ספקים</div>
+              <div className="text-sm text-slate-500 mt-2">{pos.length} הזמנות · {suppliers.length} ספקים</div>
             </div>
           );
         })}
         {data.shipments.length === 0 && (
-          <div className="col-span-full bg-zinc-900/60 rounded-2xl border border-white/[0.08] p-8 text-center text-zinc-300">אין עדיין משלוחים - צרו משלוח ראשון כדי להתחיל לשייך אליו הזמנות רכש</div>
+          <div className="col-span-full bg-white rounded-2xl border p-8 text-center text-slate-500">אין עדיין משלוחים - צרו משלוח ראשון כדי להתחיל לשייך אליו הזמנות רכש</div>
         )}
       </div>
 
@@ -3744,7 +3772,7 @@ function ShipmentsScreen({ data, refresh }) {
             </select>
           </Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת משלוח</button>
         </Modal>
       )}
@@ -3758,7 +3786,7 @@ function ShipmentsScreen({ data, refresh }) {
             </select>
           </Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
-          {editError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
@@ -3822,38 +3850,38 @@ function ShippingRatesScreen({ data, refresh }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl text-zinc-100">מחירוני שילוח (Shipping Rate Cards)</h2>
+        <h2 className="font-bold text-xl text-slate-800">מחירוני שילוח (Shipping Rate Cards)</h2>
         <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> מחירון חדש</button>
       </div>
-      <p className="text-zinc-300 text-sm mb-4">שמרו כאן מחירים קבועים שסגרתם מול חברות שילוח - הם ייבחרו אוטומטית ב"מחשבון יבוא ועלויות נחיתה" במקום להקליד את אותו מחיר בכל פעם מחדש.</p>
+      <p className="text-slate-500 text-sm mb-4">שמרו כאן מחירים קבועים שסגרתם מול חברות שילוח - הם ייבחרו אוטומטית ב"מחשבון יבוא ועלויות נחיתה" במקום להקליד את אותו מחיר בכל פעם מחדש.</p>
 
       <div className="space-y-4">
         {data.rateCards.map((card) => (
-          <div key={card.id} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b bg-white/[0.04]">
+          <div key={card.id} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
               <div>
-                <div className="font-bold text-zinc-100">{card.name}</div>
-                {card.carrier && <div className="text-sm text-zinc-300">{card.carrier}</div>}
+                <div className="font-bold text-slate-800">{card.name}</div>
+                {card.carrier && <div className="text-sm text-slate-500">{card.carrier}</div>}
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => openEdit(card)} className="text-zinc-500 hover:text-amber-600 p-1" title="עריכה"><Pencil size={16} /></button>
-                <button onClick={() => removeCard(card.id)} className="text-zinc-500 hover:text-rose-600 p-1" title="מחיקה"><Trash2 size={16} /></button>
+                <button onClick={() => openEdit(card)} className="text-gray-400 hover:text-amber-600 p-1" title="עריכה"><Pencil size={16} /></button>
+                <button onClick={() => removeCard(card.id)} className="text-gray-400 hover:text-rose-600 p-1" title="מחיקה"><Trash2 size={16} /></button>
               </div>
             </div>
             <div className="p-4">
-              {card.notes && <p className="text-sm text-zinc-300 mb-3">{card.notes}</p>}
+              {card.notes && <p className="text-sm text-slate-500 mb-3">{card.notes}</p>}
               <table className="w-full text-sm mb-3">
-                <thead><tr className="text-zinc-300 text-right"><th className="py-1.5 font-medium">סוג</th><th className="py-1.5 font-medium">תיאור</th><th className="py-1.5 font-medium">מחיר</th><th className="py-1.5"></th></tr></thead>
+                <thead><tr className="text-slate-500 text-right"><th className="py-1.5 font-medium">סוג</th><th className="py-1.5 font-medium">תיאור</th><th className="py-1.5 font-medium">מחיר</th><th className="py-1.5"></th></tr></thead>
                 <tbody>
                   {card.rates.map((r) => (
                     <tr key={r.id} className="border-t">
                       <td className="py-1.5">{RATE_TYPES[r.rateType]}</td>
-                      <td className="py-1.5 text-zinc-300">{r.label || "-"}</td>
+                      <td className="py-1.5 text-slate-500">{r.label || "-"}</td>
                       <td className="py-1.5 font-medium">{CURRENCY_SYMBOLS[r.currency] || r.currency}{r.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}{r.rateType === "air_per_kg" ? " / ק\"ג" : ""}</td>
-                      <td className="py-1.5 text-left"><button onClick={() => removeRate(r.id)} className="text-zinc-500 hover:text-rose-600"><Trash2 size={14} /></button></td>
+                      <td className="py-1.5 text-left"><button onClick={() => removeRate(r.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
-                  {card.rates.length === 0 && <tr><td colSpan={4} className="py-4 text-center text-zinc-300">אין עדיין שורות מחיר במחירון זה</td></tr>}
+                  {card.rates.length === 0 && <tr><td colSpan={4} className="py-4 text-center text-slate-500">אין עדיין שורות מחיר במחירון זה</td></tr>}
                 </tbody>
               </table>
               <button onClick={() => openRateForm(card.id)} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={14} /> הוספת שורת מחיר</button>
@@ -3861,7 +3889,7 @@ function ShippingRatesScreen({ data, refresh }) {
           </div>
         ))}
         {data.rateCards.length === 0 && (
-          <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] p-8 text-center text-zinc-300">אין עדיין מחירוני שילוח - צרו מחירון ראשון (לדוגמה "הובלה חודש יוני" או "מחירון חברת שילוח X")</div>
+          <div className="bg-white rounded-2xl border p-8 text-center text-slate-500">אין עדיין מחירוני שילוח - צרו מחירון ראשון (לדוגמה "הובלה חודש יוני" או "מחירון חברת שילוח X")</div>
         )}
       </div>
 
@@ -3870,7 +3898,7 @@ function ShippingRatesScreen({ data, refresh }) {
           <Field label='שם המחירון'><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder='לדוגמה: הובלה חודש יוני' /></Field>
           <Field label="חברת שילוח (לא חובה)"><input className={inputCls} value={form.carrier} onChange={(e) => setForm({ ...form, carrier: e.target.value })} /></Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת מחירון</button>
         </Modal>
       )}
@@ -3880,7 +3908,7 @@ function ShippingRatesScreen({ data, refresh }) {
           <Field label="שם המחירון"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></Field>
           <Field label="חברת שילוח (לא חובה)"><input className={inputCls} value={editForm.carrier} onChange={(e) => setEditForm({ ...editForm, carrier: e.target.value })} /></Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
-          {editError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
@@ -3903,7 +3931,7 @@ function ShippingRatesScreen({ data, refresh }) {
               </select>
             </Field>
           </div>
-          {rateError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{rateError}</div>}
+          {rateError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{rateError}</div>}
           <button onClick={submitRate} disabled={rateBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{rateBusy && <Loader2 size={16} className="animate-spin" />}הוספת שורה</button>
         </Modal>
       )}
@@ -3957,7 +3985,7 @@ function LeadsScreen({ data, refresh, onCreateQuote }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl text-zinc-100">לידים ומשפך מכירות (CRM)</h2>
+        <h2 className="font-bold text-xl text-slate-800">לידים ומשפך מכירות (CRM)</h2>
         <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> ליד חדש</button>
       </div>
       <div className="overflow-x-auto pb-2">
@@ -3969,26 +3997,26 @@ function LeadsScreen({ data, refresh, onCreateQuote }) {
               <div key={statusKey} className="w-72 shrink-0">
                 <div className="flex items-center justify-between mb-2 px-1">
                   <Badge tone={meta.tone}>{meta.label}</Badge>
-                  <span className="text-xs text-zinc-300">{leadsInColumn.length}</span>
+                  <span className="text-xs text-slate-500">{leadsInColumn.length}</span>
                 </div>
                 <div className="space-y-2">
                   {leadsInColumn.map((lead) => {
                     const customer = data.customers.find((c) => c.id === lead.customerId);
                     const isOverdue = lead.followUpDate && new Date(lead.followUpDate) < today;
                     return (
-                      <div key={lead.id} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] p-3 shadow-sm">
+                      <div key={lead.id} className="bg-white rounded-2xl border p-3 shadow-sm">
                         <div className="flex items-start justify-between mb-1">
-                          <div className="font-bold text-zinc-100 text-sm">{lead.name}</div>
+                          <div className="font-bold text-slate-800 text-sm">{lead.name}</div>
                           <div className="flex items-center gap-1">
-                            <button onClick={() => openEdit(lead)} className="text-zinc-500 hover:text-amber-600"><Pencil size={13} /></button>
-                            <button onClick={() => removeLead(lead.id)} className="text-zinc-500 hover:text-rose-600"><Trash2 size={13} /></button>
+                            <button onClick={() => openEdit(lead)} className="text-gray-400 hover:text-amber-600"><Pencil size={13} /></button>
+                            <button onClick={() => removeLead(lead.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={13} /></button>
                           </div>
                         </div>
-                        {customer && <div className="text-xs text-zinc-300 mb-1">מקושר ללקוח: {customer.name}</div>}
-                        {(lead.phone || lead.email) && <div className="text-xs text-zinc-300 mb-1">{lead.phone} {lead.email && `· ${lead.email}`}</div>}
-                        {lead.estimatedValue != null && <div className="text-xs text-emerald-300 font-medium mb-1">שווי משוער: ₪{lead.estimatedValue.toLocaleString()}</div>}
+                        {customer && <div className="text-xs text-slate-500 mb-1">מקושר ללקוח: {customer.name}</div>}
+                        {(lead.phone || lead.email) && <div className="text-xs text-slate-500 mb-1">{lead.phone} {lead.email && `· ${lead.email}`}</div>}
+                        {lead.estimatedValue != null && <div className="text-xs text-emerald-700 font-medium mb-1">שווי משוער: ₪{lead.estimatedValue.toLocaleString()}</div>}
                         {lead.followUpDate && (
-                          <div className={`text-xs mb-1 flex items-center justify-between gap-2 ${isOverdue ? "text-rose-600 font-medium" : "text-zinc-300"}`}>
+                          <div className={`text-xs mb-1 flex items-center justify-between gap-2 ${isOverdue ? "text-rose-600 font-medium" : "text-slate-500"}`}>
                             <span>מעקב: {new Date(lead.followUpDate).toLocaleDateString("he-IL")} {isOverdue && "(עבר!)"}</span>
                             <AddToGoogleCalendarButton
                               title={`מעקב ליד: ${lead.name}`}
@@ -3998,22 +4026,22 @@ function LeadsScreen({ data, refresh, onCreateQuote }) {
                             />
                           </div>
                         )}
-                        {lead.notes && <div className="text-xs text-zinc-300 mb-2 line-clamp-2">{lead.notes}</div>}
+                        {lead.notes && <div className="text-xs text-slate-500 mb-2 line-clamp-2">{lead.notes}</div>}
                         <div className="flex items-center gap-2 mt-2">
                           <select
-                            className="flex-1 text-xs rounded-lg border border-white/[0.12] px-2 py-1.5 bg-zinc-900"
+                            className="flex-1 text-xs rounded-lg border border-gray-300 px-2 py-1.5 bg-white"
                             value={lead.status}
                             disabled={statusBusyId === lead.id}
                             onChange={(e) => changeStatus(lead.id, e.target.value)}
                           >
                             {LEAD_STATUS_ORDER.map((s) => <option key={s} value={s}>{LEAD_STATUSES[s].label}</option>)}
                           </select>
-                          <button onClick={() => onCreateQuote(lead.customerId || null, lead.id)} className="shrink-0 text-amber-600 hover:bg-amber-500/10 rounded-lg p-1.5" title="יצירת הצעת מחיר"><FileText size={14} /></button>
+                          <button onClick={() => onCreateQuote(lead.customerId || null, lead.id)} className="shrink-0 text-amber-600 hover:bg-amber-100 rounded-lg p-1.5" title="יצירת הצעת מחיר"><FileText size={14} /></button>
                         </div>
                       </div>
                     );
                   })}
-                  {leadsInColumn.length === 0 && <div className="text-xs text-zinc-600 text-center py-6 border-2 border-dashed rounded-2xl">אין לידים</div>}
+                  {leadsInColumn.length === 0 && <div className="text-xs text-slate-300 text-center py-6 border-2 border-dashed rounded-2xl">אין לידים</div>}
                 </div>
               </div>
             );
@@ -4041,7 +4069,7 @@ function LeadsScreen({ data, refresh, onCreateQuote }) {
           <Field label="שווי משוער (₪)"><input type="number" min="0" className={inputCls} value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })} /></Field>
           <Field label="תאריך מעקב הבא"><input type="date" className={inputCls} value={form.followUpDate} onChange={(e) => setForm({ ...form, followUpDate: e.target.value })} /></Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת ליד</button>
         </Modal>
       )}
@@ -4066,7 +4094,7 @@ function LeadsScreen({ data, refresh, onCreateQuote }) {
           <Field label="שווי משוער (₪)"><input type="number" min="0" className={inputCls} value={editForm.estimatedValue} onChange={(e) => setEditForm({ ...editForm, estimatedValue: e.target.value })} /></Field>
           <Field label="תאריך מעקב הבא"><input type="date" className={inputCls} value={editForm.followUpDate} onChange={(e) => setEditForm({ ...editForm, followUpDate: e.target.value })} /></Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
-          {editError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
+          {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
@@ -4087,7 +4115,22 @@ function QuoteBuilderModal({ data, customerId, leadId, refresh, onClose, onCreat
   const setLine = (id, patch) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const addLine = () => setLines([...lines, { id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
-  const onPickItem = (id, itemId) => { const it = data.items.find((i) => i.id === itemId); setLine(id, { itemId, unitPrice: it?.unitCost ? String(Math.round(it.unitCost * 1.4 * 100) / 100) : "" }); };
+
+  // אותו "זיכרון מחירים" כמו במסך מכירה - המחיר האחרון שנגבה בפועל מהלקוח
+  // הזה על הפריט הזה (אם יש), במקום ברירת המחדל הגנרית (עלות + 40%).
+  const lastPriceFor = (custId, itemId) => {
+    if (!custId || !itemId) return null;
+    const history = data.transactions
+      .filter((t) => t.customerId === custId && t.itemId === itemId && t.type === "install" && t.unitPrice != null)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    return history[0]?.unitPrice ?? null;
+  };
+  const onPickItem = (id, itemId) => {
+    const it = data.items.find((i) => i.id === itemId);
+    const lastPrice = lastPriceFor(selectedCustomerId, itemId);
+    const unitPrice = lastPrice != null ? String(lastPrice) : (it?.unitCost ? String(Math.round(it.unitCost * 1.4 * 100) / 100) : "");
+    setLine(id, { itemId, unitPrice, lastPriceInclVat: lastPrice });
+  };
 
   const total = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
 
@@ -4110,33 +4153,40 @@ function QuoteBuilderModal({ data, customerId, leadId, refresh, onClose, onCreat
 
   return (
     <Modal title="יצירת הצעת מחיר" onClose={onClose}>
-      {lead && <div className="bg-sky-500/10 rounded-xl p-2.5 text-sm text-zinc-200 mb-3">מקושר לליד: <b>{lead.name}</b></div>}
+      {lead && <div className="bg-sky-100 rounded-xl p-2.5 text-sm text-slate-700 mb-3">מקושר לליד: <b>{lead.name}</b></div>}
       <Field label="לקוח">
         <select className={inputCls} value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)}>
           <option value="">{lead ? "ללא קישור ללקוח קיים" : "בחר לקוח..."}</option>
           {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
-      <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-zinc-300">פריטים</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
+      <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-slate-500">פריטים</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
       <div className="space-y-2 mb-2">
         {lines.map((l) => (
-          <div key={l.id} className="grid grid-cols-6 gap-1.5 items-center">
-            <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
-              <option value="">פריט...</option>
-              {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
-            </select>
-            <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
-            <input type="number" min="0" step="0.01" placeholder="מחיר (₪)" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
-            {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-zinc-500 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
+          <div key={l.id}>
+            <div className="grid grid-cols-6 gap-1.5 items-center">
+              <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
+                <option value="">פריט...</option>
+                {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+              </select>
+              <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
+              <input type="number" min="0" step="0.01" placeholder="מחיר (₪)" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
+              {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
+            </div>
+            {l.itemId && l.lastPriceInclVat != null && (
+              <div className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
+                <Banknote size={11} /> מולא לפי המחיר האחרון שנמכר ללקוח זה - ניתן לשנות ידנית
+              </div>
+            )}
           </div>
         ))}
       </div>
       <div className="flex items-center justify-between text-sm mb-4 px-1">
-        <span className="text-zinc-300">סה"כ הצעה</span>
-        <span className="font-bold text-zinc-100">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+        <span className="text-slate-500">סה"כ הצעה</span>
+        <span className="font-bold text-slate-800">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
       </div>
       <Field label="הערות"><textarea className={inputCls} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
-      {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
       <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}יצירת הצעת מחיר</button>
     </Modal>
   );
@@ -4155,10 +4205,10 @@ function QuotesScreen({ data, refresh, onPrint }) {
 
   return (
     <div>
-      <h2 className="font-bold text-xl text-zinc-100 mb-4">הצעות מחיר</h2>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+      <h2 className="font-bold text-xl text-slate-800 mb-4">הצעות מחיר</h2>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
-          <thead><tr className="bg-white/[0.03] text-zinc-300 text-right"><th className="px-5 py-4 font-medium">מס' הצעה</th><th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">לקוח / ליד</th><th className="px-5 py-4 font-medium">שורות</th><th className="px-5 py-4 font-medium">סה"כ</th><th className="px-5 py-4 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">מס' הצעה</th><th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">לקוח / ליד</th><th className="px-5 py-4 font-medium">שורות</th><th className="px-5 py-4 font-medium">סה"כ</th><th className="px-5 py-4 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.quotes.map((q) => {
               const customer = data.customers.find((c) => c.id === q.customerId);
@@ -4166,26 +4216,26 @@ function QuotesScreen({ data, refresh, onPrint }) {
               const total = q.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
               return (
                 <tr key={q.id} className="border-t">
-                  <td className="px-5 py-4 font-medium text-zinc-100">{q.quoteNumber}</td>
-                  <td className="px-5 py-4 text-zinc-300">{fmtDate(q.date)}</td>
-                  <td className="px-5 py-4 text-zinc-300">{customer?.name || lead?.name || "-"}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800">{q.quoteNumber}</td>
+                  <td className="px-5 py-4 text-slate-500">{fmtDate(q.date)}</td>
+                  <td className="px-5 py-4 text-slate-500">{customer?.name || lead?.name || "-"}</td>
                   <td className="px-5 py-4">{q.lines.length}</td>
                   <td className="px-5 py-4 font-bold">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                   <td className="px-5 py-4">
-                    <select className="text-xs rounded-lg border border-white/[0.12] px-2 py-1 bg-zinc-900" value={q.status} disabled={statusBusyId === q.id} onChange={(e) => changeStatus(q.id, e.target.value)}>
+                    <select className="text-xs rounded-lg border border-gray-300 px-2 py-1 bg-white" value={q.status} disabled={statusBusyId === q.id} onChange={(e) => changeStatus(q.id, e.target.value)}>
                       {Object.entries(QUOTE_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
                     </select>
                   </td>
                   <td className="px-5 py-4 text-left">
                     <div className="flex items-center gap-3 justify-end">
                       <button onClick={() => onPrint(q.id)} className="text-amber-600 hover:underline font-medium flex items-center gap-1"><Printer size={14} /> צפייה/הדפסה</button>
-                      <button onClick={() => removeQuote(q.id)} className="text-zinc-500 hover:text-rose-600"><Trash2 size={14} /></button>
+                      <button onClick={() => removeQuote(q.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
               );
             })}
-            {data.quotes.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-zinc-300">עדיין לא נוצרו הצעות מחיר</td></tr>}
+            {data.quotes.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">עדיין לא נוצרו הצעות מחיר</td></tr>}
           </tbody>
         </table>
       </div>
@@ -4499,12 +4549,12 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
   return (
     <Modal title={existing ? "עריכת הוצאה / חשבונית" : "הוצאה / חשבונית חדשה"} onClose={onClose}>
       {!existing && (
-        <div className="bg-violet-500/10 border border-violet-500/20 rounded-2xl p-4 mb-4">
+        <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 mb-4">
           <div className="flex items-center gap-2 mb-2">
             <Calculator size={16} className="text-violet-600" />
-            <span className="text-sm font-bold text-zinc-100">סריקת חשבונית חכמה (AI)</span>
+            <span className="text-sm font-bold text-slate-800">סריקת חשבונית חכמה (AI)</span>
           </div>
-          <p className="text-xs text-zinc-300 mb-3">חשבונית עם כמה עמודים? צלמו כל עמוד בנפרד (כל לחיצה מוסיפה עמוד לרשימה למטה עם תצוגה מקדימה) - ורק אחרי שכל העמודים נאספו, לחצו "סיים ונתח" כדי לעבד את כולם יחד כמסמך אחד.</p>
+          <p className="text-xs text-slate-500 mb-3">חשבונית עם כמה עמודים? צלמו כל עמוד בנפרד (כל לחיצה מוסיפה עמוד לרשימה למטה עם תצוגה מקדימה) - ורק אחרי שכל העמודים נאספו, לחצו "סיים ונתח" כדי לעבד את כולם יחד כמסמך אחד.</p>
           <div className="flex gap-2 mb-3">
             <label className={btnGhost + " flex-1 text-center cursor-pointer flex items-center justify-center gap-2 !py-2.5"}>
               <Upload size={16} /> צילום עמוד
@@ -4526,14 +4576,14 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
                       {stagedPreviews[i] ? (
                         <img src={stagedPreviews[i]} alt={`עמוד ${i + 1}`} className="w-full h-full object-cover" />
                       ) : (
-                        <FileText size={22} className="text-zinc-600" />
+                        <FileText size={22} className="text-slate-300" />
                       )}
                     </div>
                     <span className="absolute top-1 right-1 bg-slate-900/70 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">{i + 1}</span>
                     <button
                       type="button"
                       onClick={() => removeStagedFile(i)}
-                      className="absolute -top-1.5 -left-1.5 bg-white border border-white/[0.12] rounded-full w-5 h-5 flex items-center justify-center text-zinc-300 hover:text-rose-600 hover:border-rose-300 shadow-sm"
+                      className="absolute -top-1.5 -left-1.5 bg-white border border-gray-300 rounded-full w-5 h-5 flex items-center justify-center text-slate-500 hover:text-rose-600 hover:border-rose-300 shadow-sm"
                       title="הסרת עמוד זה"
                     >
                       <X size={11} />
@@ -4553,8 +4603,8 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
             </div>
           )}
 
-          {scanNotice && <div className="text-xs text-emerald-300 bg-emerald-500/10 rounded-lg px-2.5 py-2 mt-2">{scanNotice}</div>}
-          {scanError && <div className="text-xs text-rose-300 bg-rose-500/10 rounded-lg px-2.5 py-2 mt-2">{scanError}</div>}
+          {scanNotice && <div className="text-xs text-emerald-700 bg-emerald-100 rounded-lg px-2.5 py-2 mt-2">{scanNotice}</div>}
+          {scanError && <div className="text-xs text-rose-700 bg-rose-100 rounded-lg px-2.5 py-2 mt-2">{scanError}</div>}
         </div>
       )}
 
@@ -4562,9 +4612,9 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
         <div className={cardCls + " p-4 mb-4"}>
           <div className="flex items-center gap-2 mb-2">
             <FileSpreadsheet size={16} className="text-emerald-400" />
-            <span className="text-sm font-bold text-zinc-100">ייבוא מרוכז מקובץ הוצאות (Excel/CSV)</span>
+            <span className="text-sm font-bold text-slate-800">ייבוא מרוכז מקובץ הוצאות (Excel/CSV)</span>
           </div>
-          <p className="text-xs text-zinc-300 mb-3">
+          <p className="text-xs text-slate-500 mb-3">
             כל שורה בקובץ הופכת להוצאה נפרדת (לא רק ממלאת את הטופס למעלה). עמודות נדרשות: <b>תאריך</b> ו<b>סכום</b> (כולל מע"מ) - ואופציונלי: ספק, קטגוריה, תיאור, מספר חשבונית.
             אם יש לכם קובץ Excel: שמרו אותו קודם כ-CSV (File → Save As → CSV) והעלו את הקובץ הזה.
           </p>
@@ -4576,8 +4626,8 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
               onChange={(e) => { const f = e.target.files?.[0]; handleCsvImport(f); e.target.value = ""; }}
             />
           </label>
-          {csvSuccess && <div className="text-xs text-emerald-300 bg-emerald-500/10 rounded-lg px-2.5 py-2 mt-2">{csvSuccess}</div>}
-          {csvError && <div className="text-xs text-rose-300 bg-rose-500/10 rounded-lg px-2.5 py-2 mt-2 whitespace-pre-line">{csvError}</div>}
+          {csvSuccess && <div className="text-xs text-emerald-700 bg-emerald-100 rounded-lg px-2.5 py-2 mt-2">{csvSuccess}</div>}
+          {csvError && <div className="text-xs text-rose-700 bg-rose-100 rounded-lg px-2.5 py-2 mt-2 whitespace-pre-line">{csvError}</div>}
         </div>
       )}
       <Field label="קטגוריה">
@@ -4600,7 +4650,7 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
       <Field label='סטטוס מע"מ'>
         <div className="flex gap-1.5">
           {Object.entries(VAT_MODES).map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setForm({ ...form, vatMode: key, vatOverride: false, vatAmountOverride: "" })} className={`flex-1 rounded-xl py-2 border text-xs font-medium ${form.vatMode === key ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}>{label}</button>
+            <button key={key} type="button" onClick={() => setForm({ ...form, vatMode: key, vatOverride: false, vatAmountOverride: "" })} className={`flex-1 rounded-xl py-2 border text-xs font-medium ${form.vatMode === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>{label}</button>
           ))}
         </div>
       </Field>
@@ -4608,10 +4658,10 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
         <input type="number" min="0" step="0.01" className={inputCls} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
       </Field>
 
-      <div className="bg-white/[0.04] rounded-xl p-3 mb-4 text-sm space-y-1.5">
-        <div className="flex items-center justify-between"><span className="text-zinc-300">סכום לפני מע"מ</span><span className="font-medium">₪{amountExclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+      <div className="bg-gray-50 rounded-xl p-3 mb-4 text-sm space-y-1.5">
+        <div className="flex items-center justify-between"><span className="text-slate-500">סכום לפני מע"מ</span><span className="font-medium">₪{amountExclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
         <div className="flex items-center justify-between">
-          <span className="text-zinc-300 flex items-center gap-1.5">
+          <span className="text-slate-500 flex items-center gap-1.5">
             מע"מ ({vatRate}%)
             {form.vatMode !== "zero" && (
               <button type="button" onClick={() => setForm({ ...form, vatOverride: !form.vatOverride, vatAmountOverride: form.vatOverride ? "" : String(Math.round(computed.vatAmount * 100) / 100) })} className="text-[11px] text-amber-600 hover:underline">
@@ -4625,16 +4675,16 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
             <span className="font-medium">₪{vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           )}
         </div>
-        <div className="flex items-center justify-between pt-1.5 border-t"><span className="font-bold text-zinc-100">סה"כ כולל מע"מ</span><span className="font-bold text-zinc-100">₪{amountInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+        <div className="flex items-center justify-between pt-1.5 border-t"><span className="font-bold text-slate-800">סה"כ כולל מע"מ</span><span className="font-bold text-slate-800">₪{amountInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
         {!validation.balanced && (
-          <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs rounded-lg px-2.5 py-2 mt-1 flex items-center gap-1.5"><TriangleAlert size={13} /> החשבון לא מתאזן - הפרש ₪{validation.diff.toFixed(2)}. לא ניתן לשמור עד לתיקון.</div>
+          <div className="bg-rose-100 text-rose-700 text-xs rounded-lg px-2.5 py-2 mt-1 flex items-center gap-1.5"><TriangleAlert size={13} /> החשבון לא מתאזן - הפרש ₪{validation.diff.toFixed(2)}. לא ניתן לשמור עד לתיקון.</div>
         )}
       </div>
 
       <Field label="סטטוס תשלום">
         <div className="flex gap-2">
           {Object.entries(EXPENSE_PAYMENT_STATUSES).map(([key, cfg]) => (
-            <button key={key} type="button" onClick={() => setForm({ ...form, paymentStatus: key })} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${form.paymentStatus === key ? "bg-amber-500 text-white border-amber-500" : "bg-white/[0.04] border-white/[0.1] text-zinc-300"}`}>{cfg.label}</button>
+            <button key={key} type="button" onClick={() => setForm({ ...form, paymentStatus: key })} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${form.paymentStatus === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>{cfg.label}</button>
           ))}
         </div>
       </Field>
@@ -4645,7 +4695,7 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
       )}
       <Field label="הערות"><input className={inputCls} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
 
-      {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
       <button onClick={submit} disabled={busy || !validation.balanced} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}{existing ? "שמירת שינויים" : "שמירת הוצאה"}</button>
     </Modal>
   );
@@ -4681,25 +4731,25 @@ function ExpensePaymentsModal({ data, expense, onClose, refresh }) {
   return (
     <Modal title={`תשלומים - ${expense.invoiceNumber || expense.description || "הוצאה"}`} onClose={onClose}>
       <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-white/[0.04] rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">סה"כ (כולל מע"מ)</div><div className="font-bold text-zinc-100">₪{expense.amountInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-emerald-500/10 rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">שולם</div><div className="font-bold text-emerald-300">₪{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-amber-500/10 rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">יתרה</div><div className="font-bold text-amber-300">₪{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ (כולל מע"מ)</div><div className="font-bold text-slate-800">₪{expense.amountInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-emerald-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שולם</div><div className="font-bold text-emerald-700">₪{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-amber-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">יתרה</div><div className="font-bold text-amber-800">₪{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
       </div>
       <div className="mb-4">
-        <div className="text-sm font-medium text-zinc-300 mb-2">היסטוריית תשלומים</div>
-        {payments.length === 0 && <div className="text-sm text-zinc-300 text-center py-3">עדיין לא נרשמו תשלומים</div>}
+        <div className="text-sm font-medium text-slate-500 mb-2">היסטוריית תשלומים</div>
+        {payments.length === 0 && <div className="text-sm text-slate-500 text-center py-3">עדיין לא נרשמו תשלומים</div>}
         {payments.map((p) => (
           <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
             <div>
-              <div className="font-medium text-zinc-100 flex items-center gap-2">₪{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} {p.method && <PaymentMethodTag method={p.method} />}</div>
-              <div className="text-xs text-zinc-300">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
+              <div className="font-medium text-slate-800 flex items-center gap-2">₪{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} {p.method && <PaymentMethodTag method={p.method} />}</div>
+              <div className="text-xs text-slate-500">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
             </div>
-            <button onClick={() => removePayment(p.id)} className="text-zinc-500 hover:text-rose-600"><Trash2 size={15} /></button>
+            <button onClick={() => removePayment(p.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={15} /></button>
           </div>
         ))}
       </div>
       <div className="border-t pt-3">
-        <div className="text-sm font-bold text-zinc-200 mb-2">רישום תשלום חדש</div>
+        <div className="text-sm font-bold text-slate-700 mb-2">רישום תשלום חדש</div>
         <div className="grid grid-cols-2 gap-2 mb-2">
           <Field label="סכום (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
           <Field label="תאריך תשלום"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
@@ -4708,7 +4758,7 @@ function ExpensePaymentsModal({ data, expense, onClose, refresh }) {
           <PaymentMethodPicker value={method} onChange={setMethod} />
         </Field>
         <Field label="הערה"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-        {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
         <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום תשלום</button>
       </div>
     </Modal>
@@ -4753,30 +4803,30 @@ function InvoicePaymentsModal({ data, invoice, refresh, onClose }) {
 
   return (
     <Modal title={`תשלומים - ${invoice.invoiceNumber}`} onClose={onClose}>
-      <div className="text-sm text-zinc-300 mb-3">{customer?.name} · לתשלום עד {new Date(invoice.dueDate).toLocaleDateString("he-IL")}</div>
+      <div className="text-sm text-slate-500 mb-3">{customer?.name} · לתשלום עד {new Date(invoice.dueDate).toLocaleDateString("he-IL")}</div>
       <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-white/[0.04] rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">סה"כ חשבונית</div><div className="font-bold text-zinc-100">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-emerald-500/10 rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">שולם</div><div className="font-bold text-emerald-300">₪{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-amber-500/10 rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">יתרה</div><div className="font-bold text-amber-300">₪{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ חשבונית</div><div className="font-bold text-slate-800">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-emerald-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שולם</div><div className="font-bold text-emerald-700">₪{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-amber-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">יתרה</div><div className="font-bold text-amber-800">₪{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
       </div>
 
       <div className="mb-4">
-        <div className="text-sm font-medium text-zinc-300 mb-2">היסטוריית תשלומים</div>
-        {payments.length === 0 && <div className="text-sm text-zinc-300 text-center py-3">עדיין לא נרשמו תשלומים</div>}
+        <div className="text-sm font-medium text-slate-500 mb-2">היסטוריית תשלומים</div>
+        {payments.length === 0 && <div className="text-sm text-slate-500 text-center py-3">עדיין לא נרשמו תשלומים</div>}
         {payments.map((p) => (
           <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
             <div>
-              <div className="font-medium text-zinc-100 flex items-center gap-2">₪{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} {p.method && <PaymentMethodTag method={p.method} />}</div>
-              <div className="text-xs text-zinc-300">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
+              <div className="font-medium text-slate-800 flex items-center gap-2">₪{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} {p.method && <PaymentMethodTag method={p.method} />}</div>
+              <div className="text-xs text-slate-500">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
             </div>
-            <button onClick={() => removePayment(p.id)} className="text-zinc-500 hover:text-rose-600"><Trash2 size={15} /></button>
+            <button onClick={() => removePayment(p.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={15} /></button>
           </div>
         ))}
       </div>
 
       {balance > 0.01 && (
         <div className="border-t pt-3 mb-3">
-          <div className="text-sm font-bold text-zinc-200 mb-2">רישום תשלום חדש</div>
+          <div className="text-sm font-bold text-slate-700 mb-2">רישום תשלום חדש</div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <Field label="סכום (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
             <Field label="תאריך תשלום"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
@@ -4785,12 +4835,12 @@ function InvoicePaymentsModal({ data, invoice, refresh, onClose }) {
             <PaymentMethodPicker value={method} onChange={setMethod} />
           </Field>
           <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום תשלום</button>
         </div>
       )}
 
-      <button onClick={voidThisInvoice} className="text-xs text-zinc-500 hover:text-rose-600 flex items-center gap-1"><Ban size={13} /> ביטול חשבונית (למשל: נרשמה בטעות)</button>
+      <button onClick={voidThisInvoice} className="text-xs text-gray-400 hover:text-rose-600 flex items-center gap-1"><Ban size={13} /> ביטול חשבונית (למשל: נרשמה בטעות)</button>
     </Modal>
   );
 }
@@ -4836,7 +4886,7 @@ function NewInvoiceModal({ data, refresh, onClose }) {
           <option value="14">שוטף + 14</option><option value="30">שוטף + 30</option><option value="60">שוטף + 60</option>
         </select>
       </Field>
-      {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
       <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}הוספת חוב</button>
     </Modal>
   );
@@ -4873,26 +4923,26 @@ function ReceivablesScreen({ data, refresh }) {
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h2 className="font-bold text-xl text-zinc-100 flex items-center gap-2"><Wallet size={22} className="text-amber-600" /> חובות וגבייה</h2>
-          <p className="text-zinc-300 text-sm mt-1">גיול חובות לקוחות (Aging) לפי טווחי איחור, וניהול תשלומים.</p>
+          <h2 className="font-bold text-xl text-slate-800 flex items-center gap-2"><Wallet size={22} className="text-amber-600" /> חובות וגבייה</h2>
+          <p className="text-slate-500 text-sm mt-1">גיול חובות לקוחות (Aging) לפי טווחי איחור, וניהול תשלומים.</p>
         </div>
         <button onClick={() => setOpenNewInvoice(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> הוספת חוב פתוח</button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-5">
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-4"><div className="text-zinc-300 text-sm mb-1">סה"כ חוב פתוח</div><div className="text-2xl font-bold text-zinc-100">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-4"><div className="text-slate-500 text-sm mb-1">סה"כ חוב פתוח</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
         {bucketTotals.map((b) => (
-          <div key={b.key} className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-4">
-            <div className="text-zinc-300 text-xs mb-1">{b.label}</div>
-            <div className={`text-lg font-bold ${b.total > 0 ? TONE_TEXT_CLS[b.tone] : "text-zinc-600"}`}>₪{b.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          <div key={b.key} className="bg-white rounded-2xl border shadow-sm p-4">
+            <div className="text-slate-500 text-xs mb-1">{b.label}</div>
+            <div className={`text-lg font-bold ${b.total > 0 ? TONE_TEXT_CLS[b.tone] : "text-slate-300"}`}>₪{b.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           </div>
         ))}
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">לקוח</th><th className="px-5 py-4 font-medium">יתרת חוב</th>
               <th className="px-5 py-4 font-medium">מועד הפירעון הישן ביותר</th><th className="px-5 py-4 font-medium">סטטוס</th><th className="px-5 py-4"></th>
             </tr>
@@ -4903,29 +4953,29 @@ function ReceivablesScreen({ data, refresh }) {
               const isOpen = expandedCustomerId === c.customerId;
               return (
                 <React.Fragment key={c.customerId}>
-                  <tr className="border-t cursor-pointer hover:bg-white/[0.04]" onClick={() => setExpandedCustomerId(isOpen ? null : c.customerId)}>
-                    <td className="px-5 py-4 font-medium text-zinc-100">{c.customer?.name || "-"}</td>
+                  <tr className="border-t cursor-pointer hover:bg-gray-50" onClick={() => setExpandedCustomerId(isOpen ? null : c.customerId)}>
+                    <td className="px-5 py-4 font-medium text-slate-800">{c.customer?.name || "-"}</td>
                     <td className="px-5 py-4 font-bold">₪{c.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                    <td className="px-5 py-4 text-zinc-300">{new Date(c.oldestDue).toLocaleDateString("he-IL")}</td>
+                    <td className="px-5 py-4 text-slate-500">{new Date(c.oldestDue).toLocaleDateString("he-IL")}</td>
                     <td className="px-5 py-4"><Badge tone={worstBucket.tone}>{worstBucket.label}</Badge></td>
-                    <td className="px-5 py-4 text-left"><ChevronLeft size={16} className={`text-zinc-500 transition ${isOpen ? "-rotate-90" : ""}`} /></td>
+                    <td className="px-5 py-4 text-left"><ChevronLeft size={16} className={`text-gray-400 transition ${isOpen ? "-rotate-90" : ""}`} /></td>
                   </tr>
                   {isOpen && (
-                    <tr className="border-t bg-white/[0.03]">
+                    <tr className="border-t bg-gray-50/60">
                       <td colSpan={5} className="px-5 py-4">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="text-zinc-300">
+                            <tr className="text-slate-500">
                               <th className="text-right font-medium py-1">חשבונית</th><th className="text-right font-medium py-1">הופקה</th>
                               <th className="text-right font-medium py-1">מועד פירעון</th><th className="text-right font-medium py-1">יתרה</th><th></th>
                             </tr>
                           </thead>
                           <tbody>
                             {c.invoices.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map((inv) => (
-                              <tr key={inv.id} className="border-t border-white/[0.08]">
+                              <tr key={inv.id} className="border-t border-gray-200">
                                 <td className="py-2">{inv.invoiceNumber}</td>
-                                <td className="py-2 text-zinc-300">{new Date(inv.issueDate).toLocaleDateString("he-IL")}</td>
-                                <td className="py-2 text-zinc-300">{new Date(inv.dueDate).toLocaleDateString("he-IL")}</td>
+                                <td className="py-2 text-slate-500">{new Date(inv.issueDate).toLocaleDateString("he-IL")}</td>
+                                <td className="py-2 text-slate-500">{new Date(inv.dueDate).toLocaleDateString("he-IL")}</td>
                                 <td className="py-2 font-bold">₪{inv.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                                 <td className="py-2 text-left">
                                   <button onClick={(e) => { e.stopPropagation(); setSelectedInvoice(inv); }} className="text-amber-600 hover:underline font-medium flex items-center gap-1">
@@ -4942,7 +4992,7 @@ function ReceivablesScreen({ data, refresh }) {
                 </React.Fragment>
               );
             })}
-            {customerRows.length === 0 && <tr><td colSpan={5} className="px-5 py-8 text-center text-zinc-300">אין כרגע חובות פתוחים - כל הלקוחות מסודרים</td></tr>}
+            {customerRows.length === 0 && <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-500">אין כרגע חובות פתוחים - כל הלקוחות מסודרים</td></tr>}
           </tbody>
         </table>
       </div>
@@ -5004,23 +5054,23 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="font-bold text-xl text-zinc-100">הוצאות וחשבוניות ספקים</h2>
+        <h2 className="font-bold text-xl text-slate-800">הוצאות וחשבוניות ספקים</h2>
         <div className="flex items-center gap-2">
           <button onClick={exportToExcel} disabled={exportBusy} className={btnGhost + " flex items-center gap-1.5 !py-2"}>{exportBusy ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} ייצוא לאקסל</button>
           {isAdmin && <button onClick={() => setModalExpense({})} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> הוצאה חדשה</button>}
         </div>
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-4 mb-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-4 mb-4">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
           <div className="flex items-center gap-2">
             <button onClick={() => shiftWindow(-1)} className={btnGhost + " !p-2"} title="חודש אחורה"><ChevronLeft size={16} className="rotate-180" /></button>
-            <span className="font-bold text-zinc-200 text-sm min-w-[140px] text-center">{rangeLabel}</span>
+            <span className="font-bold text-slate-700 text-sm min-w-[140px] text-center">{rangeLabel}</span>
             <button onClick={() => shiftWindow(1)} className={btnGhost + " !p-2"} title="חודש קדימה"><ChevronLeft size={16} /></button>
           </div>
           <div className="flex items-center gap-1.5">
             {[3, 6, 12].map((n) => (
-              <button key={n} onClick={() => applyPreset(n)} className="text-xs rounded-lg px-2.5 py-1.5 border border-white/[0.12] text-zinc-300 hover:bg-white/[0.04]">{n} חודשים אחרונים</button>
+              <button key={n} onClick={() => applyPreset(n)} className="text-xs rounded-lg px-2.5 py-1.5 border border-gray-300 text-slate-500 hover:bg-gray-50">{n} חודשים אחרונים</button>
             ))}
           </div>
         </div>
@@ -5034,10 +5084,10 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
         </select>
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden overflow-x-auto">
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white/[0.03] text-zinc-300 text-right">
+            <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">קטגוריה</th>
               <th className="px-5 py-4 font-medium">ספק</th><th className="px-5 py-4 font-medium">חשבונית</th>
               <th className="px-5 py-4 font-medium">לפני מע"מ</th><th className="px-5 py-4 font-medium">מע"מ</th>
@@ -5049,25 +5099,25 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
               const supplier = data.suppliers.find((s) => s.id === e.supplierId);
               return (
                 <tr key={e.id} className="border-t">
-                  <td className="px-5 py-4 text-zinc-300 whitespace-nowrap">{new Date(e.expenseDate).toLocaleDateString("he-IL")}</td>
+                  <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{new Date(e.expenseDate).toLocaleDateString("he-IL")}</td>
                   <td className="px-5 py-4">{EXPENSE_CATEGORIES[e.category]}</td>
-                  <td className="px-5 py-4 text-zinc-300">{supplier?.name || "-"}</td>
-                  <td className="px-5 py-4 text-zinc-300">{e.invoiceNumber || "-"}</td>
+                  <td className="px-5 py-4 text-slate-500">{supplier?.name || "-"}</td>
+                  <td className="px-5 py-4 text-slate-500">{e.invoiceNumber || "-"}</td>
                   <td className="px-5 py-4">₪{e.amountExclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                  <td className="px-5 py-4 text-zinc-300">₪{e.vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className="px-5 py-4 text-slate-500">₪{e.vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                   <td className="px-5 py-4 font-bold">₪{e.amountInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                   <td className="px-5 py-4"><Badge tone={EXPENSE_PAYMENT_STATUSES[e.paymentStatus]?.tone}>{EXPENSE_PAYMENT_STATUSES[e.paymentStatus]?.label}</Badge></td>
                   <td className="px-5 py-4 text-left">
                     <div className="flex items-center gap-2 justify-end">
                       <button onClick={() => setPaymentsFor(e)} className="text-emerald-600 hover:underline text-xs font-medium">תשלומים</button>
-                      {isAdmin && <button onClick={() => setModalExpense(e)} className="text-zinc-500 hover:text-amber-600"><Pencil size={14} /></button>}
-                      {isAdmin && <button onClick={() => removeExpense(e.id)} className="text-zinc-500 hover:text-rose-600"><Trash2 size={14} /></button>}
+                      {isAdmin && <button onClick={() => setModalExpense(e)} className="text-gray-400 hover:text-amber-600"><Pencil size={14} /></button>}
+                      {isAdmin && <button onClick={() => removeExpense(e.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={14} /></button>}
                     </div>
                   </td>
                 </tr>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={9} className="px-5 py-8 text-center text-zinc-300">אין עדיין הוצאות רשומות</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="px-5 py-8 text-center text-slate-500">אין עדיין הוצאות רשומות</td></tr>}
           </tbody>
         </table>
       </div>
@@ -5196,10 +5246,10 @@ function POsScreen({ data, refresh, onPrint }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-xl text-zinc-100">הזמנות רכש (Purchase Orders)</h2><button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> PO חדש</button></div>
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] overflow-hidden overflow-x-auto">
+      <div className="flex items-center justify-between mb-4"><h2 className="font-bold text-xl text-slate-800">הזמנות רכש (Purchase Orders)</h2><button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> PO חדש</button></div>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="bg-white/[0.03] text-zinc-300 text-right"><th className="px-5 py-4 font-medium">מס' הזמנה</th><th className="px-5 py-4 font-medium">מכולה/משלוח</th><th className="px-5 py-4 font-medium">ספק</th><th className="px-5 py-4 font-medium">סה"כ</th><th className="px-5 py-4 font-medium">שולם</th><th className="px-5 py-4 font-medium">יתרה</th><th className="px-5 py-4 font-medium">תנאי תשלום</th><th className="px-5 py-4 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">מס' הזמנה</th><th className="px-5 py-4 font-medium">מכולה/משלוח</th><th className="px-5 py-4 font-medium">ספק</th><th className="px-5 py-4 font-medium">סה"כ</th><th className="px-5 py-4 font-medium">שולם</th><th className="px-5 py-4 font-medium">יתרה</th><th className="px-5 py-4 font-medium">תנאי תשלום</th><th className="px-5 py-4 font-medium">סטטוס</th><th className="px-4 py-2"></th></tr></thead>
           <tbody>
             {data.purchaseOrders.map((po) => {
               const supplier = data.suppliers.find((s) => s.id === po.supplierId);
@@ -5211,16 +5261,16 @@ function POsScreen({ data, refresh, onPrint }) {
               const isOverdue = po.dueDate && balance > 0.01 && new Date(po.dueDate) < new Date(new Date().toDateString());
               return (
                 <tr key={po.id} className="border-t">
-                  <td className="px-5 py-4 font-medium text-zinc-100 whitespace-nowrap">{po.poNumber}</td>
-                  <td className="px-5 py-4">{shipment ? <Badge tone="violet">{shipment.name}</Badge> : <span className="text-zinc-600">-</span>}</td>
-                  <td className="px-5 py-4 text-zinc-300 whitespace-nowrap">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800 whitespace-nowrap">{po.poNumber}</td>
+                  <td className="px-5 py-4">{shipment ? <Badge tone="violet">{shipment.name}</Badge> : <span className="text-slate-300">-</span>}</td>
+                  <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{supplier?.name} {supplier?.country ? `(${supplier.country})` : ""}</td>
                   <td className="px-5 py-4 font-bold whitespace-nowrap">{sym}{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                  <td className="px-5 py-4 text-emerald-300 whitespace-nowrap">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                  <td className={`px-5 py-4 font-medium whitespace-nowrap ${balance > 0.01 ? (isOverdue ? "text-rose-600" : "text-amber-600") : "text-zinc-600"}`}>
+                  <td className="px-5 py-4 text-emerald-700 whitespace-nowrap">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  <td className={`px-5 py-4 font-medium whitespace-nowrap ${balance > 0.01 ? (isOverdue ? "text-rose-600" : "text-amber-600") : "text-slate-300"}`}>
                     {sym}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     {isOverdue && <span className="block text-xs">פג תוקף!</span>}
                   </td>
-                  <td className="px-5 py-4 text-zinc-300 whitespace-nowrap">
+                  <td className="px-5 py-4 text-slate-500 whitespace-nowrap">
                     {PAYMENT_TERMS[po.paymentTerms]?.label}
                     {po.paymentTerms === "deposit_balance" && po.depositPercent ? ` (${po.depositPercent}%)` : ""}
                     {po.paymentTerms === "net_x" && po.netDays ? ` (${po.netDays} ימים)` : ""}
@@ -5240,7 +5290,7 @@ function POsScreen({ data, refresh, onPrint }) {
                   </td>
                   <td className="px-5 py-4">
                     <select
-                      className="text-xs rounded-lg border border-white/[0.12] px-2 py-1 bg-zinc-900"
+                      className="text-xs rounded-lg border border-gray-300 px-2 py-1 bg-white"
                       value={po.status}
                       disabled={statusBusyId === po.id}
                       onChange={(e) => changeStatus(po.id, e.target.value)}
@@ -5251,14 +5301,14 @@ function POsScreen({ data, refresh, onPrint }) {
                   <td className="px-5 py-4 text-left">
                     <div className="flex items-center gap-3 justify-end whitespace-nowrap">
                       <button onClick={() => setPaymentsPO(po)} className="text-emerald-600 hover:underline font-medium flex items-center gap-1"><Database size={14} /> תשלומים</button>
-                      <button onClick={() => openEditPO(po)} className="text-zinc-300 hover:text-amber-600 font-medium flex items-center gap-1"><Pencil size={14} /> עריכה</button>
+                      <button onClick={() => openEditPO(po)} className="text-slate-500 hover:text-amber-600 font-medium flex items-center gap-1"><Pencil size={14} /> עריכה</button>
                       <button onClick={() => onPrint(po.id)} className="text-amber-600 hover:underline font-medium flex items-center gap-1"><Printer size={14} /> צפייה/הדפסה</button>
                     </div>
                   </td>
                 </tr>
               );
             })}
-            {data.purchaseOrders.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-zinc-300">עדיין לא נוצרו הזמנות רכש</td></tr>}
+            {data.purchaseOrders.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">עדיין לא נוצרו הזמנות רכש</td></tr>}
           </tbody>
         </table>
       </div>
@@ -5280,9 +5330,9 @@ function POsScreen({ data, refresh, onPrint }) {
               <option value="">ללא שיוך למשלוח</option>
               {data.shipments.map((s) => <option key={s.id} value={s.id}>{s.name} - {SHIPMENT_STATUSES[s.status]?.label}</option>)}
             </select>
-            <div className="text-xs text-zinc-300 mt-1">הזמנות מכל הספקים שמשויכות לאותו משלוח ייטענו יחד במחשבון היבוא ועלויות הנחיתה.</div>
+            <div className="text-xs text-slate-500 mt-1">הזמנות מכל הספקים שמשויכות לאותו משלוח ייטענו יחד במחשבון היבוא ועלויות הנחיתה.</div>
           </Field>
-          <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-zinc-300">פריטים (מחירים ב-{currencySymbol}{currency})</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
+          <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-slate-500">פריטים (מחירים ב-{currencySymbol}{currency})</span><button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button></div>
           <div className="space-y-2 mb-2">
             {lines.map((l) => (
               <div key={l.id} className="grid grid-cols-6 gap-1.5 items-center">
@@ -5291,21 +5341,21 @@ function POsScreen({ data, refresh, onPrint }) {
                     <option value="">פריט...</option>
                     {data.items.map((it) => <option key={it.id} value={it.id}>{itemLabel(it)}</option>)}
                   </select>
-                  <button type="button" onClick={() => openNewItemFor(l.id)} className="shrink-0 rounded-xl border border-dashed border-amber-400 text-amber-600 hover:bg-amber-500/10 px-2.5" title="הוספת פריט חדש למאגר"><Plus size={16} /></button>
+                  <button type="button" onClick={() => openNewItemFor(l.id)} className="shrink-0 rounded-xl border border-dashed border-amber-400 text-amber-600 hover:bg-amber-100 px-2.5" title="הוספת פריט חדש למאגר"><Plus size={16} /></button>
                 </div>
                 <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
                 <input type="number" min="0" step="0.01" placeholder={`מחיר (${currencySymbol})`} className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
-                {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-zinc-500 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
+                {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
               </div>
             ))}
           </div>
-          <p className="text-xs text-zinc-300 mb-2">לא מוצאים את הפריט ברשימה? לחצו על <Plus size={11} className="inline" /> ליצירת פריט חדש ישירות מכאן - הוא יישמר במאגר הפריטים הכללי ויתמלא אוטומטית בשורה.</p>
+          <p className="text-xs text-slate-500 mb-2">לא מוצאים את הפריט ברשימה? לחצו על <Plus size={11} className="inline" /> ליצירת פריט חדש ישירות מכאן - הוא יישמר במאגר הפריטים הכללי ויתמלא אוטומטית בשורה.</p>
           <div className="flex items-center justify-between text-sm mb-4 px-1">
-            <span className="text-zinc-300">סה"כ הזמנה</span>
-            <span className="font-bold text-zinc-100">{currencySymbol}{orderTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <span className="text-slate-500">סה"כ הזמנה</span>
+            <span className="font-bold text-slate-800">{currencySymbol}{orderTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </div>
 
-          <div className="border-t pt-3 mb-1"><span className="text-sm font-bold text-zinc-200">תנאי תשלום</span></div>
+          <div className="border-t pt-3 mb-1"><span className="text-sm font-bold text-slate-700">תנאי תשלום</span></div>
           <Field label="סוג תנאי תשלום">
             <select className={inputCls} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
               {Object.entries(PAYMENT_TERMS).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
@@ -5315,7 +5365,7 @@ function POsScreen({ data, refresh, onPrint }) {
             <Field label="אחוז מקדמה חובה (%)">
               <input type="number" min="1" max="99" className={inputCls} value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} />
               {orderTotal > 0 && depositPercent && (
-                <div className="text-xs text-zinc-300 mt-1">מקדמה: {currencySymbol}{(orderTotal * Number(depositPercent) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })} · יתרה: {currencySymbol}{(orderTotal * (1 - Number(depositPercent) / 100)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                <div className="text-xs text-slate-500 mt-1">מקדמה: {currencySymbol}{(orderTotal * Number(depositPercent) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })} · יתרה: {currencySymbol}{(orderTotal * (1 - Number(depositPercent) / 100)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
               )}
             </Field>
           )}
@@ -5331,7 +5381,7 @@ function POsScreen({ data, refresh, onPrint }) {
 
           <Field label="תנאי משלוח"><input className={inputCls} value={shippingTerms} onChange={(e) => setShippingTerms(e.target.value)} placeholder="לדוגמה: FOB Shanghai, 45 ימי אספקה" /></Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
-          {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}{editingPOId ? "שמירת שינויים" : "יצירת הזמנה והפקת מסמך"}</button>
         </Modal>
       )}
@@ -5360,9 +5410,9 @@ function POsScreen({ data, refresh, onPrint }) {
               </select>
             </Field>
           ) : (
-            <Field label="יחידת מידה"><input className={inputCls + " bg-white/[0.02] text-zinc-500"} value="יחידה" disabled readOnly /></Field>
+            <Field label="יחידת מידה"><input className={inputCls + " bg-gray-100 text-slate-400"} value="יחידה" disabled readOnly /></Field>
           )}
-          {newItemError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{newItemError}</div>}
+          {newItemError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{newItemError}</div>}
           <button onClick={submitNewItem} disabled={newItemBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{newItemBusy && <Loader2 size={16} className="animate-spin" />}יצירה והוספה להזמנה</button>
         </Modal>
       )}
@@ -5403,36 +5453,36 @@ function POPaymentsModal({ data, po, refresh, onClose }) {
   return (
     <Modal title={`תשלומים - ${po.poNumber}`} onClose={onClose}>
       <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-white/[0.04] rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">סה"כ הזמנה</div><div className="font-bold text-zinc-100">{sym}{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-emerald-500/10 rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">שולם</div><div className="font-bold text-emerald-300">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-amber-500/10 rounded-xl p-3 text-center"><div className="text-xs text-zinc-300 mb-1">יתרה</div><div className="font-bold text-amber-300">{sym}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ הזמנה</div><div className="font-bold text-slate-800">{sym}{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-emerald-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שולם</div><div className="font-bold text-emerald-700">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-amber-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">יתרה</div><div className="font-bold text-amber-800">{sym}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
       </div>
       {depositAmount != null && (
-        <div className="text-xs text-zinc-300 mb-4 bg-sky-500/10 rounded-xl p-2.5">תנאי תשלום: מקדמה {po.depositPercent}% ({sym}{depositAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}) + יתרה {sym}{(total - depositAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+        <div className="text-xs text-slate-500 mb-4 bg-sky-100 rounded-xl p-2.5">תנאי תשלום: מקדמה {po.depositPercent}% ({sym}{depositAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}) + יתרה {sym}{(total - depositAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
       )}
 
       <div className="mb-4">
-        <div className="text-sm font-medium text-zinc-300 mb-2">היסטוריית תשלומים</div>
-        {payments.length === 0 && <div className="text-sm text-zinc-300 text-center py-3">עדיין לא נרשמו תשלומים</div>}
+        <div className="text-sm font-medium text-slate-500 mb-2">היסטוריית תשלומים</div>
+        {payments.length === 0 && <div className="text-sm text-slate-500 text-center py-3">עדיין לא נרשמו תשלומים</div>}
         {payments.map((p) => (
           <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
             <div>
-              <div className="font-medium text-zinc-100">{sym}{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-              <div className="text-xs text-zinc-300">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
+              <div className="font-medium text-slate-800">{sym}{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+              <div className="text-xs text-slate-500">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
             </div>
-            <button onClick={() => removePayment(p.id)} className="text-zinc-500 hover:text-rose-600"><Trash2 size={15} /></button>
+            <button onClick={() => removePayment(p.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={15} /></button>
           </div>
         ))}
       </div>
 
       <div className="border-t pt-3">
-        <div className="text-sm font-bold text-zinc-200 mb-2">רישום תשלום חדש</div>
+        <div className="text-sm font-bold text-slate-700 mb-2">רישום תשלום חדש</div>
         <div className="grid grid-cols-2 gap-2 mb-2">
           <Field label={`סכום (${sym})`}><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
           <Field label="תאריך תשלום"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
         </div>
         <Field label="הערה (לדוגמה: מקדמה 30%, יתרה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-        {error && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+        {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
         <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום תשלום</button>
       </div>
     </Modal>
@@ -5622,38 +5672,38 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
 
   return (
     <div className="space-y-5 max-w-2xl">
-      <h2 className="font-bold text-xl text-zinc-100 flex items-center gap-2"><Settings size={22} className="text-amber-600" /> הגדרות</h2>
+      <h2 className="font-bold text-xl text-slate-800 flex items-center gap-2"><Settings size={22} className="text-amber-600" /> הגדרות</h2>
 
       {isAdmin && (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-          <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><Upload size={18} /> לוגו העסק</h3>
-          <p className="text-zinc-300 text-sm mb-4">התמונה תוצג בסרגל הניווט ובמסך ההתחברות, ותישמר ב-Supabase (טבלת app_settings) לכל המשתמשים.</p>
+        <div className="bg-white rounded-2xl border shadow-sm p-5">
+          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Upload size={18} /> לוגו העסק</h3>
+          <p className="text-slate-500 text-sm mb-4">התמונה תוצג בסרגל הניווט ובמסך ההתחברות, ותישמר ב-Supabase (טבלת app_settings) לכל המשתמשים.</p>
           <div className="flex items-center gap-4">
             <LogoBadge logoUrl={logoUrl} size={64} />
             <div className="flex-1">
               <button onClick={pickLogoFile} disabled={logoBusy} className={btnPrimary + " flex items-center gap-2"}>{logoBusy && <Loader2 size={16} className="animate-spin" />}<Upload size={16} /> העלה לוגו עסק</button>
               <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoFile} />
-              {logoFileName && <div className="text-xs text-zinc-300 mt-2">קובץ אחרון שהועלה: {logoFileName}</div>}
+              {logoFileName && <div className="text-xs text-slate-500 mt-2">קובץ אחרון שהועלה: {logoFileName}</div>}
             </div>
           </div>
-          {logoError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mt-3">{logoError}</div>}
-          {logoSaved && <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm rounded-xl px-3 py-2 mt-3 flex items-center gap-2"><CircleCheck size={16} /> הלוגו הוחלף ונשמר בהצלחה ב-DB</div>}
+          {logoError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mt-3">{logoError}</div>}
+          {logoSaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mt-3 flex items-center gap-2"><CircleCheck size={16} /> הלוגו הוחלף ונשמר בהצלחה ב-DB</div>}
         </div>
       )}
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-        <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><User size={18} /> ניהול פרופיל</h3>
-        <p className="text-zinc-300 text-sm mb-4">כתובת הדוא"ל להתחברות.</p>
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><User size={18} /> ניהול פרופיל</h3>
+        <p className="text-slate-500 text-sm mb-4">כתובת הדוא"ל להתחברות.</p>
         <Field label='כתובת דוא"ל להתחברות'><input type="email" className={inputCls} value={newEmail} onChange={(e) => setNewEmail(e.target.value)} /></Field>
-        {profileError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{profileError}</div>}
-        {profileSaved && <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm rounded-xl px-3 py-2 mb-3">נשלח קישור אישור לדוא"ל. השינוי ייכנס לתוקף לאחר האישור.</div>}
+        {profileError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{profileError}</div>}
+        {profileSaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">נשלח קישור אישור לדוא"ל. השינוי ייכנס לתוקף לאחר האישור.</div>}
         <button onClick={saveProfile} disabled={profileBusy} className={btnPrimary + " flex items-center gap-2"}>{profileBusy && <Loader2 size={16} className="animate-spin" />}שמירת פרופיל</button>
       </div>
 
       {isAdmin && (
-        <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-          <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><Building2 size={18} /> פרטי העסק</h3>
-          <p className="text-zinc-300 text-sm mb-4">מוצג בכותרת המערכת ובמסמכי PO.</p>
+        <div className="bg-white rounded-2xl border shadow-sm p-5">
+          <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Building2 size={18} /> פרטי העסק</h3>
+          <p className="text-slate-500 text-sm mb-4">מוצג בכותרת המערכת ובמסמכי PO.</p>
           <Field label="שם החברה (עברית)"><input className={inputCls} value={company.name} onChange={(e) => setCompany({ ...company, name: e.target.value })} /></Field>
           <Field label="שם משפטי (אנגלית)"><input className={inputCls} value={company.legalName} onChange={(e) => setCompany({ ...company, legalName: e.target.value })} /></Field>
           <Field label="כתובת"><input className={inputCls} value={company.address} onChange={(e) => setCompany({ ...company, address: e.target.value })} /></Field>
@@ -5662,38 +5712,38 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
             <Field label='אחוז מע"מ נוכחי'><input type="number" min="0" step="0.1" className={inputCls} value={company.vatRate ?? 18} onChange={(e) => setCompany({ ...company, vatRate: Number(e.target.value) })} /></Field>
             <Field label="אחוז מקדמת מס הכנסה"><input type="number" min="0" step="0.1" className={inputCls} value={company.taxAdvanceRate ?? 0} onChange={(e) => setCompany({ ...company, taxAdvanceRate: Number(e.target.value) })} /></Field>
           </div>
-          <p className="text-xs text-zinc-300 -mt-2 mb-3">שני האחוזים האלה משמשים את מנוע חישוב המע"מ בכל המערכת (הזמנות, הוצאות) ואת דוח "מע"מ ומקדמות".</p>
-          {companySaved && <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm rounded-xl px-3 py-2 mb-3">פרטי העסק עודכנו</div>}
+          <p className="text-xs text-slate-500 -mt-2 mb-3">שני האחוזים האלה משמשים את מנוע חישוב המע"מ בכל המערכת (הזמנות, הוצאות) ואת דוח "מע"מ ומקדמות".</p>
+          {companySaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">פרטי העסק עודכנו</div>}
           <button onClick={saveCompany} disabled={companyBusy} className={btnPrimary + " flex items-center gap-2"}>{companyBusy && <Loader2 size={16} className="animate-spin" />}שמירת פרטי עסק</button>
         </div>
       )}
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-        <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><KeyRound size={18} /> אבטחה - שינוי סיסמה</h3>
-        <p className="text-zinc-300 text-sm mb-4">יש להזין את הסיסמה הנוכחית לאימות, ולאחר מכן את הסיסמה החדשה פעמיים.</p>
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><KeyRound size={18} /> אבטחה - שינוי סיסמה</h3>
+        <p className="text-slate-500 text-sm mb-4">יש להזין את הסיסמה הנוכחית לאימות, ולאחר מכן את הסיסמה החדשה פעמיים.</p>
         <Field label="סיסמה נוכחית"><input type="password" className={inputCls} value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} /></Field>
         <Field label="סיסמה חדשה"><input type="password" className={inputCls} value={newPw} onChange={(e) => setNewPw(e.target.value)} /></Field>
         <Field label="אימות סיסמה חדשה"><input type="password" className={inputCls} value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} /></Field>
-        {pwError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{pwError}</div>}
-        {pwSaved && <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm rounded-xl px-3 py-2 mb-3 flex items-center gap-2"><CircleCheck size={16} /> הסיסמה עודכנה בהצלחה</div>}
+        {pwError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{pwError}</div>}
+        {pwSaved && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3 flex items-center gap-2"><CircleCheck size={16} /> הסיסמה עודכנה בהצלחה</div>}
         <button onClick={changePassword} disabled={pwBusy} className={btnPrimary + " flex items-center gap-2"}>{pwBusy && <Loader2 size={16} className="animate-spin" />}עדכון סיסמה</button>
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-        <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><KeyRound size={18} /> אימות דו-שלבי (2FA)</h3>
-        <p className="text-zinc-300 text-sm mb-4">שכבת הגנה נוספת מעבר לסיסמה, דרך אפליקציית Authenticator (Google Authenticator, Microsoft Authenticator וכדומה).</p>
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><KeyRound size={18} /> אימות דו-שלבי (2FA)</h3>
+        <p className="text-slate-500 text-sm mb-4">שכבת הגנה נוספת מעבר לסיסמה, דרך אפליקציית Authenticator (Google Authenticator, Microsoft Authenticator וכדומה).</p>
 
         {mfaJustEnabled && (
-          <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-300 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
+          <div className="flex items-center gap-2 bg-emerald-100 text-emerald-700 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
             <CircleCheck size={16} /> אומת ונשמר בהצלחה! מעכשיו תתבקשו להזין קוד גם בכניסה הבאה.
           </div>
         )}
 
-        {mfaFactors === null && <div className="text-sm text-zinc-300 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> בודק סטטוס...</div>}
+        {mfaFactors === null && <div className="text-sm text-slate-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> בודק סטטוס...</div>}
 
         {mfaFactors && mfaFactors.length > 0 && !mfaEnrollData && (
           <div>
-            <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-300 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
+            <div className="flex items-center gap-2 bg-emerald-100 text-emerald-700 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
               <CircleCheck size={16} /> אימות דו-שלבי פעיל על החשבון שלכם
             </div>
             <button onClick={() => disableMfa(mfaFactors[0].id)} disabled={mfaBusy} className={btnGhost + " flex items-center gap-2 text-rose-600"}>
@@ -5704,7 +5754,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
 
         {mfaFactors && mfaFactors.length === 0 && !mfaEnrollData && (
           <div>
-            <div className="flex items-center gap-2 bg-amber-500/10 text-amber-300 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
+            <div className="flex items-center gap-2 bg-amber-100 text-amber-800 rounded-xl px-3 py-2.5 mb-3 text-sm font-medium">
               <TriangleAlert size={16} /> אימות דו-שלבי אינו מופעל
             </div>
             <button onClick={startMfaEnroll} disabled={mfaBusy} className={btnPrimary + " flex items-center gap-2"}>
@@ -5715,15 +5765,15 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
 
         {mfaEnrollData && (
           <div>
-            <p className="text-sm text-zinc-300 mb-3">1. סרקו את הקוד עם אפליקציית ה-Authenticator, או הזינו את המפתח הסודי ידנית:</p>
-            <div className="flex justify-center bg-white/[0.04] rounded-xl p-4 mb-3">
+            <p className="text-sm text-slate-500 mb-3">1. סרקו את הקוד עם אפליקציית ה-Authenticator, או הזינו את המפתח הסודי ידנית:</p>
+            <div className="flex justify-center bg-gray-50 rounded-xl p-4 mb-3">
               <img src={mfaEnrollData.totp.qr_code} alt="QR Code" className="w-44 h-44" />
             </div>
-            <div className="bg-white/[0.04] rounded-xl px-3 py-2 mb-4 text-center">
-              <div className="text-xs text-zinc-300 mb-1">מפתח סודי להזנה ידנית</div>
-              <div className="font-mono text-sm text-zinc-200 break-all">{mfaEnrollData.totp.secret}</div>
+            <div className="bg-gray-50 rounded-xl px-3 py-2 mb-4 text-center">
+              <div className="text-xs text-slate-500 mb-1">מפתח סודי להזנה ידנית</div>
+              <div className="font-mono text-sm text-slate-700 break-all">{mfaEnrollData.totp.secret}</div>
             </div>
-            <p className="text-sm text-zinc-300 mb-2">2. הזינו את הקוד בן 6 הספרות שמופיע כרגע באפליקציה:</p>
+            <p className="text-sm text-slate-500 mb-2">2. הזינו את הקוד בן 6 הספרות שמופיע כרגע באפליקציה:</p>
             <Field label="קוד אימות">
               <input
                 type="text" inputMode="numeric" maxLength={6}
@@ -5732,7 +5782,7 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
                 onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               />
             </Field>
-            {mfaError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-3">{mfaError}</div>}
+            {mfaError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{mfaError}</div>}
             <div className="flex gap-2">
               <button onClick={confirmMfaEnroll} disabled={mfaBusy || mfaCode.length !== 6} className={btnPrimary + " flex-1 flex items-center justify-center gap-2"}>
                 {mfaBusy && <Loader2 size={16} className="animate-spin" />} אימות והפעלה
@@ -5743,13 +5793,13 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
         )}
       </div>
 
-      <div className="bg-zinc-900/60 rounded-2xl border border-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-14px_rgba(0,0,0,0.7)] p-5">
-        <h3 className="font-bold text-zinc-100 mb-1 flex items-center gap-2"><Database size={18} /> חיבור מסד נתונים</h3>
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Database size={18} /> חיבור מסד נתונים</h3>
         <div className="flex items-center gap-2 mt-2 mb-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-          <span className="font-medium text-zinc-200">מחובר בלייב ל-Supabase</span>
+          <span className="font-medium text-slate-700">מחובר בלייב ל-Supabase</span>
         </div>
-        <p className="text-zinc-300 text-sm">Realtime פעיל על טבלאות המלאי והתנועות. עדכוני RLS ומפתחות ה-API מנוהלים דרך קובץ ה-.env והגדרות הפרויקט ב-Supabase Dashboard.</p>
+        <p className="text-slate-500 text-sm">Realtime פעיל על טבלאות המלאי והתנועות. עדכוני RLS ומפתחות ה-API מנוהלים דרך קובץ ה-.env והגדרות הפרויקט ב-Supabase Dashboard.</p>
       </div>
     </div>
   );
@@ -5912,15 +5962,15 @@ export default function App() {
   };
 
   if (session === undefined) {
-    return <div dir="rtl" className="min-h-screen flex items-center justify-center gap-2.5 text-zinc-400 bg-zinc-950"><Loader2 className="animate-spin" size={18} /> טוען...</div>;
+    return <div dir="rtl" className="min-h-screen flex items-center justify-center gap-2.5 text-slate-400 bg-white"><Loader2 className="animate-spin" size={18} /> טוען...</div>;
   }
   if (!session) {
     return <LoginScreen onSuccess={(newSession) => resolveSession(newSession)} logoUrl={publicLogoUrl} />;
   }
   if (mfaPendingFactorId) {
     return (
-      <div dir="rtl" lang="he" className="min-h-screen bg-zinc-950 flex items-center justify-center p-4" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
-        <div className={cardCls + " w-full max-w-sm p-7"}>
+      <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
+        <div className={cardCls + " w-full max-w-sm p-6"}>
           <MfaCodeStep
             factorId={mfaPendingFactorId}
             onVerified={() => setMfaPendingFactorId(null)}
@@ -5932,9 +5982,9 @@ export default function App() {
   }
   if (!data || !profile) {
     return (
-      <div dir="rtl" className="min-h-screen flex items-center justify-center text-zinc-400 gap-2 bg-zinc-950">
+      <div dir="rtl" className="min-h-screen flex items-center justify-center text-slate-400 gap-2">
         <Loader2 className="animate-spin" size={18} /> טוען נתונים...
-        {dataError && <div className="text-rose-400 text-sm mr-2">{dataError}</div>}
+        {dataError && <div className="text-rose-600 text-sm mr-2">{dataError}</div>}
       </div>
     );
   }
@@ -5950,79 +6000,79 @@ export default function App() {
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (
-    <div dir="rtl" lang="he" className="min-h-screen bg-zinc-950 text-zinc-100" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
+    <div dir="rtl" lang="he" className="min-h-screen bg-gray-50 text-slate-800" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         .sidebar-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-        .sidebar-scroll:hover { scrollbar-color: rgba(255,255,255,0.2) transparent; }
+        .sidebar-scroll:hover { scrollbar-color: rgba(255,255,255,0.25) transparent; }
         .sidebar-scroll::-webkit-scrollbar { width: 5px; }
         .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
         .sidebar-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 9999px; }
-        .sidebar-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+        .sidebar-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); }
         .mobile-nav-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-        .mobile-nav-scroll:hover { scrollbar-color: rgba(255,255,255,0.15) transparent; }
+        .mobile-nav-scroll:hover { scrollbar-color: rgba(0,0,0,0.15) transparent; }
         .mobile-nav-scroll::-webkit-scrollbar { width: 5px; }
         .mobile-nav-scroll::-webkit-scrollbar-track { background: transparent; }
         .mobile-nav-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 9999px; }
-        .mobile-nav-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+        .mobile-nav-scroll:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
       `}</style>
       <div className="flex">
-        <aside className="hidden md:flex flex-col w-64 shrink-0 bg-zinc-900/80 border-l border-white/[0.06] text-zinc-300 min-h-screen p-4 sticky top-0 h-screen">
+        <aside className="hidden md:flex flex-col w-64 shrink-0 bg-slate-900 text-slate-200 min-h-screen p-4 sticky top-0 h-screen">
           <div className="flex items-center gap-2.5 px-2 py-3 mb-4 shrink-0">
             <LogoBadge logoUrl={data.logoUrl} size={36} editable={isAdmin} onChange={async (dataUrl) => { try { await api.updateLogoUrl(dataUrl); await refresh(); } catch (e) { alert(e.message); } }} />
             <div>
-              <div className="font-bold text-zinc-100 leading-tight tracking-tight">אדל אימפורט</div>
-              <div className="text-xs text-zinc-500">ניהול מלאי</div>
+              <div className="font-bold text-white leading-tight tracking-tight">אדל אימפורט</div>
+              <div className="text-xs text-slate-400">ניהול מלאי</div>
             </div>
           </div>
           <nav className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto sidebar-scroll">
             {nav.map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14.5px] font-semibold tracking-tight transition shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-500 text-zinc-950 shadow-[0_1px_0_0_rgba(255,255,255,0.25)_inset]" : "text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"}`}>
+              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14.5px] font-semibold tracking-tight transition shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
                 <Icon size={18} /> {label}
               </button>
             ))}
           </nav>
-          <div className="border-t border-white/[0.08] pt-3 px-2 shrink-0">
-            <div className="text-sm text-zinc-200 font-semibold tracking-tight">{profile.fullName || session.user.email}</div>
-            <div className="text-xs text-zinc-500 mb-2">{roleLabel}</div>
-            <button onClick={handleSignOut} className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-100 transition"><LogOut size={14} /> התנתקות</button>
+          <div className="border-t border-slate-800 pt-3 px-2 shrink-0">
+            <div className="text-sm text-slate-300 font-semibold tracking-tight">{profile.fullName || session.user.email}</div>
+            <div className="text-xs text-slate-500 mb-2">{roleLabel}</div>
+            <button onClick={handleSignOut} className="flex items-center gap-2 text-xs text-slate-400 hover:text-white transition"><LogOut size={14} /> התנתקות</button>
           </div>
         </aside>
 
         <main className="flex-1 min-w-0">
-          <div className="md:hidden flex flex-row-reverse items-center justify-between bg-zinc-900/95 backdrop-blur-sm border-b border-white/[0.06] text-zinc-100 px-4 py-3.5 sticky top-0 z-30">
+          <div className="md:hidden flex flex-row-reverse items-center justify-between bg-gradient-to-l from-slate-900 to-slate-800 text-white px-4 py-3.5 sticky top-0 z-30 shadow-md">
             <div className="flex items-center gap-2.5">
               <LogoBadge logoUrl={data.logoUrl} size={34} />
               <div className="leading-tight">
                 <div className="font-bold text-[15px] tracking-tight">אדל אימפורט</div>
-                <div className="text-[11px] text-zinc-500 font-medium">ניהול מלאי</div>
+                <div className="text-[11px] text-slate-400 font-medium">ניהול מלאי</div>
               </div>
             </div>
-            <button onClick={() => setMobileMenuOpen(true)} className="p-1.5 rounded-lg hover:bg-white/[0.08] transition"><Menu size={22} /></button>
+            <button onClick={() => setMobileMenuOpen(true)} className="p-1.5 rounded-lg hover:bg-white/10 transition"><Menu size={22} /></button>
           </div>
 
           {mobileMenuOpen && (
-            <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden" onClick={() => setMobileMenuOpen(false)}>
-              <div className="bg-zinc-900 border-l border-white/[0.08] w-64 h-full p-4 flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5 shrink-0 text-zinc-400 hover:text-zinc-100"><X size={20} /></button>
+            <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileMenuOpen(false)}>
+              <div className="bg-white w-64 h-full p-4 flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5 shrink-0"><X size={20} /></button>
                 <nav className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto mobile-nav-scroll">
                   {nav.map(({ key, label, icon: Icon }) => (
-                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-semibold tracking-tight shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-500/15 text-amber-300" : "text-zinc-300"}`}>
+                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-semibold tracking-tight shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
                       <Icon size={18} /> {label}
                     </button>
                   ))}
                 </nav>
-                <div className="border-t border-white/[0.08] pt-3 shrink-0">
-                  <div className="text-sm text-zinc-200 font-semibold">{profile.fullName || session.user.email}</div>
-                  <div className="text-xs text-zinc-500 mb-2">{roleLabel}</div>
-                  <button onClick={handleSignOut} className="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-100 transition"><LogOut size={14} /> התנתקות</button>
+                <div className="border-t pt-3 shrink-0">
+                  <div className="text-sm text-slate-700 font-semibold">{profile.fullName || session.user.email}</div>
+                  <div className="text-xs text-slate-400 mb-2">{roleLabel}</div>
+                  <button onClick={handleSignOut} className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-800 transition"><LogOut size={14} /> התנתקות</button>
                 </div>
               </div>
             </div>
           )}
 
           <div className="p-4 sm:p-6 pb-48 md:pb-6 max-w-6xl mx-auto">
-            {dataError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl px-3 py-2 mb-4">{dataError}</div>}
+            {dataError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-4">{dataError}</div>}
             {customerFileId ? (
               <CustomerFile
                 data={data}
@@ -6066,24 +6116,24 @@ export default function App() {
 
           {tab !== "transaction" && !customerFileId && !locationFileId && isAdmin && (
             <div
-              className="md:hidden fixed inset-x-0 z-20 bg-zinc-900/90 backdrop-blur-xl border-t border-white/[0.08]"
+              className="md:hidden fixed inset-x-0 z-20 bg-white/90 backdrop-blur-xl border-t border-gray-100"
               style={{ bottom: "calc(4rem + env(safe-area-inset-bottom))", height: "4rem" }}
             >
-              <div className="flex h-full divide-x divide-x-reverse divide-white/[0.08]">
-                <button onClick={() => runQuickAction("transfer")} className="flex-1 flex items-center justify-center gap-2.5 active:bg-white/[0.06] transition">
-                  <div className="p-2 rounded-xl bg-sky-500/15 text-sky-300"><ArrowLeftRight size={17} /></div>
-                  <span className="text-sm font-semibold text-zinc-200 tracking-tight">העברה מהירה</span>
+              <div className="flex h-full divide-x divide-x-reverse divide-gray-100">
+                <button onClick={() => runQuickAction("transfer")} className="flex-1 flex items-center justify-center gap-2.5 active:bg-gray-50 transition">
+                  <div className="p-2 rounded-xl bg-sky-100 text-sky-600"><ArrowLeftRight size={17} /></div>
+                  <span className="text-sm font-semibold text-slate-700 tracking-tight">העברה מהירה</span>
                 </button>
-                <button onClick={() => runQuickAction("install")} className="flex-1 flex items-center justify-center gap-2.5 active:bg-white/[0.06] transition">
-                  <div className="p-2 rounded-xl bg-amber-500/15 text-amber-300"><Truck size={17} /></div>
-                  <span className="text-sm font-semibold text-zinc-200 tracking-tight">התקנה מהירה</span>
+                <button onClick={() => runQuickAction("install")} className="flex-1 flex items-center justify-center gap-2.5 active:bg-gray-50 transition">
+                  <div className="p-2 rounded-xl bg-amber-100 text-amber-600"><Truck size={17} /></div>
+                  <span className="text-sm font-semibold text-slate-700 tracking-tight">התקנה מהירה</span>
                 </button>
               </div>
             </div>
           )}
 
           <nav
-            className="md:hidden fixed bottom-0 inset-x-0 bg-zinc-900/95 backdrop-blur-sm border-t border-white/[0.08] flex justify-around items-center z-30"
+            className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t flex justify-around items-center z-30"
             style={{ height: "4rem", paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             {MOBILE_NAV.filter((key) => nav.some((n) => n.key === key)).map((key) => {
@@ -6091,7 +6141,7 @@ export default function App() {
               const Icon = item.icon;
               const active = tab === key && !customerFileId && !locationFileId;
               return (
-                <button key={key} onClick={() => goTab(key)} className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl ${active ? "text-amber-400" : "text-zinc-500"}`}>
+                <button key={key} onClick={() => goTab(key)} className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl ${active ? "text-amber-600" : "text-slate-400"}`}>
                   <Icon size={22} /><span className="text-[11px] font-semibold">{item.label}</span>
                 </button>
               );
