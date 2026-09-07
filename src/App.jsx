@@ -4366,8 +4366,24 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
         throw new Error(`מבנה העמודות בקובץ לא זוהה - חובה שיהיו עמודות עבור תאריך וסכום. העמודות שנמצאו בקובץ: ${headers.join(", ") || "(לא זוהו כלל כותרות - ייתכן שהקובץ לא CSV תקין)"}`);
       }
 
+      // זיהוי כפילויות: תאריך + סכום + ספק (או תיאור אם אין ספק מזוהה) - שילוב
+      // מספיק ייחודי כדי לא לפספס כפילות אמיתית, אבל לא רגיש מדי כדי לא לחסום
+      // חיוב חוזר לגיטימי. בכוונה נבדק רק מול הוצאות שכבר קיימות ב-DB (מיובאות
+      // בעבר או שהוזנו ידנית) - ולא מתעדכן תוך כדי הריצה הנוכחית. אם כן היינו
+      // מוסיפים כל שורה חדשה לרשימה תוך כדי, שתי חיובים זהים לגיטימיים באותו
+      // יום (למשל שתי עמלות העברה של 2.55 ש"ח באותו תאריך, שתי שורות אמיתיות
+      // ונפרדות שקיימות בפועל בייצוא) היו נחסמות זו נגד זו בטעות בתוך אותו קובץ.
+      const expenseSignature = (dateStr, amount, supplierName, description) => {
+        const who = normalizeText(supplierName || description || "").toLowerCase();
+        return `${dateStr}|${Number(amount).toFixed(2)}|${who}`;
+      };
+      const existingSignatures = new Set(
+        data.expenses.map((e) => expenseSignature(e.expenseDate, e.amountInclVat, data.suppliers.find((s) => s.id === e.supplierId)?.name, e.description))
+      );
+
       let success = 0;
       let creditCount = 0;
+      let duplicateCount = 0;
       const failures = [];
       const vatRateLocal = data.companySettings.vatRate ?? 18;
       for (let i = 0; i < rows.length; i++) {
@@ -4415,6 +4431,9 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
           // אין כרגע ערך "זיכוי" ב-enum של קטגוריות ההוצאה, והוספתו דורשת מיגרציה.
           const description = isCredit ? `זיכוי - ${rawDescription}` : rawDescription;
 
+          const signature = expenseSignature(expenseDate, amountInclVat, matchedSupplier?.name, rawDescription);
+          if (existingSignatures.has(signature)) { duplicateCount++; continue; }
+
           await api.addExpense({
             category: matchedCategoryKey, supplierId: matchedSupplier ? matchedSupplier.id : null,
             description, invoiceNumber: pickField(r, CSV_INVOICE_ALIASES), expenseDate,
@@ -4431,11 +4450,13 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
         }
       }
       await refresh();
-      if (success > 0 || creditCount > 0) {
+      if (success > 0 || creditCount > 0 || duplicateCount > 0) {
         const parts = [];
         if (success > 0) parts.push(`${success} הוצאות רגילות`);
         if (creditCount > 0) parts.push(`${creditCount} שורות זיכוי/החזר`);
-        setCsvSuccess(`יובאו בהצלחה ${parts.join(" ו-")} (סה"כ ${success + creditCount} מתוך ${rows.length} שורות, סטטוס "ממתין לתשלום").${failures.length > 0 ? ` ${failures.length} שורות נכשלו - פירוט למטה.` : ""}`);
+        const importedPart = parts.length > 0 ? `יובאו בהצלחה ${parts.join(" ו-")} (סה"כ ${success + creditCount} מתוך ${rows.length} שורות, סטטוס "ממתין לתשלום").` : "";
+        const dupPart = duplicateCount > 0 ? ` ${duplicateCount} שורות דולגו כי כבר קיימות במערכת (זוהו לפי תאריך + סכום + ספק זהים).` : "";
+        setCsvSuccess(`${importedPart}${dupPart}${failures.length > 0 ? ` ${failures.length} שורות נכשלו - פירוט למטה.` : ""}`);
       }
       if (failures.length > 0) {
         setCsvError(failures.slice(0, 12).join(" | ") + (failures.length > 12 ? ` ... ועוד ${failures.length - 12} שגיאות` : ""));
