@@ -1,0 +1,637 @@
+full_schema
+"-- ============================================================
+create type client_type as enum ('private', 'business');
+
+-- ============================================================
+create type expense_category as enum ('goods', 'payroll', 'rent', 'utilities', 'fixed', 'variable', 'other');
+
+-- ============================================================
+create type expense_payment_status as enum ('paid', 'pending');
+
+-- ============================================================
+create type item_category as enum ('device', 'consumable');
+
+-- ============================================================
+create type item_condition as enum ('ok', 'faulty');
+
+-- ============================================================
+create type lead_status as enum ('new', 'contacted', 'quote_sent', 'awaiting_approval', 'closed_won', 'closed_lost');
+
+-- ============================================================
+create type location_type as enum ('warehouse', 'vehicle');
+
+-- ============================================================
+create type payment_method as enum ('bank_transfer', 'check', 'credit_card', 'cash');
+
+-- ============================================================
+create type payment_terms_type as enum ('prepaid_100', 'deposit_balance', 'net_x');
+
+-- ============================================================
+create type po_status as enum ('draft', 'sent', 'confirmed', 'received', 'cancelled', 'in_production', 'in_transit');
+
+-- ============================================================
+create type quote_status as enum ('draft', 'sent', 'accepted', 'rejected');
+
+-- ============================================================
+create type shipment_status as enum ('preparing', 'in_transit', 'planned');
+
+-- ============================================================
+create type shipping_rate_type as enum ('container_20ft', 'container_40ft', 'air_per_kg', 'other');
+
+-- ============================================================
+create type transaction_type as enum ('receive', 'transfer', 'install', 'return', 'writeoff', 'repack');
+
+-- ============================================================
+create type user_role as enum ('admin', 'technician', 'viewer');
+
+-- ============================================================
+create type vat_mode as enum ('incl', 'excl', 'zero');
+
+-- ============================================================
+create table app_settings (
+  key text not null,
+  value text
+);
+
+-- ============================================================
+create table customers (
+  id uuid not null default uuid_generate_v4(),
+  name text not null,
+  address text,
+  contact text,
+  created_at timestamp with time zone not null default now(),
+  phone text,
+  email text,
+  client_type client_type not null default 'private'::client_type
+);
+
+-- ============================================================
+create table expense_payments (
+  id uuid not null default uuid_generate_v4(),
+  expense_id uuid not null,
+  amount numeric not null,
+  paid_date date not null default CURRENT_DATE,
+  method payment_method,
+  note text,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table expenses (
+  id uuid not null default uuid_generate_v4(),
+  category expense_category not null default 'other'::expense_category,
+  supplier_id uuid,
+  description text,
+  invoice_number text,
+  expense_date date not null default CURRENT_DATE,
+  vat_mode vat_mode not null default 'incl'::vat_mode,
+  amount_excl_vat numeric not null,
+  vat_amount numeric not null,
+  amount_incl_vat numeric not null,
+  payment_status expense_payment_status not null default 'pending'::expense_payment_status,
+  payment_method payment_method,
+  notes text,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table items (
+  id uuid not null default uuid_generate_v4(),
+  name text not null,
+  category item_category not null,
+  model text,
+  color text,
+  unit text not null,
+  min_threshold numeric not null default 0,
+  created_at timestamp with time zone not null default now(),
+  unit_cost numeric,
+  supplier_sku text,
+  fragrance_group text
+);
+
+-- ============================================================
+create table leads (
+  id uuid not null default uuid_generate_v4(),
+  name text not null,
+  phone text,
+  email text,
+  customer_id uuid,
+  status lead_status not null default 'new'::lead_status,
+  source text,
+  estimated_value numeric,
+  notes text,
+  follow_up_date date,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table locations (
+  id uuid not null default uuid_generate_v4(),
+  name text not null,
+  type location_type not null,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table po_lines (
+  id uuid not null default uuid_generate_v4(),
+  po_id uuid not null,
+  item_id uuid not null,
+  qty numeric not null,
+  unit_price numeric not null
+);
+
+-- ============================================================
+create table po_payments (
+  id uuid not null default uuid_generate_v4(),
+  po_id uuid not null,
+  amount numeric not null,
+  paid_date date not null default CURRENT_DATE,
+  note text,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table profiles (
+  id uuid not null,
+  full_name text,
+  role user_role not null default 'technician'::user_role,
+  location_id uuid,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table purchase_orders (
+  id uuid not null default uuid_generate_v4(),
+  po_number text not null,
+  supplier_id uuid not null,
+  status po_status not null default 'draft'::po_status,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  currency text not null default 'USD'::text,
+  shipping_terms text,
+  notes text,
+  shipment_id uuid,
+  payment_terms payment_terms_type not null default 'prepaid_100'::payment_terms_type,
+  deposit_percent numeric,
+  net_days integer,
+  due_date date
+);
+
+-- ============================================================
+create table quote_lines (
+  id uuid not null default uuid_generate_v4(),
+  quote_id uuid not null,
+  item_id uuid not null,
+  qty numeric not null,
+  unit_price numeric not null
+);
+
+-- ============================================================
+create table quotes (
+  id uuid not null default uuid_generate_v4(),
+  quote_number text not null,
+  customer_id uuid,
+  lead_id uuid,
+  status quote_status not null default 'draft'::quote_status,
+  notes text,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table shipments (
+  id uuid not null default uuid_generate_v4(),
+  name text not null,
+  status shipment_status not null default 'preparing'::shipment_status,
+  notes text,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table shipping_rate_cards (
+  id uuid not null default uuid_generate_v4(),
+  name text not null,
+  carrier text,
+  notes text,
+  created_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table shipping_rates (
+  id uuid not null default uuid_generate_v4(),
+  rate_card_id uuid not null,
+  rate_type shipping_rate_type not null default 'other'::shipping_rate_type,
+  label text,
+  price numeric not null,
+  currency text not null default 'USD'::text
+);
+
+-- ============================================================
+create table stock_levels (
+  item_id uuid not null,
+  location_id uuid not null,
+  quantity numeric not null default 0,
+  updated_at timestamp with time zone not null default now()
+);
+
+-- ============================================================
+create table suppliers (
+  id uuid not null default uuid_generate_v4(),
+  name text not null,
+  country text not null,
+  contact text,
+  phone text,
+  email text,
+  created_at timestamp with time zone not null default now(),
+  currency text not null default 'USD'::text,
+  notes text
+);
+
+-- ============================================================
+create table transactions (
+  id uuid not null default uuid_generate_v4(),
+  type transaction_type not null,
+  item_id uuid not null,
+  qty numeric not null,
+  from_location_id uuid,
+  to_location_id uuid,
+  customer_id uuid,
+  condition item_condition,
+  note text,
+  performed_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  unit_price numeric,
+  supplier_id uuid
+);
+
+-- ============================================================
+alter table app_settings add constraint app_settings_pkey primary key (key);
+
+-- ============================================================
+alter table customers add constraint customers_pkey primary key (id);
+
+-- ============================================================
+alter table expense_payments add constraint expense_payments_expense_id_fkey foreign key (expense_id) references expenses(id);
+
+-- ============================================================
+alter table expense_payments add constraint expense_payments_pkey primary key (id);
+
+-- ============================================================
+alter table expenses add constraint expenses_pkey primary key (id);
+
+-- ============================================================
+alter table expenses add constraint expenses_supplier_id_fkey foreign key (supplier_id) references suppliers(id);
+
+-- ============================================================
+alter table items add constraint items_pkey primary key (id);
+
+-- ============================================================
+alter table leads add constraint leads_customer_id_fkey foreign key (customer_id) references customers(id);
+
+-- ============================================================
+alter table leads add constraint leads_pkey primary key (id);
+
+-- ============================================================
+alter table locations add constraint locations_pkey primary key (id);
+
+-- ============================================================
+alter table po_lines add constraint po_lines_item_id_fkey foreign key (item_id) references items(id);
+
+-- ============================================================
+alter table po_lines add constraint po_lines_pkey primary key (id);
+
+-- ============================================================
+alter table po_lines add constraint po_lines_po_id_fkey foreign key (po_id) references purchase_orders(id);
+
+-- ============================================================
+alter table po_payments add constraint po_payments_pkey primary key (id);
+
+-- ============================================================
+alter table po_payments add constraint po_payments_po_id_fkey foreign key (po_id) references purchase_orders(id);
+
+-- ============================================================
+alter table profiles add constraint profiles_location_id_fkey foreign key (location_id) references locations(id);
+
+-- ============================================================
+alter table profiles add constraint profiles_pkey primary key (id);
+
+-- ============================================================
+alter table purchase_orders add constraint purchase_orders_pkey primary key (id);
+
+-- ============================================================
+alter table purchase_orders add constraint purchase_orders_shipment_id_fkey foreign key (shipment_id) references shipments(id);
+
+-- ============================================================
+alter table purchase_orders add constraint purchase_orders_supplier_id_fkey foreign key (supplier_id) references suppliers(id);
+
+-- ============================================================
+alter table quote_lines add constraint quote_lines_item_id_fkey foreign key (item_id) references items(id);
+
+-- ============================================================
+alter table quote_lines add constraint quote_lines_pkey primary key (id);
+
+-- ============================================================
+alter table quote_lines add constraint quote_lines_quote_id_fkey foreign key (quote_id) references quotes(id);
+
+-- ============================================================
+alter table quotes add constraint quotes_customer_id_fkey foreign key (customer_id) references customers(id);
+
+-- ============================================================
+alter table quotes add constraint quotes_lead_id_fkey foreign key (lead_id) references leads(id);
+
+-- ============================================================
+alter table quotes add constraint quotes_pkey primary key (id);
+
+-- ============================================================
+alter table shipments add constraint shipments_pkey primary key (id);
+
+-- ============================================================
+alter table shipping_rate_cards add constraint shipping_rate_cards_pkey primary key (id);
+
+-- ============================================================
+alter table shipping_rates add constraint shipping_rates_pkey primary key (id);
+
+-- ============================================================
+alter table shipping_rates add constraint shipping_rates_rate_card_id_fkey foreign key (rate_card_id) references shipping_rate_cards(id);
+
+-- ============================================================
+alter table stock_levels add constraint stock_levels_item_id_fkey foreign key (item_id) references items(id);
+
+-- ============================================================
+alter table stock_levels add constraint stock_levels_location_id_fkey foreign key (location_id) references locations(id);
+
+-- ============================================================
+alter table stock_levels add constraint stock_levels_pkey primary key (item_id, location_id);
+
+-- ============================================================
+alter table suppliers add constraint suppliers_pkey primary key (id);
+
+-- ============================================================
+alter table transactions add constraint transactions_customer_id_fkey foreign key (customer_id) references customers(id);
+
+-- ============================================================
+alter table transactions add constraint transactions_from_location_id_fkey foreign key (from_location_id) references locations(id);
+
+-- ============================================================
+alter table transactions add constraint transactions_item_id_fkey foreign key (item_id) references items(id);
+
+-- ============================================================
+alter table transactions add constraint transactions_pkey primary key (id);
+
+-- ============================================================
+alter table transactions add constraint transactions_supplier_id_fkey foreign key (supplier_id) references suppliers(id);
+
+-- ============================================================
+alter table transactions add constraint transactions_to_location_id_fkey foreign key (to_location_id) references locations(id);
+
+-- ============================================================
+alter table app_settings enable row level security;
+
+-- ============================================================
+alter table customers enable row level security;
+
+-- ============================================================
+alter table expense_payments enable row level security;
+
+-- ============================================================
+alter table expenses enable row level security;
+
+-- ============================================================
+alter table items enable row level security;
+
+-- ============================================================
+alter table leads enable row level security;
+
+-- ============================================================
+alter table locations enable row level security;
+
+-- ============================================================
+alter table po_lines enable row level security;
+
+-- ============================================================
+alter table po_payments enable row level security;
+
+-- ============================================================
+alter table profiles enable row level security;
+
+-- ============================================================
+alter table purchase_orders enable row level security;
+
+-- ============================================================
+alter table quote_lines enable row level security;
+
+-- ============================================================
+alter table quotes enable row level security;
+
+-- ============================================================
+alter table shipments enable row level security;
+
+-- ============================================================
+alter table shipping_rate_cards enable row level security;
+
+-- ============================================================
+alter table shipping_rates enable row level security;
+
+-- ============================================================
+alter table stock_levels enable row level security;
+
+-- ============================================================
+alter table suppliers enable row level security;
+
+-- ============================================================
+alter table transactions enable row level security;
+
+-- ============================================================
+create policy ""admin insert settings"" on app_settings for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""admin write settings"" on app_settings for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""read settings"" on app_settings for SELECT using (true);
+
+-- ============================================================
+create policy ""admin update customers"" on customers for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write customers"" on customers for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read customers"" on customers for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin delete expense_payments"" on expense_payments for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin write expense_payments"" on expense_payments for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read expense_payments"" on expense_payments for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin delete expenses"" on expenses for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin update expenses"" on expenses for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write expenses"" on expenses for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read expenses"" on expenses for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin delete items"" on items for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin update items"" on items for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write items"" on items for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read items"" on items for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin delete leads"" on leads for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""read leads"" on leads for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""update leads"" on leads for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""write leads"" on leads for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""admin update locations"" on locations for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write locations"" on locations for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read locations"" on locations for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin delete po_lines"" on po_lines for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin update po_lines"" on po_lines for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write po_lines"" on po_lines for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read po_lines"" on po_lines for SELECT using (is_admin());
+
+-- ============================================================
+create policy ""admin delete po_payments"" on po_payments for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin write po_payments"" on po_payments for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read po_payments"" on po_payments for SELECT using (is_admin());
+
+-- ============================================================
+create policy ""admin manage profiles"" on profiles for ALL using (is_admin());
+
+-- ============================================================
+create policy ""insert own profile"" on profiles for INSERT with check (((id = auth.uid()) AND (role = 'technician'::user_role)));
+
+-- ============================================================
+create policy ""read own profile"" on profiles for SELECT using (((id = auth.uid()) OR is_admin()));
+
+-- ============================================================
+create policy ""update own profile"" on profiles for UPDATE using ((id = auth.uid()));
+
+-- ============================================================
+create policy ""admin update po"" on purchase_orders for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write po"" on purchase_orders for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read po"" on purchase_orders for SELECT using (is_admin());
+
+-- ============================================================
+create policy ""read quote_lines"" on quote_lines for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""write quote_lines"" on quote_lines for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""admin delete quotes"" on quotes for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""read quotes"" on quotes for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""update quotes"" on quotes for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""write quotes"" on quotes for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""admin delete shipments"" on shipments for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin update shipments"" on shipments for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write shipments"" on shipments for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read shipments"" on shipments for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin delete rate cards"" on shipping_rate_cards for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin update rate cards"" on shipping_rate_cards for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write rate cards"" on shipping_rate_cards for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read rate cards"" on shipping_rate_cards for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin delete shipping rates"" on shipping_rates for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin write shipping rates"" on shipping_rates for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read shipping rates"" on shipping_rates for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin update stock"" on stock_levels for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write stock"" on stock_levels for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read stock"" on stock_levels for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""admin delete suppliers"" on suppliers for DELETE using (is_admin());
+
+-- ============================================================
+create policy ""admin update suppliers"" on suppliers for UPDATE using (is_admin());
+
+-- ============================================================
+create policy ""admin write suppliers"" on suppliers for INSERT with check (is_admin());
+
+-- ============================================================
+create policy ""read suppliers"" on suppliers for SELECT using ((auth.role() = 'authenticated'::text));
+
+-- ============================================================
+create policy ""insert transactions"" on transactions for INSERT with check ((is_admin() OR (from_location_id = my_location_id()) OR (to_location_id = my_location_id())));
+
+-- ============================================================
+create policy ""read transactions"" on transactions for SELECT using ((is_admin() OR (from_location_id = my_location_id()) OR (to_location_id = my_location_id())));
+
+-- ============================================================
+-- trigger: trg_apply_transaction on transactions (AFTER INSERT) calls EXECUTE FUNCTION apply_transaction_to_stock()"
