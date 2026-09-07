@@ -4367,6 +4367,7 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
       }
 
       let success = 0;
+      let creditCount = 0;
       const failures = [];
       const vatRateLocal = data.companySettings.vatRate ?? 18;
       for (let i = 0; i < rows.length; i++) {
@@ -4393,7 +4394,7 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
           } else throw new Error("לא נמצאה עמודת סכום בשורה זו");
 
           if (!amountInclVat) throw new Error("סכום לא תקין או חסר");
-          if (amountInclVat < 0) throw new Error('סכום שלילי (זיכוי/תיקון) - לא יובא אוטומטית, יש להזין ידנית דרך "הוצאה חדשה"');
+          const isCredit = amountInclVat < 0;
 
           const supplierRaw = pickField(r, CSV_SUPPLIER_ALIASES);
           const normalizedSupplier = normalizeText(supplierRaw);
@@ -4406,7 +4407,13 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
             ([k, label]) => k === categoryRaw || normalizeText(label).toLowerCase().includes(categoryRaw) || (categoryRaw && categoryRaw.includes(normalizeText(label).toLowerCase()))
           )?.[0]) || "other";
 
-          const description = pickField(r, CSV_DESCRIPTION_ALIASES) || (supplierRaw ? `יובא מקובץ - ${supplierRaw}` : "יובא מקובץ CSV");
+          const rawDescription = pickField(r, CSV_DESCRIPTION_ALIASES) || (supplierRaw ? `יובא מקובץ - ${supplierRaw}` : "יובא מקובץ CSV");
+          // זיכוי/החזר (סכום שלילי במקור) לא נזרק החוצה - נקלט כשורת הוצאה שלילית
+          // תחת אותו ספק וקטגוריה, מתויגת "זיכוי" בתיאור ובהערה כדי שיהיה ברור
+          // בכל דוח/רשימה שזו לא הוצאה רגילה. סכום שלילי מקזז את עצמו נכון בכל
+          // סכימה (סה"כ לפי ספק/קטגוריה/תקופה) בלי צורך בקטגוריית DB נפרדת -
+          // אין כרגע ערך "זיכוי" ב-enum של קטגוריות ההוצאה, והוספתו דורשת מיגרציה.
+          const description = isCredit ? `זיכוי - ${rawDescription}` : rawDescription;
 
           await api.addExpense({
             category: matchedCategoryKey, supplierId: matchedSupplier ? matchedSupplier.id : null,
@@ -4415,16 +4422,20 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
             amountExclVat: Math.round(amountExclVat * 100) / 100,
             vatAmount: Math.round(vatAmount * 100) / 100,
             amountInclVat: Math.round(amountInclVat * 100) / 100,
-            paymentStatus: "pending", paymentMethod: null, notes: "",
+            paymentStatus: "pending", paymentMethod: null,
+            notes: isCredit ? "זיכוי/החזר יובא אוטומטית מקובץ CSV" : "",
           });
-          success++;
+          if (isCredit) creditCount++; else success++;
         } catch (rowErr) {
           failures.push(`שורה ${i + 2} בקובץ: ${rowErr.message}`);
         }
       }
       await refresh();
-      if (success > 0) {
-        setCsvSuccess(`יובאו בהצלחה ${success} מתוך ${rows.length} שורות כהוצאות חדשות (סטטוס "ממתין לתשלום").${failures.length > 0 ? ` ${failures.length} שורות נכשלו - פירוט למטה.` : ""}`);
+      if (success > 0 || creditCount > 0) {
+        const parts = [];
+        if (success > 0) parts.push(`${success} הוצאות רגילות`);
+        if (creditCount > 0) parts.push(`${creditCount} שורות זיכוי/החזר`);
+        setCsvSuccess(`יובאו בהצלחה ${parts.join(" ו-")} (סה"כ ${success + creditCount} מתוך ${rows.length} שורות, סטטוס "ממתין לתשלום").${failures.length > 0 ? ` ${failures.length} שורות נכשלו - פירוט למטה.` : ""}`);
       }
       if (failures.length > 0) {
         setCsvError(failures.slice(0, 12).join(" | ") + (failures.length > 12 ? ` ... ועוד ${failures.length - 12} שגיאות` : ""));
