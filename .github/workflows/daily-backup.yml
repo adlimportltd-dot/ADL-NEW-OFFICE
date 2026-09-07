@@ -1,0 +1,58 @@
+name: Daily Backup & Morning Health Check
+
+# 05:00 UTC = 08:00 שעון ישראל בקיץ (IDT, UTC+3) / 07:00 בחורף (IST, UTC+2).
+# GitHub Actions cron לא יודע DST - ריצה סביב 8:00 בבוקר בכל השנה, עם סטייה
+# של עד שעה בחורף. אפשר גם להריץ ידנית בכל רגע דרך "Run workflow" למעלה.
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  backup-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install script dependencies
+        run: npm install --no-save pg
+
+      - name: Set backup timestamp
+        run: echo "STAMP=$(date -u +%Y-%m-%d_%H-%M-%SZ)" >> "$GITHUB_ENV"
+
+      - name: Dump database (schema + data)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p backup
+          # ה-pg_dump מדיפולט של אובונטו ישן מדי לשרת Supabase (Postgres 17) -
+          # pg_dump מסרב לגבות משרת עם גרסה חדשה משלו. מתקינים 17 במפורש
+          # מהמאגר הרשמי של PostgreSQL במקום זה שמגיע כברירת מחדל.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges --format=plain \
+            --file="backup/database_${STAMP}.sql"
+
+      - name: Upload backup as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adl-inventory-backup-${{ env.STAMP }}
+          path: backup
+          retention-days: 90
+
+      - name: Morning health check
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
+        run: node scripts/morning-health-check.cjs
