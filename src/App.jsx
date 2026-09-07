@@ -5,7 +5,7 @@ import {
   CircleCheck, CircleX, Trash2, ChevronLeft, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
-  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet,
+  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
@@ -224,13 +224,6 @@ async function updateItem(id, patch) {
   if (patch.supplierSku !== undefined) payload.supplier_sku = patch.supplierSku;
   if (patch.fragranceGroup !== undefined) payload.fragrance_group = patch.fragranceGroup || null;
   const { error } = await supabase.from("items").update(payload).eq("id", id);
-  if (error) throw error;
-}
-async function setItemStock(itemId, locationId, quantity) {
-  const { error } = await supabase.from("stock_levels").upsert(
-    { item_id: itemId, location_id: locationId, quantity, updated_at: new Date().toISOString() },
-    { onConflict: "item_id,location_id" }
-  );
   if (error) throw error;
 }
 async function deleteItem(id) {
@@ -693,7 +686,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, setItemStock, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, addInvoicePayment, deleteInvoicePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, addInvoicePayment, deleteInvoicePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -1404,7 +1397,10 @@ function ItemsScreen({ data, refresh, isAdmin }) {
       });
       const qty = Number(form.quantity) || 0;
       if (qty > 0 && warehouse) {
-        await api.setItemStock(newItemId, warehouse.id, qty);
+        // מלאי פתיחה נרשם כתנועת "קבלת סחורה" רגילה - כדי שיהיה תיעוד מלא
+        // ביומן האירועים (מי, מתי, כמה) בדיוק כמו כל תנועת מלאי אחרת, במקום
+        // כתיבה ישירה ושקטה ל-stock_levels שלא משאירה שום עקבות.
+        await api.insertTransaction({ type: "receive", itemId: newItemId, qty, toLocationId: warehouse.id, note: "מלאי פתיחה בעת יצירת הפריט" });
       }
       setForm({ name: "", fragranceName: "", category: "device", unit: "יחידה", minThreshold: 0, quantity: 0, supplierSku: "" });
       setOpen(false);
@@ -1422,7 +1418,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
     setEditForm({
       name: it.name, fragranceName: it.category === "consumable" ? guessFragranceName(it) : "",
       category: it.category, unit: it.unit, minThreshold: it.minThreshold, unitCost: it.unitCost ?? "",
-      quantity: currentQty, supplierSku: it.supplierSku || "",
+      quantity: currentQty, originalQuantity: currentQty, supplierSku: it.supplierSku || "",
     });
     setEditError("");
   };
@@ -1446,7 +1442,17 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         fragranceGroup: isConsumable ? editForm.fragranceName.trim() : null,
       });
       if (warehouse) {
-        await api.setItemStock(editItem.id, warehouse.id, Number(editForm.quantity) || 0);
+        // תיקון ספירת מלאי ידני נרשם כתנועת "קבלת סחורה" (אם עלה) או "פחת/גריעה"
+        // (אם ירד) על ההפרש בלבד - לא דריסה שקטה של stock_levels. כך התיקון
+        // מופיע ביומן האירועים עם תאריך, כמות ומי ביצע אותו, בדיוק כמו כל
+        // תנועת מלאי אחרת, ואף ספירה קודמת לא נמחקת בלי עקבות.
+        const newQty = Number(editForm.quantity) || 0;
+        const delta = newQty - (editForm.originalQuantity || 0);
+        if (delta > 0) {
+          await api.insertTransaction({ type: "receive", itemId: editItem.id, qty: delta, toLocationId: warehouse.id, note: "התאמת ספירת מלאי ידנית" });
+        } else if (delta < 0) {
+          await api.insertTransaction({ type: "writeoff", itemId: editItem.id, qty: Math.abs(delta), fromLocationId: warehouse.id, note: "התאמת ספירת מלאי ידנית" });
+        }
       }
       await refresh();
       setEditItem(null);
@@ -1468,12 +1474,18 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   const fragranceGroupList = Object.values(fragranceGroups).sort((a, b) => a.name.localeCompare(b.name, "he"));
 
   const [repackFor, setRepackFor] = useState(null); // fragrance name, or "" for open-picker mode
+  const [search, setSearch] = useState("");
+  const [historyFor, setHistoryFor] = useState(null); // { itemIds: [...], title } | null
 
-  const deviceItems = data.items.filter((it) => it.category === "device");
+  const deviceItemsAll = data.items.filter((it) => it.category === "device");
+  const searchNorm = normalizeText(search).toLowerCase();
+  const matchesSearch = (text) => !searchNorm || normalizeText(text || "").toLowerCase().includes(searchNorm);
+  const deviceItems = deviceItemsAll.filter((it) => matchesSearch(it.name) || matchesSearch(it.supplierSku));
+  const visibleFragranceGroupList = fragranceGroupList.filter((g) => matchesSearch(g.name));
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 className="font-bold text-xl text-slate-800">פריטים</h2>
         <div className="flex items-center gap-2">
           {isAdmin && fragranceGroupList.length > 0 && (
@@ -1483,11 +1495,21 @@ function ItemsScreen({ data, refresh, isAdmin }) {
         </div>
       </div>
 
-      {fragranceGroupList.length > 0 && (
+      <div className="relative mb-5">
+        <Search size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          className={inputCls + " pr-10"}
+          placeholder='חיפוש פריט / דגם / ריח / SKU...'
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      {visibleFragranceGroupList.length > 0 && (
         <div className="mb-6">
           <h3 className="font-bold text-slate-800 mb-2">תמציות ריח - כרטיס אחד לכל ריח</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {fragranceGroupList.map((g) => (
+            {visibleFragranceGroupList.map((g) => (
               <div key={g.name} className="bg-white rounded-2xl border shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div className="font-bold text-slate-800">{g.name}</div>
@@ -1509,9 +1531,17 @@ function ItemsScreen({ data, refresh, isAdmin }) {
                     );
                   })}
                 </div>
-                {isAdmin && (
-                  <button onClick={() => setRepackFor(g.name)} className="text-xs text-amber-600 hover:underline font-medium mt-1 flex items-center gap-1"><Calculator size={12} /> המרת אריזות לריח זה</button>
-                )}
+                <div className="flex items-center justify-between mt-1">
+                  {isAdmin && (
+                    <button onClick={() => setRepackFor(g.name)} className="text-xs text-amber-600 hover:underline font-medium flex items-center gap-1"><Calculator size={12} /> המרת אריזות</button>
+                  )}
+                  <button
+                    onClick={() => setHistoryFor({ itemIds: g.sizes.map((s) => s.itemId), title: `היסטוריית מכירות - ${g.name}` })}
+                    className="text-xs text-sky-600 hover:underline font-medium flex items-center gap-1"
+                  >
+                    <History size={12} /> היסטוריית מכירות
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1537,16 +1567,21 @@ function ItemsScreen({ data, refresh, isAdmin }) {
                 <td className="px-5 py-4">{it.minThreshold}</td>
                 <td className="px-5 py-4">{it.unitCost ? `₪${Number(it.unitCost).toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
                 <td className="px-5 py-4 text-left" onClick={(e) => e.stopPropagation()}>
-                  {isAdmin && (
-                    <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => openEdit(it)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
-                      <button onClick={() => removeItem(it.id)} className="text-gray-400 hover:text-rose-600" title="מחיקה"><Trash2 size={16} /></button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 justify-end">
+                    <button onClick={() => setHistoryFor({ itemIds: [it.id], title: `היסטוריית מכירות - ${it.name}` })} className="text-gray-400 hover:text-sky-600" title="היסטוריית מכירות"><History size={16} /></button>
+                    {isAdmin && (
+                      <>
+                        <button onClick={() => openEdit(it)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
+                        <button onClick={() => removeItem(it.id)} className="text-gray-400 hover:text-rose-600" title="מחיקה"><Trash2 size={16} /></button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
-            {deviceItems.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">אין מכשירים עדיין</td></tr>}
+            {deviceItems.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">{search ? "אין מכשירים שתואמים לחיפוש" : "אין מכשירים עדיין"}</td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -1629,6 +1664,7 @@ function ItemsScreen({ data, refresh, isAdmin }) {
             <Field label={`כמה ${editForm.category === "consumable" ? editForm.unit || "יחידות" : "יחידות"} יש כרגע במחסן`}>
               <input type="number" min="0" className={inputCls} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
             </Field>
+            <p className="text-xs text-slate-400 -mt-2 mb-2">שינוי כאן נרשם אוטומטית ביומן האירועים כתנועת "קבלת סחורה" או "פחת/גריעה" על ההפרש - לא נעלם בלי תיעוד.</p>
           </div>
           <Field label="סף מלאי מינימלי להתראה"><input type="number" className={inputCls} value={editForm.minThreshold} onChange={(e) => setEditForm({ ...editForm, minThreshold: e.target.value })} /></Field>
           <Field label="עלות נחיתה ליח' (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={editForm.unitCost} onChange={(e) => setEditForm({ ...editForm, unitCost: e.target.value })} placeholder="לא הוגדר" /></Field>
@@ -1645,7 +1681,56 @@ function ItemsScreen({ data, refresh, isAdmin }) {
           onClose={() => setRepackFor(null)}
         />
       )}
+      {historyFor && (
+        <SalesHistoryModal data={data} itemIds={historyFor.itemIds} title={historyFor.title} onClose={() => setHistoryFor(null)} />
+      )}
     </div>
+  );
+}
+
+// מסך היסטוריית מכירות לפי פריט (או קבוצת פריטים - למשל כל גדלי אריזה של
+// אותו ריח ביחד): כל תנועות ה-install (ניפוק/התקנה ללקוח) על הפריטים האלה,
+// למי נמכר, מתי ובאיזו כמות - בלי צורך לחפש ידנית ביומן האירועים הכללי.
+function SalesHistoryModal({ data, itemIds, title, onClose }) {
+  const idSet = new Set(itemIds);
+  const rows = data.transactions
+    .filter((t) => t.type === "install" && idSet.has(t.itemId))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const totalQty = rows.reduce((s, t) => s + t.qty, 0);
+
+  return (
+    <Modal title={title} onClose={onClose}>
+      <div className="text-sm text-slate-500 mb-3">{rows.length} מכירות · סה"כ {totalQty} יחידות</div>
+      <div className="border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-slate-500 text-right">
+              <th className="px-3 py-2.5 font-medium">תאריך</th>
+              {itemIds.length > 1 && <th className="px-3 py-2.5 font-medium">גודל</th>}
+              <th className="px-3 py-2.5 font-medium">לקוח</th><th className="px-3 py-2.5 font-medium">כמות</th><th className="px-3 py-2.5 font-medium">מחיר ליח'</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((t) => {
+              const customer = data.customers.find((c) => c.id === t.customerId);
+              const item = data.items.find((i) => i.id === t.itemId);
+              return (
+                <tr key={t.id} className="border-t">
+                  <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
+                  {itemIds.length > 1 && <td className="px-3 py-2.5 text-slate-500">{item?.unit || "-"}</td>}
+                  <td className="px-3 py-2.5 font-medium text-slate-800">{customer?.name || "-"}</td>
+                  <td className="px-3 py-2.5">{t.qty}</td>
+                  <td className="px-3 py-2.5">{t.unitPrice != null ? `₪${t.unitPrice.toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr><td colSpan={itemIds.length > 1 ? 5 : 4} className="px-3 py-8 text-center text-slate-400">עדיין לא נמכרה יחידה אחת מהפריט הזה</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
   );
 }
 
@@ -2278,30 +2363,69 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
     catch (e) { setEditError(e.message); } finally { setEditBusy(false); }
   };
 
+  // "רדימות" לקוח: כמה ימים עברו מאז ה-install (התקנה/ניפוק) האחרון של אותו
+  // לקוח. לקוח שמעולם לא קנה מטופל כ"בסיכון" גם הוא - קל לפספס לקוח כזה
+  // בלי הסימון, ולא פחות חשוב ליצור איתו קשר.
+  const DORMANT_THRESHOLD_DAYS = 60;
+  const now = Date.now();
+  const lastPurchaseDaysOf = (custId) => {
+    const purchases = data.transactions.filter((t) => t.customerId === custId && t.type === "install");
+    if (purchases.length === 0) return null;
+    const latest = Math.max(...purchases.map((t) => new Date(t.date).getTime()));
+    return Math.floor((now - latest) / 86400000);
+  };
+  const [statusFilter, setStatusFilter] = useState("all"); // all | active | dormant
+  const customerRows = data.customers.map((c) => {
+    const daysSince = lastPurchaseDaysOf(c.id);
+    const dormant = daysSince === null || daysSince > DORMANT_THRESHOLD_DAYS;
+    return { c, daysSince, dormant };
+  });
+  const dormantCount = customerRows.filter((r) => r.dormant).length;
+  const visibleRows = customerRows.filter((r) => statusFilter === "all" || (statusFilter === "dormant" ? r.dormant : !r.dormant));
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 className="font-bold text-xl text-slate-800">לקוחות</h2>
         {isAdmin && <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> לקוח חדש</button>}
       </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => setStatusFilter("all")} className={`text-sm font-medium rounded-xl px-3.5 py-2 border ${statusFilter === "all" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600 hover:bg-gray-50"}`}>כל הלקוחות ({data.customers.length})</button>
+        <button onClick={() => setStatusFilter("active")} className={`text-sm font-medium rounded-xl px-3.5 py-2 border ${statusFilter === "active" ? "bg-emerald-500 text-white border-emerald-500" : "bg-white border-gray-300 text-slate-600 hover:bg-gray-50"}`}>לקוחות פעילים ({data.customers.length - dormantCount})</button>
+        <button onClick={() => setStatusFilter("dormant")} className={`text-sm font-medium rounded-xl px-3.5 py-2 border flex items-center gap-1.5 ${statusFilter === "dormant" ? "bg-rose-500 text-white border-rose-500" : "bg-white border-gray-300 text-slate-600 hover:bg-gray-50"}`}>
+          <TriangleAlert size={14} /> לקוחות בסיכון / רדומים ({dormantCount})
+        </button>
+      </div>
+
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">שם לקוח / עסק</th><th className="px-5 py-4 font-medium">סוג</th>
               <th className="px-5 py-4 font-medium">טלפון</th><th className="px-5 py-4 font-medium">אימייל</th>
-              <th className="px-5 py-4 font-medium">כתובת</th><th className="px-5 py-4 font-medium">איש קשר</th><th className="px-4 py-2"></th>
+              <th className="px-5 py-4 font-medium">כתובת</th><th className="px-5 py-4 font-medium">איש קשר</th>
+              <th className="px-5 py-4 font-medium">סטטוס רכישה</th><th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {data.customers.map((c) => (
-              <tr key={c.id} className="border-t hover:bg-gray-50">
+            {visibleRows.map(({ c, daysSince, dormant }) => (
+              <tr key={c.id} className={`border-t hover:bg-gray-50 ${dormant ? "bg-rose-50/40" : ""}`}>
                 <td className="px-5 py-4 font-medium text-slate-800">{c.name}</td>
                 <td className="px-5 py-4"><Badge tone={CLIENT_TYPES[c.clientType]?.tone}>{CLIENT_TYPES[c.clientType]?.label}</Badge></td>
                 <td className="px-5 py-4 text-slate-500">{c.phone || "-"}</td>
                 <td className="px-5 py-4 text-slate-500">{c.email || "-"}</td>
                 <td className="px-5 py-4 text-slate-500">{c.address}</td>
                 <td className="px-5 py-4 text-slate-500">{c.contact}</td>
+                <td className="px-5 py-4">
+                  {daysSince === null ? (
+                    <Badge tone="rose">מעולם לא רכש</Badge>
+                  ) : dormant ? (
+                    <Badge tone="rose">רדום - {daysSince} ימים</Badge>
+                  ) : (
+                    <Badge tone="emerald">פעיל - לפני {daysSince} ימים</Badge>
+                  )}
+                </td>
                 <td className="px-5 py-4 text-left">
                   <div className="flex items-center gap-3 justify-end">
                     {isAdmin && <button onClick={() => openEdit(c)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={15} /></button>}
@@ -2310,7 +2434,9 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
                 </td>
               </tr>
             ))}
-            {data.customers.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">אין לקוחות עדיין</td></tr>}
+            {visibleRows.length === 0 && (
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">{data.customers.length === 0 ? "אין לקוחות עדיין" : "אין לקוחות בקטגוריה הזו"}</td></tr>
+            )}
           </tbody>
         </table>
       </div>
