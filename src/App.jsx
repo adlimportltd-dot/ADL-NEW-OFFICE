@@ -5105,15 +5105,20 @@ export default function App() {
     })();
   }, []);
 
+  // חשוב: לא לטעון נתונים (ולא להירשם ל-Realtime) כל עוד יש 2FA ממתין -
+  // גם אם ה-UI מציג רק את מסך קוד ה-2FA, ה-session שקיים ב-state כבר תקף
+  // ברמת ה-API (aal1), כך ש-fetchAllData היה מצליח ומחזיר את כל נתוני
+  // העסק לפני שהמשתמש הוכיח החזקה בגורם השני. התלות ב-mfaPendingFactorId
+  // גם מבטיחה שהטעינה תרוץ בפועל ברגע שה-2FA מאומת (session עצמו לא משתנה).
   useEffect(() => {
-    if (session?.user?.id) loadEverything(session.user.id);
-  }, [session?.user?.id, loadEverything]);
+    if (session?.user?.id && !mfaPendingFactorId) loadEverything(session.user.id);
+  }, [session?.user?.id, mfaPendingFactorId, loadEverything]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || mfaPendingFactorId) return;
     const unsubscribe = api.subscribeToChanges(() => refresh());
     return unsubscribe;
-  }, [session, refresh]);
+  }, [session, mfaPendingFactorId, refresh]);
 
   const runQuickAction = (type) => {
     setCustomerFileId(null); setTab("transaction"); setQuickTx({ type, nonce: Math.random().toString(36).slice(2) });
