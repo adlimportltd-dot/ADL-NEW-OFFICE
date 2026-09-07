@@ -2583,9 +2583,12 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
 }
 
 // ==================== Transaction ====================
+const emptyTxLine = () => ({ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "", condition: "ok" });
+
 function TransactionScreen({ data, refresh, quickTx }) {
   const [type, setType] = useState(null);
-  const [form, setForm] = useState({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" });
+  const [form, setForm] = useState({ fromLocationId: "", toLocationId: "", customerId: "", note: "", supplierId: "" });
+  const [lines, setLines] = useState([emptyTxLine()]);
   const [receiveCategoryFilter, setReceiveCategoryFilter] = useState("all"); // all | device | consumable
   const [selectedFragranceName, setSelectedFragranceName] = useState("");
   const [resolvingFragrance, setResolvingFragrance] = useState(false);
@@ -2596,14 +2599,23 @@ function TransactionScreen({ data, refresh, quickTx }) {
   const warehouse = data.locations.find((l) => l.type === "warehouse");
   const vehicles = data.locations.filter((l) => l.type === "vehicle");
 
-  const resetForm = () => setForm({ itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" });
+  // "קבלת סחורה" נשארת שורה אחת בלבד - בחירת הפריט שם עוברת דרך הבורר הייעודי
+  // (מכשיר / ריח, עם יצירה אוטומטית של אריזת 25 ליטר לריח חדש) שלא בנוי כרגע
+  // לתמוך בכמה שורות בו-זמנית. כל שאר סוגי התנועה תומכים בכמה שורות פריטים.
+  const multiLine = type !== "receive";
+  const setLine = (id, patch) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const addLine = () => setLines((ls) => [...ls, emptyTxLine()]);
+  const removeLine = (id) => setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.id !== id) : ls));
+
+  const resetForm = () => { setForm({ fromLocationId: "", toLocationId: "", customerId: "", note: "", supplierId: "" }); setLines([emptyTxLine()]); };
 
   const chooseType = (t) => {
     setType(t); setError(""); setSuccess(""); setReceiveCategoryFilter("all"); setSelectedFragranceName("");
-    const base = { itemId: "", qty: "", fromLocationId: "", toLocationId: "", customerId: "", condition: "ok", note: "", unitPrice: "", supplierId: "" };
+    const base = { fromLocationId: "", toLocationId: "", customerId: "", note: "", supplierId: "" };
     if (t === "receive") base.toLocationId = warehouse?.id || "";
     if (t === "transfer") base.fromLocationId = warehouse?.id || "";
     setForm(base);
+    setLines([emptyTxLine()]);
   };
 
   // מאגר הריחות הראשי - כל שם ריח ייחודי מתוך כל פריטי התמציות בקטלוג, בכל גודל
@@ -2616,15 +2628,15 @@ function TransactionScreen({ data, refresh, quickTx }) {
   // אם לא, יוצרים אותו כעת אוטומטית ומשתמשים בפריט החדש.
   const onSelectReceiveFragrance = async (name) => {
     setSelectedFragranceName(name);
-    if (!name) { setForm({ ...form, itemId: "" }); return; }
+    if (!name) { setLine(lines[0].id, { itemId: "" }); return; }
     const existing = data.items.find((it) => it.category === "consumable" && isLargePackage(it) && guessFragranceName(it) === name);
-    if (existing) { setForm({ ...form, itemId: existing.id }); return; }
+    if (existing) { setLine(lines[0].id, { itemId: existing.id }); return; }
     setResolvingFragrance(true);
     setError("");
     try {
       const newId = await api.addItem({ name: `תמצית ריח - ${name} (25 ליטר)`, category: "consumable", unit: "25 ליטר", minThreshold: 0, fragranceGroup: name });
       await refresh();
-      setForm({ ...form, itemId: newId });
+      setLine(lines[0].id, { itemId: newId });
     } catch (e) { setError(e.message); } finally { setResolvingFragrance(false); }
   };
 
@@ -2637,52 +2649,67 @@ function TransactionScreen({ data, refresh, quickTx }) {
 
   const submit = async () => {
     setError(""); setSuccess("");
-    const qty = Number(form.qty);
-    if (!form.itemId || !qty || qty <= 0) { setError("יש לבחור פריט ולהזין כמות תקינה"); return; }
 
-    if (type === "receive") {
-      if (!form.toLocationId) { setError("יש לבחור מיקום יעד"); return; }
-      if (!form.supplierId) { setError("יש לבחור ספק שממנו התקבלה הסחורה"); return; }
-    }
+    if (type === "receive" && !form.supplierId) { setError("יש לבחור ספק שממנו התקבלה הסחורה"); return; }
+    if (type === "receive" && !form.toLocationId) { setError("יש לבחור מיקום יעד"); return; }
     if (type === "transfer") {
       if (!form.fromLocationId || !form.toLocationId) { setError("יש לבחור מיקום מקור ויעד"); return; }
       if (form.fromLocationId === form.toLocationId) { setError("מקור ויעד לא יכולים להיות זהים"); return; }
-      const avail = stockOf(form.itemId, form.fromLocationId);
-      if (avail < qty) { setError(`אין מספיק מלאי במקור (זמין: ${avail})`); return; }
     }
     if (type === "install") {
       if (!form.fromLocationId) { setError("יש לבחור רכב מקור"); return; }
       if (!form.customerId) { setError("יש לבחור לקוח"); return; }
-      const avail = stockOf(form.itemId, form.fromLocationId);
-      if (avail < qty) { setError(`אין מספיק מלאי ברכב (זמין: ${avail})`); return; }
-      if (form.unitPrice === "" || Number(form.unitPrice) < 0) { setError("יש להזין מחיר ליחידה שנגבה מהלקוח"); return; }
     }
     if (type === "return" && !form.toLocationId) { setError("יש לבחור מיקום יעד להחזרה"); return; }
-    if (type === "writeoff") {
-      if (!form.fromLocationId) { setError("יש לבחור מיקום"); return; }
-      const avail = stockOf(form.itemId, form.fromLocationId);
-      if (avail < qty) { setError(`אין מספיק מלאי לגריעה (זמין: ${avail})`); return; }
+    if (type === "writeoff" && !form.fromLocationId) { setError("יש לבחור מיקום"); return; }
+
+    // בודקים את כל השורות מראש, לפני שמתחילים לשלוח בכלל - כדי לא להשאיר
+    // חלק מהתנועה הזו רשומה בפועל וחלק לא, אם שורה מאוחרת יותר לא תקינה.
+    const seenItems = new Set();
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      const qty = Number(l.qty);
+      const rowLabel = multiLine ? `שורה ${i + 1}: ` : "";
+      if (!l.itemId || !qty || qty <= 0) { setError(`${rowLabel}יש לבחור פריט ולהזין כמות תקינה`); return; }
+      if (seenItems.has(l.itemId)) { setError(`${rowLabel}אותו פריט נבחר ביותר משורה אחת - אחדו לשורה אחת עם הכמות הכוללת`); return; }
+      seenItems.add(l.itemId);
+      if ((type === "transfer" || type === "writeoff") && form.fromLocationId) {
+        const avail = stockOf(l.itemId, form.fromLocationId);
+        if (avail < qty) { setError(`${rowLabel}אין מספיק מלאי במקור (זמין: ${avail})`); return; }
+      }
+      if (type === "install") {
+        const avail = form.fromLocationId ? stockOf(l.itemId, form.fromLocationId) : 0;
+        if (avail < qty) { setError(`${rowLabel}אין מספיק מלאי ברכב (זמין: ${avail})`); return; }
+        if (l.unitPrice === "" || Number(l.unitPrice) < 0) { setError(`${rowLabel}יש להזין מחיר ליחידה שנגבה מהלקוח`); return; }
+      }
     }
 
     setBusy(true);
+    let done = 0;
     try {
-      await api.insertTransaction({
-        type, itemId: form.itemId, qty,
-        fromLocationId: form.fromLocationId || null,
-        toLocationId: form.toLocationId || null,
-        customerId: form.customerId || null,
-        condition: type === "return" ? form.condition : null,
-        note: form.note || "",
-        unitPrice: type === "install" ? form.unitPrice : null,
-        supplierId: type === "receive" ? form.supplierId : null,
-      });
+      for (const l of lines) {
+        await api.insertTransaction({
+          type, itemId: l.itemId, qty: Number(l.qty),
+          fromLocationId: form.fromLocationId || null,
+          toLocationId: form.toLocationId || null,
+          customerId: form.customerId || null,
+          condition: type === "return" ? l.condition : null,
+          note: form.note || "",
+          unitPrice: type === "install" ? l.unitPrice : null,
+          supplierId: type === "receive" ? form.supplierId : null,
+        });
+        done++;
+      }
       await refresh();
-      setSuccess("התנועה נרשמה בהצלחה");
+      setSuccess(lines.length > 1 ? `${lines.length} שורות נרשמו בהצלחה` : "התנועה נרשמה בהצלחה");
       resetForm();
       if (type === "receive") setForm((f) => ({ ...f, toLocationId: warehouse?.id || "" }));
       if (type === "transfer") setForm((f) => ({ ...f, fromLocationId: warehouse?.id || "" }));
     } catch (e) {
-      setError(e.message || "שגיאה בביצוע התנועה - ייתכן שאין לך הרשאה למיקום זה");
+      setError(
+        (done > 0 ? `${done} מתוך ${lines.length} שורות נרשמו בהצלחה לפני השגיאה. ` : "") +
+        (e.message || "שגיאה בביצוע התנועה - ייתכן שאין לך הרשאה למיקום זה")
+      );
     } finally {
       setBusy(false);
     }
@@ -2708,9 +2735,6 @@ function TransactionScreen({ data, refresh, quickTx }) {
   }
 
   const cfg = TX_TYPES[type];
-  // עבור סוגי תנועה שאינם קבלת סחורה, כל הפריטים זמינים כרגיל.
-  // קבלת סחורה משתמשת בבחירה ייעודית למטה (מכשיר / ריח) ולא ברשימה הזו.
-  const itemOptions = data.items;
   return (
     <div>
       <button onClick={() => setType(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> בחירת סוג תנועה אחרת</button>
@@ -2726,56 +2750,6 @@ function TransactionScreen({ data, refresh, quickTx }) {
             {data.suppliers.length === 0 && <div className="text-xs text-rose-500 mt-1">אין עדיין ספקים במערכת - הוסיפו ספק במסך "ספקים" לפני קבלת סחורה.</div>}
           </Field>
         )}
-
-        {type === "receive" && (
-          <Field label="סינון לפי סוג">
-            <div className="flex gap-2">
-              {[["all", "הכל"], ["device", "מכשירים"], ["consumable", "תמציות ריח"]].map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => { setReceiveCategoryFilter(key); setSelectedFragranceName(""); setForm({ ...form, itemId: "" }); }}
-                  className={`flex-1 rounded-xl py-2 border text-sm font-medium ${receiveCategoryFilter === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </Field>
-        )}
-
-        {type === "receive" && (receiveCategoryFilter === "device" || receiveCategoryFilter === "all") && (
-          <Field label="מכשיר">
-            <select className={inputCls} value={data.items.find((i) => i.id === form.itemId)?.category === "device" ? form.itemId : ""} onChange={(e) => { setSelectedFragranceName(""); setForm({ ...form, itemId: e.target.value }); }}>
-              <option value="">בחר מכשיר...</option>
-              {data.items.filter((it) => it.category === "device").map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
-            </select>
-          </Field>
-        )}
-
-        {type === "receive" && (receiveCategoryFilter === "consumable" || receiveCategoryFilter === "all") && (
-          <Field label="ריח (מאגר הריחות הראשי - יתקבל כג'ריקן 25 ליטר)">
-            <select className={inputCls} value={selectedFragranceName} onChange={(e) => onSelectReceiveFragrance(e.target.value)} disabled={resolvingFragrance}>
-              <option value="">בחר ריח...</option>
-              {fragranceNames.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-            {resolvingFragrance && <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> יוצר אריזת 25 ליטר לריח זה...</div>}
-            {!resolvingFragrance && <div className="text-xs text-slate-500 mt-1">תמציות ריח מתקבלות מהספק אך ורק בג'ריקן 25 ליטר. אם אין עדיין 25 ליטר לריח זה, ייווצר אוטומטית.</div>}
-          </Field>
-        )}
-
-        {type !== "receive" && (
-          <Field label="פריט">
-            <select className={inputCls} value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value })}>
-              <option value="">בחר פריט...</option>
-              {itemOptions.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
-            </select>
-          </Field>
-        )}
-
-        <Field label={`כמות${form.itemId ? " (" + (data.items.find((i) => i.id === form.itemId)?.unit || "") + ")" : ""}`}>
-          <input type="number" min="1" className={inputCls} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
-        </Field>
 
         {type === "transfer" && (
           <Field label="ממיקום">
@@ -2813,22 +2787,102 @@ function TransactionScreen({ data, refresh, quickTx }) {
           </Field>
         )}
 
-        {type === "install" && (
-          <Field label="מחיר ליחידה שנגבה מהלקוח (₪)">
-            <input type="number" min="0" step="0.01" className={inputCls} value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} />
-            {form.qty && form.unitPrice !== "" && (
-              <div className="text-xs text-slate-500 mt-1">סה"כ להזמנה: ₪{(Number(form.qty) * Number(form.unitPrice)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+        {type === "receive" && (
+          <>
+            <Field label="סינון לפי סוג">
+              <div className="flex gap-2">
+                {[["all", "הכל"], ["device", "מכשירים"], ["consumable", "תמציות ריח"]].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => { setReceiveCategoryFilter(key); setSelectedFragranceName(""); setLine(lines[0].id, { itemId: "" }); }}
+                    className={`flex-1 rounded-xl py-2 border text-sm font-medium ${receiveCategoryFilter === key ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            {(receiveCategoryFilter === "device" || receiveCategoryFilter === "all") && (
+              <Field label="מכשיר">
+                <select className={inputCls} value={data.items.find((i) => i.id === lines[0].itemId)?.category === "device" ? lines[0].itemId : ""} onChange={(e) => { setSelectedFragranceName(""); setLine(lines[0].id, { itemId: e.target.value }); }}>
+                  <option value="">בחר מכשיר...</option>
+                  {data.items.filter((it) => it.category === "device").map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                </select>
+              </Field>
             )}
-          </Field>
+
+            {(receiveCategoryFilter === "consumable" || receiveCategoryFilter === "all") && (
+              <Field label="ריח (מאגר הריחות הראשי - יתקבל כג'ריקן 25 ליטר)">
+                <select className={inputCls} value={selectedFragranceName} onChange={(e) => onSelectReceiveFragrance(e.target.value)} disabled={resolvingFragrance}>
+                  <option value="">בחר ריח...</option>
+                  {fragranceNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+                {resolvingFragrance && <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> יוצר אריזת 25 ליטר לריח זה...</div>}
+                {!resolvingFragrance && <div className="text-xs text-slate-500 mt-1">תמציות ריח מתקבלות מהספק אך ורק בג'ריקן 25 ליטר. אם אין עדיין 25 ליטר לריח זה, ייווצר אוטומטית.</div>}
+              </Field>
+            )}
+
+            <Field label={`כמות${lines[0].itemId ? " (" + (data.items.find((i) => i.id === lines[0].itemId)?.unit || "") + ")" : ""}`}>
+              <input type="number" min="1" className={inputCls} value={lines[0].qty} onChange={(e) => setLine(lines[0].id, { qty: e.target.value })} />
+            </Field>
+          </>
         )}
 
-        {type === "return" && (
-          <Field label="מצב הפריט המוחזר">
-            <div className="flex gap-2">
-              <button onClick={() => setForm({ ...form, condition: "ok" })} className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 border font-medium ${form.condition === "ok" ? "bg-emerald-500 text-white border-emerald-500" : "bg-white border-gray-300 text-slate-600"}`}><CircleCheck size={16} /> תקין</button>
-              <button onClick={() => setForm({ ...form, condition: "faulty" })} className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 border font-medium ${form.condition === "faulty" ? "bg-rose-500 text-white border-rose-500" : "bg-white border-gray-300 text-slate-600"}`}><CircleX size={16} /> תקול</button>
+        {multiLine && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-slate-600">פריטים</span>
+              <button type="button" onClick={addLine} className={btnGhost + " !py-1.5 !px-3 text-xs flex items-center gap-1"}><Plus size={14} /> הוספת שורה</button>
             </div>
-          </Field>
+            <div className="space-y-3">
+              {lines.map((l, i) => {
+                const it = data.items.find((x) => x.id === l.itemId);
+                const availAt = form.fromLocationId ? stockOf(l.itemId, form.fromLocationId) : null;
+                return (
+                  <div key={l.id} className="bg-white/70 rounded-xl border p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <select className={inputCls + " flex-1"} value={l.itemId} onChange={(e) => setLine(l.id, { itemId: e.target.value })}>
+                        <option value="">בחר פריט...</option>
+                        {data.items.map((opt) => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
+                      </select>
+                      {lines.length > 1 && (
+                        <button type="button" onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 shrink-0" title="הסרת שורה"><Trash2 size={16} /></button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label={`כמות${it ? ` (${it.unit})` : ""}`}>
+                        <input type="number" min="1" className={inputCls} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
+                      </Field>
+                      {type === "install" && (
+                        <Field label="מחיר ליח' (₪)">
+                          <input type="number" min="0" step="0.01" className={inputCls} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
+                        </Field>
+                      )}
+                    </div>
+                    {(type === "transfer" || type === "writeoff" || type === "install") && l.itemId && availAt !== null && (
+                      <div className="text-xs text-slate-500 mt-1">זמין במקור: {availAt} {it?.unit}</div>
+                    )}
+                    {type === "install" && l.qty && l.unitPrice !== "" && (
+                      <div className="text-xs text-slate-500 mt-1">סה"כ לשורה: ₪{(Number(l.qty) * Number(l.unitPrice)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                    )}
+                    {type === "return" && (
+                      <div className="flex gap-2 mt-2">
+                        <button type="button" onClick={() => setLine(l.id, { condition: "ok" })} className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 border text-sm font-medium ${l.condition === "ok" ? "bg-emerald-500 text-white border-emerald-500" : "bg-white border-gray-300 text-slate-600"}`}><CircleCheck size={14} /> תקין</button>
+                        <button type="button" onClick={() => setLine(l.id, { condition: "faulty" })} className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 border text-sm font-medium ${l.condition === "faulty" ? "bg-rose-500 text-white border-rose-500" : "bg-white border-gray-300 text-slate-600"}`}><CircleX size={14} /> תקול</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {type === "install" && lines.some((l) => l.qty && l.unitPrice !== "") && (
+              <div className="text-sm font-bold text-slate-700 mt-2 text-left">
+                סה"כ להתקנה: ₪{lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </div>
+            )}
+          </div>
         )}
 
         <Field label="הערה (לא חובה)"><textarea className={inputCls} rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
@@ -3542,14 +3596,14 @@ function ValuationReport({ data }) {
         <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">שווי לפי מוצר (Top 10)</h3></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">עלות ליח'</th><th className="px-5 py-4 font-medium">שווי כולל</th></tr></thead>
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium whitespace-nowrap">פריט</th><th className="px-5 py-4 font-medium whitespace-nowrap">כמות</th><th className="px-5 py-4 font-medium whitespace-nowrap">עלות ליח'</th><th className="px-5 py-4 font-medium whitespace-nowrap">שווי כולל</th></tr></thead>
             <tbody>
               {topProducts.map((r) => (
                 <tr key={r.item.id} className="border-t">
-                  <td className="px-5 py-4 font-medium text-slate-800">{r.item.name}</td>
-                  <td className="px-5 py-4">{r.totalQty}</td>
-                  <td className="px-5 py-4">₪{r.unitCost.toFixed(2)}</td>
-                  <td className="px-5 py-4 font-bold">₪{r.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td className="px-5 py-4 font-medium text-slate-800 whitespace-nowrap">{r.item.name}</td>
+                  <td className="px-5 py-4 whitespace-nowrap">{r.totalQty}</td>
+                  <td className="px-5 py-4 whitespace-nowrap">₪{r.unitCost.toFixed(2)}</td>
+                  <td className="px-5 py-4 font-bold whitespace-nowrap">₪{r.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                 </tr>
               ))}
               {topProducts.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">אין עדיין שווי מחושב</td></tr>}
