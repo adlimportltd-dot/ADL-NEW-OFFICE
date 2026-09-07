@@ -1550,7 +1550,7 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
 }
 
 // ==================== Locations ====================
-function LocationsScreen({ data, refresh, isAdmin }) {
+function LocationsScreen({ data, refresh, isAdmin, onOpenFile }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", type: "vehicle" });
   const [error, setError] = useState("");
@@ -1587,7 +1587,7 @@ function LocationsScreen({ data, refresh, isAdmin }) {
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {data.locations.map((loc) => (
-          <div key={loc.id} className={`bg-white rounded-2xl border shadow-sm p-5 flex items-center gap-3 ${isAdmin ? "cursor-pointer hover:shadow-md transition" : ""}`} onClick={() => isAdmin && openEdit(loc)}>
+          <div key={loc.id} className="bg-white rounded-2xl border shadow-sm p-5 flex items-center gap-3 cursor-pointer hover:shadow-md transition" onClick={() => onOpenFile(loc.id)}>
             <div className={`p-2.5 rounded-xl ${loc.type === "warehouse" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"}`}>
               {loc.type === "warehouse" ? <Building2 size={20} /> : <Truck size={20} />}
             </div>
@@ -1595,7 +1595,15 @@ function LocationsScreen({ data, refresh, isAdmin }) {
               <div className="font-bold text-slate-800">{loc.name}</div>
               <div className="text-sm text-slate-500">{loc.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {stockAt(loc.id)} יח' סה"כ</div>
             </div>
-            {isAdmin && <Pencil size={16} className="text-gray-300" />}
+            {isAdmin && (
+              <button
+                onClick={(e) => { e.stopPropagation(); openEdit(loc); }}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-300 hover:text-gray-600"
+                title="עריכת מיקום"
+              >
+                <Pencil size={16} />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -1625,6 +1633,109 @@ function LocationsScreen({ data, refresh, isAdmin }) {
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// מסך פירוט מיקום/רכב: מה יש בפועל אצל הטכנאי כרגע (stock_levels לפי location_id
+// זה), ותנועות המלאי האחרונות שהזיזו פריטים אל/מהמיקום הזה. לא טבלה נפרדת -
+// הנתונים כבר קיימים ב-stock_levels/transactions, המסך הזה רק מסנן ומציג אותם.
+function LocationFile({ data, locationId, onBack, isAdmin, onQuickAction }) {
+  const location = data.locations.find((l) => l.id === locationId);
+  if (!location) return null;
+
+  const stockRows = data.items
+    .map((item) => ({ item, qty: data.stock[`${item.id}|${locationId}`] || 0 }))
+    .filter((r) => r.qty > 0)
+    .sort((a, b) => (a.item.category === b.item.category ? a.item.name.localeCompare(b.item.name, "he") : a.item.category.localeCompare(b.item.category)));
+  const totalUnits = stockRows.reduce((s, r) => s + r.qty, 0);
+
+  const history = data.transactions
+    .filter((t) => t.fromLocationId === locationId || t.toLocationId === locationId)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const otherLocationName = (t) => {
+    const otherId = t.fromLocationId === locationId ? t.toLocationId : t.fromLocationId;
+    return data.locations.find((l) => l.id === otherId)?.name || "-";
+  };
+  const direction = (t) => (t.toLocationId === locationId ? "נכנס" : "יצא");
+
+  return (
+    <div>
+      <button onClick={onBack} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת מיקומים</button>
+
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${location.type === "warehouse" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"}`}>
+              {location.type === "warehouse" ? <Building2 size={22} /> : <Truck size={22} />}
+            </div>
+            <div>
+              <h2 className="font-bold text-xl text-slate-800">{location.name}</h2>
+              <p className="text-slate-500 text-sm">{location.type === "warehouse" ? "מחסן" : "רכב טכנאי"} · {totalUnits} יח' סה"כ במלאי כרגע</p>
+            </div>
+          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <button onClick={() => onQuickAction("transfer")} className={btnGhost + " flex items-center gap-1.5 !py-2 text-sm"}><ArrowLeftRight size={16} /> תנועת מלאי חדשה</button>
+              <button onClick={() => onQuickAction("install")} className={btnGhost + " flex items-center gap-1.5 !py-2 text-sm"}><Truck size={16} /> התקנה / ניפוק</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <h3 className="font-bold text-slate-800 mb-2">מה יש כרגע פיזית ב{location.type === "warehouse" ? "מחסן" : "רכב"}</h3>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-5">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-slate-500 text-right">
+              <th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">קטגוריה</th>
+              <th className="px-5 py-3 font-medium">כמות</th><th className="px-5 py-3 font-medium">מתחת לסף?</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stockRows.map((r) => (
+              <tr key={r.item.id} className="border-t">
+                <td className="px-5 py-3 font-medium text-slate-800">{r.item.name}</td>
+                <td className="px-5 py-3"><Badge tone={r.item.category === "device" ? "sky" : "violet"}>{CATEGORIES[r.item.category]}</Badge></td>
+                <td className="px-5 py-3 font-bold">{r.qty} {r.item.unit}</td>
+                <td className="px-5 py-3">{r.qty < r.item.minThreshold ? <Badge tone="rose">מתחת לסף</Badge> : <span className="text-slate-300">-</span>}</td>
+              </tr>
+            ))}
+            {stockRows.length === 0 && <tr><td colSpan={4} className="px-5 py-8 text-center text-slate-400">אין כרגע שום פריט במיקום הזה</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 className="font-bold text-slate-800 mb-2">תנועות מלאי אחרונות</h3>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-slate-500 text-right">
+              <th className="px-5 py-3 font-medium">תאריך</th><th className="px-5 py-3 font-medium">כיוון</th>
+              <th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">כמות</th>
+              <th className="px-5 py-3 font-medium">סוג</th><th className="px-5 py-3 font-medium">מול מיקום</th><th className="px-5 py-3 font-medium">הערה</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((t) => {
+              const item = data.items.find((i) => i.id === t.itemId);
+              return (
+                <tr key={t.id} className="border-t">
+                  <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
+                  <td className="px-5 py-3"><Badge tone={direction(t) === "נכנס" ? "emerald" : "amber"}>{direction(t)}</Badge></td>
+                  <td className="px-5 py-3 font-medium text-slate-800">{item?.name || "-"}</td>
+                  <td className="px-5 py-3">{t.qty}</td>
+                  <td className="px-5 py-3"><Badge tone={AUDIT_TX_LABELS[t.type]?.color}>{AUDIT_TX_LABELS[t.type]?.label}</Badge></td>
+                  <td className="px-5 py-3 text-slate-500">{otherLocationName(t)}</td>
+                  <td className="px-5 py-3 text-slate-500">{t.note || "-"}</td>
+                </tr>
+              );
+            })}
+            {history.length === 0 && <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-400">אין עדיין תנועות מלאי למיקום הזה</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -5023,6 +5134,7 @@ export default function App() {
   const [dataError, setDataError] = useState("");
   const [tab, setTab] = useState("dashboard");
   const [customerFileId, setCustomerFileId] = useState(null);
+  const [locationFileId, setLocationFileId] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [quickTx, setQuickTx] = useState(null);
   const [printPOId, setPrintPOId] = useState(null);
@@ -5121,7 +5233,7 @@ export default function App() {
   }, [session, mfaPendingFactorId, refresh]);
 
   const runQuickAction = (type) => {
-    setCustomerFileId(null); setTab("transaction"); setQuickTx({ type, nonce: Math.random().toString(36).slice(2) });
+    setCustomerFileId(null); setLocationFileId(null); setTab("transaction"); setQuickTx({ type, nonce: Math.random().toString(36).slice(2) });
   };
 
   const openQuoteBuilder = (customerId, leadId) => setQuoteBuilderFor({ customerId, leadId });
@@ -5182,7 +5294,7 @@ export default function App() {
   const isViewer = profile.role === "viewer";
   const roleLabel = isAdmin ? "מנהל" : isViewer ? "צפייה בלבד" : "טכנאי";
   const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
-  const goTab = (key) => { setTab(key); setCustomerFileId(null); setMobileMenuOpen(false); };
+  const goTab = (key) => { setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (
@@ -5213,7 +5325,7 @@ export default function App() {
           </div>
           <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto sidebar-scroll">
             {nav.map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-[15px] font-medium transition shrink-0 ${tab === key && !customerFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
+              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-[15px] font-medium transition shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
                 <Icon size={18} /> {label}
               </button>
             ))}
@@ -5243,7 +5355,7 @@ export default function App() {
                 <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5 shrink-0"><X size={20} /></button>
                 <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto mobile-nav-scroll">
                   {nav.map(({ key, label, icon: Icon }) => (
-                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-medium shrink-0 ${tab === key && !customerFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
+                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-medium shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
                       <Icon size={18} /> {label}
                     </button>
                   ))}
@@ -5268,11 +5380,19 @@ export default function App() {
                 onStartSale={(id) => { setSaleInitialCustomerId(id); setCustomerFileId(null); setTab("sale"); }}
                 isAdmin={isAdmin}
               />
+            ) : locationFileId ? (
+              <LocationFile
+                data={data}
+                locationId={locationFileId}
+                onBack={() => setLocationFileId(null)}
+                isAdmin={isAdmin}
+                onQuickAction={runQuickAction}
+              />
             ) : (
               <>
                 {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} />}
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
-                {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
+                {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setLocationFileId} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
                 {tab === "leads" && <LeadsScreen data={data} refresh={refresh} onCreateQuote={openQuoteBuilder} />}
                 {tab === "quotes" && <QuotesScreen data={data} refresh={refresh} onPrint={setPrintQuoteId} />}
@@ -5291,7 +5411,7 @@ export default function App() {
             )}
           </div>
 
-          {tab !== "transaction" && !customerFileId && isAdmin && (
+          {tab !== "transaction" && !customerFileId && !locationFileId && isAdmin && (
             <div
               className="md:hidden fixed inset-x-0 z-20 bg-white/90 backdrop-blur-xl border-t border-gray-100"
               style={{ bottom: "calc(4rem + env(safe-area-inset-bottom))", height: "4rem" }}
@@ -5316,7 +5436,7 @@ export default function App() {
             {MOBILE_NAV.filter((key) => nav.some((n) => n.key === key)).map((key) => {
               const item = FULL_NAV.find((n) => n.key === key);
               const Icon = item.icon;
-              const active = tab === key && !customerFileId;
+              const active = tab === key && !customerFileId && !locationFileId;
               return (
                 <button key={key} onClick={() => goTab(key)} className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl ${active ? "text-amber-600" : "text-slate-400"}`}>
                   <Icon size={22} /><span className="text-[11px] font-medium">{item.label}</span>
