@@ -777,14 +777,20 @@ function parseCSV(text) {
     });
   return { headers, rows: dataRows };
 }
+// משווה כותרות עמודה בלי להתחשב בגרשיים/גרש (מע"מ / מעמ / מע׳מ) ובלי רגישות
+// לאותיות גדולות/קטנות - תוכנות הנהלת חשבונות שונות מייצאות את אותה כותרת
+// בכתיב מעט שונה, וזה לא אמור לגרום לייבוא כולו להיכשל.
+const normalizeHeader = (s) => normalizeText(s).replace(/["'׳״]/g, "").toLowerCase();
 const pickField = (row, aliases) => {
   const keys = Object.keys(row);
   for (const alias of aliases) {
-    const key = keys.find((k) => normalizeText(k).toLowerCase() === normalizeText(alias).toLowerCase());
+    const key = keys.find((k) => normalizeHeader(k) === normalizeHeader(alias));
     if (key && row[key]) return row[key];
   }
   return "";
 };
+const hasAnyColumn = (headers, aliases) => aliases.some((a) => headers.some((h) => normalizeHeader(h) === normalizeHeader(a)));
+const parseMoney = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, ""));
 function parseDateFlexible(raw) {
   if (!raw) return null;
   const s = String(raw).trim();
@@ -795,11 +801,25 @@ function parseDateFlexible(raw) {
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
-const CSV_DATE_ALIASES = ["תאריך", "תאריך הוצאה", "Date", "date"];
-const CSV_AMOUNT_ALIASES = ["סכום", 'סכום כולל מע"מ', "Amount", "amount", "Total"];
-const CSV_SUPPLIER_ALIASES = ["ספק", "שם ספק", "Supplier", "supplier"];
+// קורא קובץ עם זיהוי קידוד אוטומטי: אקסל בגרסה העברית שומר CSV רגיל (לא
+// "CSV UTF-8") בקידוד Windows-1255 - קריאה כ-UTF-8 הופכת את כל העברית,
+// כולל שורת הכותרות עצמה, לתווים לא קריאים. UTF-8 תקין נכשל (fatal:true)
+// על בייטים של Windows-1255 שאינם רצף UTF-8 חוקי, אז זו בדיקה מדויקת ולא ניחוש.
+async function readTextFileSmart(file) {
+  const buf = await file.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch (e) {
+    return new TextDecoder("windows-1255").decode(buf);
+  }
+}
+const CSV_DATE_ALIASES = ["תאריך", "תאריך הוצאה", "ת.אסמכ", "אסמכתא", "תאריך אסמכתא", "Date", "date"];
+const CSV_AMOUNT_INCL_ALIASES = ["סכום כולל מעמ", "כולל מעמ", "סכום", "סהכ", "Amount Incl VAT", "Total", "Amount", "amount"];
+const CSV_AMOUNT_EXCL_ALIASES = ["סכום ללא מעמ", "לפני מעמ", "Amount Excl VAT", "Subtotal"];
+const CSV_VAT_ALIASES = ["מעמ", "VAT", "Vat Amount"];
+const CSV_SUPPLIER_ALIASES = ["ספק", "שם ספק", "פרטים", "Supplier", "supplier"];
 const CSV_CATEGORY_ALIASES = ["קטגוריה", "Category", "category"];
-const CSV_DESCRIPTION_ALIASES = ["תיאור", "פירוט", "Description", "description"];
+const CSV_DESCRIPTION_ALIASES = ["תיאור", "פירוט", "פרטים", "Description", "description"];
 const CSV_INVOICE_ALIASES = ["מספר חשבונית", "חשבונית", "Invoice", "Invoice Number", "invoice"];
 const guessFragranceName = (item) => {
   if (item.fragranceGroup) return normalizeText(item.fragranceGroup);
@@ -4336,14 +4356,14 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
     if (!file) return;
     setCsvError(""); setCsvSuccess(""); setCsvBusy(true);
     try {
-      const text = await file.text();
+      const text = await readTextFileSmart(file);
       const { headers, rows } = parseCSV(text);
       if (rows.length === 0) throw new Error("הקובץ ריק, או שלא הצלחנו לקרוא ממנו שורות נתונים.");
 
-      const hasDateCol = CSV_DATE_ALIASES.some((a) => headers.some((h) => normalizeText(h).toLowerCase() === a.toLowerCase()));
-      const hasAmountCol = CSV_AMOUNT_ALIASES.some((a) => headers.some((h) => normalizeText(h).toLowerCase() === a.toLowerCase()));
+      const hasDateCol = hasAnyColumn(headers, CSV_DATE_ALIASES);
+      const hasAmountCol = hasAnyColumn(headers, CSV_AMOUNT_INCL_ALIASES) || hasAnyColumn(headers, CSV_AMOUNT_EXCL_ALIASES);
       if (!hasDateCol || !hasAmountCol) {
-        throw new Error(`מבנה העמודות בקובץ לא זוהה - חובה שיהיו עמודות בשם "תאריך" (או Date) ו"סכום" (או Amount). העמודות שנמצאו בקובץ: ${headers.join(", ") || "(לא זוהו כלל כותרות)"}`);
+        throw new Error(`מבנה העמודות בקובץ לא זוהה - חובה שיהיו עמודות עבור תאריך וסכום. העמודות שנמצאו בקובץ: ${headers.join(", ") || "(לא זוהו כלל כותרות - ייתכן שהקובץ לא CSV תקין)"}`);
       }
 
       let success = 0;
@@ -4353,9 +4373,27 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
         const r = rows[i];
         try {
           const expenseDate = parseDateFlexible(pickField(r, CSV_DATE_ALIASES));
-          const amountInclVat = Number(String(pickField(r, CSV_AMOUNT_ALIASES)).replace(/[^\d.-]/g, ""));
-          if (!expenseDate) throw new Error("תאריך לא תקין");
-          if (!amountInclVat || amountInclVat <= 0) throw new Error("סכום לא תקין");
+          if (!expenseDate) throw new Error("תאריך לא תקין או חסר");
+
+          // עדיפות לעמודות מפורשות (ללא מעמ + מעמ + כולל מעמ) כשקיימות - מדויק
+          // יותר מאשר להעריך את הפיצול לפי שיעור המע"מ הנוכחי בהגדרות. אם יש
+          // רק עמודת סכום אחת, מניחים שהיא כוללת מע"מ ומחשבים את הפיצול.
+          const inclRaw = pickField(r, CSV_AMOUNT_INCL_ALIASES);
+          const exclRaw = pickField(r, CSV_AMOUNT_EXCL_ALIASES);
+          const vatRaw = pickField(r, CSV_VAT_ALIASES);
+          let amountInclVat, vatAmount, amountExclVat;
+          if (inclRaw) {
+            amountInclVat = parseMoney(inclRaw);
+            if (exclRaw && vatRaw) { amountExclVat = parseMoney(exclRaw); vatAmount = parseMoney(vatRaw); }
+            else { vatAmount = Math.round((amountInclVat * vatRateLocal / (100 + vatRateLocal)) * 100) / 100; amountExclVat = Math.round((amountInclVat - vatAmount) * 100) / 100; }
+          } else if (exclRaw) {
+            amountExclVat = parseMoney(exclRaw);
+            vatAmount = vatRaw ? parseMoney(vatRaw) : Math.round((amountExclVat * vatRateLocal / 100) * 100) / 100;
+            amountInclVat = Math.round((amountExclVat + vatAmount) * 100) / 100;
+          } else throw new Error("לא נמצאה עמודת סכום בשורה זו");
+
+          if (!amountInclVat) throw new Error("סכום לא תקין או חסר");
+          if (amountInclVat < 0) throw new Error('סכום שלילי (זיכוי/תיקון) - לא יובא אוטומטית, יש להזין ידנית דרך "הוצאה חדשה"');
 
           const supplierRaw = pickField(r, CSV_SUPPLIER_ALIASES);
           const normalizedSupplier = normalizeText(supplierRaw);
@@ -4368,14 +4406,15 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
             ([k, label]) => k === categoryRaw || normalizeText(label).toLowerCase().includes(categoryRaw) || (categoryRaw && categoryRaw.includes(normalizeText(label).toLowerCase()))
           )?.[0]) || "other";
 
-          const vatAmount = Math.round((amountInclVat * vatRateLocal / (100 + vatRateLocal)) * 100) / 100;
-          const amountExclVat = Math.round((amountInclVat - vatAmount) * 100) / 100;
           const description = pickField(r, CSV_DESCRIPTION_ALIASES) || (supplierRaw ? `יובא מקובץ - ${supplierRaw}` : "יובא מקובץ CSV");
 
           await api.addExpense({
             category: matchedCategoryKey, supplierId: matchedSupplier ? matchedSupplier.id : null,
             description, invoiceNumber: pickField(r, CSV_INVOICE_ALIASES), expenseDate,
-            vatMode: "incl", amountExclVat, vatAmount, amountInclVat,
+            vatMode: "incl",
+            amountExclVat: Math.round(amountExclVat * 100) / 100,
+            vatAmount: Math.round(vatAmount * 100) / 100,
+            amountInclVat: Math.round(amountInclVat * 100) / 100,
             paymentStatus: "pending", paymentMethod: null, notes: "",
           });
           success++;
