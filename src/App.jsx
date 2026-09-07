@@ -1464,15 +1464,21 @@ function ItemsScreen({ data, refresh, isAdmin }) {
   };
 
   // ---------- סיכום מלאי לפי ריח (מרכז כל גדלי האריזה של אותו ריח לשורה אחת) ----------
+  // כמות "במחסן" ו"סה"כ בעסק (כולל רכבים)" הן שתי בדיקות שונות בכוונה: ברגע
+  // שפריט עבר ברכב, הוא כבר לא זמין למכירה/הקצאה מהמחסן - למרות שהוא עדיין
+  // חלק מהמלאי הכולל של העסק (וממשיך להיכלל בשווי המלאי בדוח שווי מלאי).
+  // מציגים כאן את שתיהן במפורש כדי שלא ייראה כאילו כלום לא זז כשמעבירים לרכב.
+  const warehouseStockOf = (itemId) => (warehouse ? data.stock[`${itemId}|${warehouse.id}`] || 0 : 0);
   const totalStockOf = (itemId) => data.locations.reduce((s, l) => s + (data.stock[`${itemId}|${l.id}`] || 0), 0);
   const fragranceGroups = {};
   data.items.filter((it) => it.category === "consumable").forEach((it) => {
     const groupName = guessFragranceName(it);
     if (!fragranceGroups[groupName]) fragranceGroups[groupName] = { name: groupName, sizes: [], totalWeighted: 0 };
-    const qty = totalStockOf(it.id);
+    const whQty = warehouseStockOf(it.id);
+    const totalQty = totalStockOf(it.id);
     const volumePerUnit = packageVolumeOf(it);
-    fragranceGroups[groupName].sizes.push({ itemId: it.id, unit: it.unit, qty });
-    fragranceGroups[groupName].totalWeighted += qty * volumePerUnit;
+    fragranceGroups[groupName].sizes.push({ itemId: it.id, unit: it.unit, whQty, totalQty });
+    fragranceGroups[groupName].totalWeighted += totalQty * volumePerUnit;
   });
   Object.values(fragranceGroups).forEach((g) => g.sizes.sort(sortBySizeDesc));
   const fragranceGroupList = Object.values(fragranceGroups).sort((a, b) => a.name.localeCompare(b.name, "he"));
@@ -1522,11 +1528,15 @@ function ItemsScreen({ data, refresh, isAdmin }) {
                 <div className="space-y-1.5 mb-2">
                   {g.sizes.map((s) => {
                     const item = data.items.find((i) => i.id === s.itemId);
+                    const outInVehicles = s.totalQty - s.whQty;
                     return (
                       <div key={s.itemId} className="flex items-center justify-between text-sm group">
                         <span className="text-slate-500">{s.unit}</span>
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-slate-700">{s.qty} יח'</span>
+                          <span className="text-left">
+                            <span className="font-medium text-slate-700 block">{s.whQty} יח' במחסן</span>
+                            {outInVehicles > 0 && <span className="text-xs text-amber-600 block">+{outInVehicles} ברכבים · סה"כ {s.totalQty}</span>}
+                          </span>
                           {isAdmin && item && (
                             <button onClick={() => openEdit(item)} className="text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition" title="עריכת אריזה זו"><Pencil size={13} /></button>
                           )}
@@ -1748,7 +1758,11 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
   const [busy, setBusy] = useState(false);
 
   const itemFor = (itemId) => data.items.find((i) => i.id === itemId);
-  const totalStockOf = (itemId) => data.locations.reduce((s, l) => s + (data.stock[`${itemId}|${l.id}`] || 0), 0);
+  // מזיגה/פתיחת אריזה קורית פיזית במחסן בלבד - לכן הזמינות כאן חייבת להיות
+  // המלאי שנמצא ממש במחסן המרכזי, לא סה"כ כולל מה שיצא כבר לרכבים. לפני
+  // התיקון הזה המסך הציג "זמין" לפי סכימה על כל המיקומים, מה שהיה מאפשר
+  // לבחור לפתיחה יותר ג'ריקנים ממה שבאמת עומדים במחסן.
+  const warehouseStockOf = (itemId) => (warehouse ? data.stock[`${itemId}|${warehouse.id}`] || 0 : 0);
 
   // מחושב ישירות מתוך data.items + data.stock בכל רינדור - בלי להסתמך על אף חישוב מוכן
   // מראש, כדי שלא יהיה פער בין מה שבאמת קיים במלאי לבין מה שמוצג כאן.
@@ -1757,7 +1771,7 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
         name: fragranceName,
         sizes: data.items
           .filter((it) => it.category === "consumable" && guessFragranceName(it) === normalizeText(fragranceName))
-          .map((it) => ({ itemId: it.id, unit: it.unit, qty: totalStockOf(it.id) }))
+          .map((it) => ({ itemId: it.id, unit: it.unit, qty: warehouseStockOf(it.id) }))
           .sort(sortBySizeDesc),
       }
     : null;
