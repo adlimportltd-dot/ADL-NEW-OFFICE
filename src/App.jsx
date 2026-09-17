@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   LayoutDashboard, Package, Warehouse, Users, ArrowLeftRight,
   ScrollText, Plus, X, TriangleAlert, Download, Truck, Building2,
-  CircleCheck, CircleX, Trash2, ChevronLeft, Menu, LogOut, Loader2,
+  CircleCheck, CircleX, Trash2, ChevronLeft, ChevronDown, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
   Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History,
@@ -2499,6 +2499,7 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
 function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, isAdmin }) {
   const customer = data.customers.find((c) => c.id === customerId);
   const history = data.transactions.filter((t) => t.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const [expandedOrder, setExpandedOrder] = useState(null);
   if (!customer) return null;
 
   const purchases = history.filter((t) => t.type === "install");
@@ -2506,6 +2507,49 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
   const deviceCount = purchases.filter((t) => data.items.find((i) => i.id === t.itemId)?.category === "device").reduce((s, t) => s + t.qty, 0);
   const consumableCount = purchases.filter((t) => data.items.find((i) => i.id === t.itemId)?.category === "consumable").reduce((s, t) => s + t.qty, 0);
   const customerQuotes = data.quotes.filter((q) => q.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const otherHistory = history.filter((t) => t.type !== "install");
+
+  // כל מכירה חדשה יוצרת שורת customer_invoices אחת + שורות customer_invoice_lines - זהו מקור
+  // הנתונים ה"נכון" לקבוצת הזמנה אחת. לפני שנוצר מודל החשבוניות, מכירות נרשמו רק כשורות
+  // transactions בודדות עם תגית "הזמנה #XXXXX" בהערה - אלו מקובצות כאן בנפרד כך שלא ייעלמו.
+  const extractOrderTag = (text) => {
+    const m = (text || "").match(/הזמנה #\S+/);
+    return m ? m[0] : null;
+  };
+  const customerInvoices = (data.customerInvoices || []).filter((inv) => inv.customerId === customerId);
+  const invoiceOrderTags = new Set(customerInvoices.map((inv) => extractOrderTag(inv.notes)).filter(Boolean));
+  const uncoveredInstall = purchases.filter((t) => {
+    const tag = extractOrderTag(t.note);
+    return !tag || !invoiceOrderTags.has(tag);
+  });
+  const legacyGroups = {};
+  uncoveredInstall.forEach((t) => {
+    const tag = extractOrderTag(t.note) || `__single_${t.id}`;
+    if (!legacyGroups[tag]) legacyGroups[tag] = { key: tag, date: t.date, txs: [] };
+    legacyGroups[tag].txs.push(t);
+  });
+  const orders = [
+    ...customerInvoices.map((inv) => ({
+      key: `inv_${inv.id}`,
+      date: inv.issueDate,
+      label: extractOrderTag(inv.notes) || inv.invoiceNumber,
+      total: inv.totalAmount,
+      lines: inv.lines.map((l) => {
+        const item = l.itemId ? data.items.find((i) => i.id === l.itemId) : null;
+        return { name: item?.name || l.description || "פריט", item, qty: l.qty, unitPrice: l.unitPrice };
+      }),
+    })),
+    ...Object.values(legacyGroups).map((g) => ({
+      key: g.key,
+      date: g.date,
+      label: g.key.startsWith("__single_") ? "רכישה" : g.key,
+      total: g.txs.reduce((s, t) => s + (t.unitPrice != null ? t.unitPrice * t.qty : 0), 0),
+      lines: g.txs.map((t) => {
+        const item = data.items.find((i) => i.id === t.itemId);
+        return { name: item?.name || "-", item, qty: t.qty, unitPrice: t.unitPrice };
+      }),
+    })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div>
@@ -2538,42 +2582,94 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
-              <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">פריט</th>
-              <th className="px-5 py-4 font-medium">קטגוריה</th><th className="px-5 py-4 font-medium">יחידה / גודל</th>
-              <th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">מחיר ליח'</th>
-              <th className="px-5 py-4 font-medium">סה"כ שורה</th><th className="px-5 py-4 font-medium">סוג</th><th className="px-5 py-4 font-medium">הערה</th>
+              <th className="px-5 py-4 font-medium w-8"></th>
+              <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">מס' הזמנה</th>
+              <th className="px-5 py-4 font-medium">פריטים</th><th className="px-5 py-4 font-medium">סה"כ הזמנה</th>
             </tr>
           </thead>
           <tbody>
-            {history.map((t) => {
-              const item = data.items.find((i) => i.id === t.itemId);
-              const lineTotal = t.unitPrice != null ? t.unitPrice * t.qty : null;
+            {orders.map((o) => {
+              const isOpen = expandedOrder === o.key;
               return (
-                <tr key={t.id} className="border-t">
-                  <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
-                  <td className="px-5 py-4 font-medium text-slate-800">{item?.name || "-"}</td>
-                  <td className="px-5 py-4">{item ? <Badge tone={item.category === "device" ? "sky" : "violet"}>{CATEGORIES[item.category]}</Badge> : "-"}</td>
-                  <td className="px-5 py-4 text-slate-500">{item?.unit || "-"}</td>
-                  <td className="px-5 py-4">{t.qty}</td>
-                  <td className="px-5 py-4">{t.unitPrice != null ? `₪${t.unitPrice.toFixed(2)}` : <span className="text-slate-300">-</span>}</td>
-                  <td className="px-5 py-4 font-bold">{lineTotal != null ? `₪${lineTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="text-slate-300">-</span>}</td>
-                  <td className="px-5 py-4"><Badge tone={TX_TYPES[t.type]?.color}>{TX_TYPES[t.type]?.label}</Badge></td>
-                  <td className="px-5 py-4 text-slate-500">{t.note || "-"}</td>
-                </tr>
+                <React.Fragment key={o.key}>
+                  <tr className="border-t cursor-pointer hover:bg-gray-50" onClick={() => setExpandedOrder(isOpen ? null : o.key)}>
+                    <td className="px-5 py-4 text-slate-400"><ChevronDown size={16} className={"transition-transform " + (isOpen ? "rotate-180" : "")} /></td>
+                    <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{fmtDate(o.date)}</td>
+                    <td className="px-5 py-4 font-medium text-slate-800">{o.label}</td>
+                    <td className="px-5 py-4 text-slate-500">{o.lines.length}</td>
+                    <td className="px-5 py-4 font-bold">₪{o.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="border-t bg-gray-50/70">
+                      <td colSpan={5} className="px-5 py-3">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-slate-500 text-right">
+                              <th className="px-3 py-2 font-medium">פריט</th><th className="px-3 py-2 font-medium">קטגוריה</th>
+                              <th className="px-3 py-2 font-medium">כמות</th><th className="px-3 py-2 font-medium">מחיר ליח'</th>
+                              <th className="px-3 py-2 font-medium">סה"כ שורה</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {o.lines.map((l, idx) => (
+                              <tr key={idx} className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-slate-800">{l.name}</td>
+                                <td className="px-3 py-2">{l.item ? <Badge tone={l.item.category === "device" ? "sky" : "violet"}>{CATEGORIES[l.item.category]}</Badge> : "-"}</td>
+                                <td className="px-3 py-2">{l.qty}</td>
+                                <td className="px-3 py-2">₪{Number(l.unitPrice || 0).toFixed(2)}</td>
+                                <td className="px-3 py-2 font-bold">₪{(l.qty * (l.unitPrice || 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
-            {history.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">אין היסטוריה עדיין ללקוח זה</td></tr>}
+            {orders.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">אין היסטוריית הזמנות עדיין ללקוח זה</td></tr>}
           </tbody>
-          {purchases.length > 0 && (
+          {orders.length > 0 && (
             <tfoot>
               <tr className="border-t bg-gray-50">
-                <td colSpan={6} className="px-5 py-4 text-left font-bold text-slate-700">סה"כ שולם על ידי הלקוח</td>
-                <td colSpan={3} className="px-5 py-4 font-bold text-amber-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                <td colSpan={4} className="px-5 py-4 text-left font-bold text-slate-700">סה"כ שולם על ידי הלקוח</td>
+                <td className="px-5 py-4 font-bold text-amber-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
               </tr>
             </tfoot>
           )}
         </table>
       </div>
+
+      {otherHistory.length > 0 && (
+        <>
+          <h3 className="font-bold text-slate-800 mb-2 mt-4">פעולות נוספות (החזרות וכו')</h3>
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-slate-500 text-right">
+                  <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">פריט</th>
+                  <th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">סוג</th><th className="px-5 py-4 font-medium">הערה</th>
+                </tr>
+              </thead>
+              <tbody>
+                {otherHistory.map((t) => {
+                  const item = data.items.find((i) => i.id === t.itemId);
+                  return (
+                    <tr key={t.id} className="border-t">
+                      <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{fmtDate(t.date)}</td>
+                      <td className="px-5 py-4 font-medium text-slate-800">{item?.name || "-"}</td>
+                      <td className="px-5 py-4">{t.qty}</td>
+                      <td className="px-5 py-4"><Badge tone={TX_TYPES[t.type]?.color}>{TX_TYPES[t.type]?.label}</Badge></td>
+                      <td className="px-5 py-4 text-slate-500">{t.note || "-"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {customerQuotes.length > 0 && (
         <>
