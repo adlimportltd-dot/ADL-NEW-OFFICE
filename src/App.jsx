@@ -69,7 +69,7 @@ const mapInvoice = (r) => ({
   id: r.id, invoiceNumber: r.invoice_number, customerId: r.customer_id,
   issueDate: r.issue_date, dueDate: r.due_date, totalAmount: Number(r.total_amount),
   status: r.status, notes: r.notes || "",
-  lines: (r.customer_invoice_lines || []).map((l) => ({ itemId: l.item_id, description: l.description || "", qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
+  lines: (r.customer_invoice_lines || []).map((l) => ({ id: l.id, itemId: l.item_id, description: l.description || "", qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
 });
 const mapInvoicePayment = (r) => ({ id: r.id, invoiceId: r.invoice_id, amount: Number(r.amount), paidDate: r.paid_date, method: r.method || "", note: r.note || "" });
 
@@ -518,6 +518,50 @@ async function deleteInvoicePayment(id) {
   if (error) throw error;
 }
 
+// ---------- תיקון שורת הזמנה קיימת (למשל מוצר שנבחר בטעות) ----------
+// אסור לעדכן ישירות item_id/qty על שורת transactions קיימת: הטריגר שמעדכן את
+// המלאי (apply_transaction_to_stock) יורה רק על insert, כך שעדכון ישיר היה
+// משאיר את המלאי לא מסונכרן בלי אף שגיאה. לכן תיקון תמיד מתבצע ע"י שתי תנועות
+// חדשות (מראה מדויק לזרימה של SaleScreen): "return" שמחזירה למלאי את הפריט/
+// הכמות הישנים במיקום המקורי, ו-"install" חדשה שמורידה מהמלאי את הפריט/הכמות
+// המתוקנים. שורת ה-transactions המקורית נשארת כפי שהיא (audit log - append
+// only) - רק שורת customer_invoice_lines (שכבת התצוגה/החיוב) מתעדכנת בפועל.
+async function correctInvoiceLine({ invoiceId, lineId, locationId, customerId, orderTag, oldItemId, oldQty, oldItemName, newItemId, newQty, newUnitPrice, newItemName }) {
+  const itemOrQtyChanged = oldItemId !== newItemId || Number(oldQty) !== Number(newQty);
+  if (itemOrQtyChanged && !locationId) throw new Error("לא ניתן לזהות את מיקום המקור של ההזמנה - לא ניתן לתקן את המלאי אוטומטית");
+
+  // מעדכנים קודם את שורת התצוגה/החיוב (customer_invoice_lines) ורק אם זה הצליח
+  // באמת (נבדק ע"י select() אחרי ה-update - RLS חוסם update בלי לזרוק שגיאה,
+  // רק מחזיר 0 שורות) פונים לגעת במלאי. כך אם חסר הרשאת RLS (ראה
+  // migration_v5_invoice_line_edit.sql), נכשלים לפני שהמלאי בכלל משתנה,
+  // ולא נשארים במצב ביניים שבו המלאי תוקן אבל התצוגה עדיין מראה את הישן.
+  const { data: updatedLine, error: lineErr } = await supabase.from("customer_invoice_lines")
+    .update({ item_id: newItemId, description: null, qty: Number(newQty), unit_price: Number(newUnitPrice) })
+    .eq("id", lineId)
+    .select();
+  if (lineErr) throw lineErr;
+  if (!updatedLine || updatedLine.length === 0) {
+    throw new Error("עדכון שורת ההזמנה נחסם (חסרה הרשאת עריכה ל-customer_invoice_lines) - יש להריץ קודם את migration_v5_invoice_line_edit.sql ב-Supabase SQL Editor");
+  }
+
+  if (itemOrQtyChanged) {
+    await insertTransaction({
+      type: "return", itemId: oldItemId, qty: Number(oldQty), toLocationId: locationId, customerId,
+      condition: "ok", note: `תיקון ${orderTag || ""} - הוחזר למלאי (הוחלף): ${oldItemName || ""}`.trim(),
+    });
+    await insertTransaction({
+      type: "install", itemId: newItemId, qty: Number(newQty), fromLocationId: locationId, customerId,
+      unitPrice: Number(newUnitPrice), note: `תיקון ${orderTag || ""} - עודכן ל: ${newItemName || ""}`.trim(),
+    });
+  }
+
+  const { data: allLines, error: fetchErr } = await supabase.from("customer_invoice_lines").select("qty, unit_price").eq("invoice_id", invoiceId);
+  if (fetchErr) throw fetchErr;
+  const newTotal = (allLines || []).reduce((s, l) => s + Number(l.qty) * Number(l.unit_price), 0);
+  const { error: invErr } = await supabase.from("customer_invoices").update({ total_amount: newTotal }).eq("id", invoiceId);
+  if (invErr) throw invErr;
+}
+
 // ---------- סריקת חשבונית חכמה (AI OCR) ----------
 // ה-API של קלוד מקבל ל-image רק image/jpeg, image/png, image/gif, image/webp -
 // PDF חייב להיות מומר לתמונה אמיתית (rendering ל-canvas) לפני שהוא נשלח,
@@ -690,7 +734,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, correctInvoiceLine, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -2496,10 +2540,11 @@ function CustomersScreen({ data, refresh, isAdmin, onOpenFile }) {
   );
 }
 
-function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, isAdmin }) {
+function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, isAdmin, refresh }) {
   const customer = data.customers.find((c) => c.id === customerId);
   const history = data.transactions.filter((t) => t.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
   const [expandedOrder, setExpandedOrder] = useState(null);
+  const [editingLine, setEditingLine] = useState(null); // { order, line, lineIndex }
   if (!customer) return null;
 
   const purchases = history.filter((t) => t.type === "install");
@@ -2536,15 +2581,23 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
   const orders = [
     ...customerInvoices.map((inv) => {
       const tag = extractOrderTag(inv.notes);
+      // מיקום המקור של ההזמנה לא נשמר בחשבונית עצמה - הוא נלקח מתוך שורות
+      // ה-transactions המקוריות שנוצרו באותה מכירה (מזוהות לפי אותה תגית הזמנה),
+      // שכולן תמיד משתפות אותו sourceLocationId יחיד (ראה SaleScreen.submit()).
+      const matchingTx = tag ? purchases.find((t) => extractOrderTag(t.note) === tag) : null;
       return {
         key: `inv_${inv.id}`,
         date: inv.issueDate,
         label: tag || inv.invoiceNumber,
         note: extractExtraNote(inv.notes, tag),
         total: inv.totalAmount,
+        editable: isAdmin,
+        invoiceId: inv.id,
+        locationId: matchingTx?.fromLocationId || null,
+        tag,
         lines: inv.lines.map((l) => {
           const item = l.itemId ? data.items.find((i) => i.id === l.itemId) : null;
-          return { name: item?.name || l.description || "פריט", item, qty: l.qty, unitPrice: l.unitPrice };
+          return { lineId: l.id, itemId: l.itemId, name: item?.name || l.description || "פריט", item, qty: l.qty, unitPrice: l.unitPrice };
         }),
       };
     }),
@@ -2623,6 +2676,7 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
                               <th className="px-3 py-2 font-medium">פריט</th><th className="px-3 py-2 font-medium">קטגוריה</th>
                               <th className="px-3 py-2 font-medium">כמות</th><th className="px-3 py-2 font-medium">מחיר ליח'</th>
                               <th className="px-3 py-2 font-medium">סה"כ שורה</th>
+                              {o.editable && <th className="px-3 py-2 font-medium w-10"></th>}
                             </tr>
                           </thead>
                           <tbody>
@@ -2633,6 +2687,11 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
                                 <td className="px-3 py-2">{l.qty}</td>
                                 <td className="px-3 py-2">₪{Number(l.unitPrice || 0).toFixed(2)}</td>
                                 <td className="px-3 py-2 font-bold">₪{(l.qty * (l.unitPrice || 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                {o.editable && (
+                                  <td className="px-3 py-2">
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingLine({ order: o, line: l, lineIndex: idx }); }} className="text-gray-400 hover:text-amber-600" title="תיקון שורה"><Pencil size={15} /></button>
+                                  </td>
+                                )}
                               </tr>
                             ))}
                           </tbody>
@@ -2708,7 +2767,90 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
           </div>
         </>
       )}
+
+      {editingLine && (
+        <EditOrderLineModal
+          data={data}
+          customerId={customerId}
+          order={editingLine.order}
+          line={editingLine.line}
+          onClose={() => setEditingLine(null)}
+          refresh={refresh}
+        />
+      )}
     </div>
+  );
+}
+
+function EditOrderLineModal({ data, customerId, order, line, onClose, refresh }) {
+  const [itemId, setItemId] = useState(line.itemId || "");
+  const [qty, setQty] = useState(String(line.qty));
+  const [unitPrice, setUnitPrice] = useState(String(line.unitPrice));
+  const [locationId, setLocationId] = useState(order.locationId || "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const itemChanged = itemId !== line.itemId || Number(qty) !== Number(line.qty);
+  const stockAt = (id) => (locationId ? data.stock[`${id}|${locationId}`] || 0 : 0);
+  // כמות זמינה בפועל למוצר החדש: המלאי הנוכחי, ועוד הכמות הישנה שתוחזר למלאי
+  // אוטומטית אם זה אותו פריט בדיוק (כי אז ההחזרה וההורדה מתבטלות חלקית).
+  const effectiveAvailable = stockAt(itemId) + (itemId === line.itemId ? Number(line.qty) : 0);
+
+  const save = async () => {
+    setError("");
+    if (!itemId) { setError("יש לבחור מוצר"); return; }
+    if (!qty || Number(qty) <= 0) { setError("יש להזין כמות תקינה"); return; }
+    if (!unitPrice || Number(unitPrice) < 0) { setError("יש להזין מחיר תקין"); return; }
+    if (itemChanged) {
+      if (!locationId) { setError("יש לבחור מיקום מקור לתיקון המלאי"); return; }
+      if (Number(qty) > effectiveAvailable) {
+        const it = data.items.find((i) => i.id === itemId);
+        setError(`אין מספיק מלאי ל"${it?.name}" במיקום שנבחר (זמין: ${effectiveAvailable})`);
+        return;
+      }
+    }
+    setBusy(true);
+    try {
+      const oldItem = data.items.find((i) => i.id === line.itemId);
+      const newItem = data.items.find((i) => i.id === itemId);
+      await api.correctInvoiceLine({
+        invoiceId: order.invoiceId, lineId: line.lineId, locationId, customerId, orderTag: order.tag,
+        oldItemId: line.itemId, oldQty: line.qty, oldItemName: oldItem?.name,
+        newItemId: itemId, newQty: Number(qty), newUnitPrice: Number(unitPrice), newItemName: newItem?.name,
+      });
+      await refresh();
+      onClose();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={`תיקון שורה - ${order.label}`} onClose={onClose}>
+      <Field label="מוצר">
+        <select className={inputCls} value={itemId} onChange={(e) => setItemId(e.target.value)}>
+          <option value="">בחר מוצר...</option>
+          {data.items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+        </select>
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="כמות"><input type="number" min="0" step="1" className={inputCls} value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+        <Field label="מחיר ליח' (₪)"><input type="number" min="0" step="0.01" className={inputCls} value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} /></Field>
+      </div>
+      {itemChanged && (
+        <Field label="מיקום מקור לתיקון המלאי">
+          <select className={inputCls} value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+            <option value="">בחר מיקום...</option>
+            {data.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </Field>
+      )}
+      {itemChanged && (
+        <div className="text-xs text-slate-500 bg-gray-50 rounded-xl px-3 py-2 mb-3">
+          השינוי יעדכן את המלאי אוטומטית: "{data.items.find((i) => i.id === line.itemId)?.name}" יוחזר למלאי, ו"{data.items.find((i) => i.id === itemId)?.name}" יורד מהמלאי.
+        </div>
+      )}
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={save} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת תיקון</button>
+    </Modal>
   );
 }
 
@@ -6435,6 +6577,7 @@ export default function App() {
                 onCreateQuote={openQuoteBuilder}
                 onStartSale={(id) => { setSaleInitialCustomerId(id); setCustomerFileId(null); setTab("sale"); }}
                 isAdmin={isAdmin}
+                refresh={refresh}
               />
             ) : locationFileId ? (
               <LocationFile
