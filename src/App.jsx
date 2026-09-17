@@ -480,7 +480,12 @@ async function deleteExpensePayment(id) {
 // ---------- Customer invoices (חובות לקוחות / AR) ----------
 async function createCustomerInvoice(customerId, lines, extra = {}) {
   const invoiceNumber = extra.invoiceNumber || `ADL-INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(Math.random() * 900 + 100)}`;
-  const totalAmount = lines.reduce((s, l) => s + Number(l.qty) * Number(l.unitPrice), 0);
+  // totalAmountOverride מאפשר לעגל/לשנות ידנית את הסכום הסופי (למשל 495.60 -> 500)
+  // בלי לגעת במחירי השורות עצמן - ה"מלאי" (transactions) לא מושפע כלל מזה, כי
+  // הוא נגזר מהתנועות שכבר נרשמו קודם עם המחיר המקורי לכל שורה; ה-unit_price
+  // בטבלת customer_invoice_lines מוגבל ב-check (unit_price >= 0), כך שהפרש שלילי
+  // (הנחה) לא יכול להיות שורה נפרדת שם - ההפרש מתועד בפועל בשדה notes של החשבונית.
+  const totalAmount = extra.totalAmountOverride != null ? Number(extra.totalAmountOverride) : lines.reduce((s, l) => s + Number(l.qty) * Number(l.unitPrice), 0);
   const { data: invoice, error } = await supabase
     .from("customer_invoices")
     .insert({
@@ -2132,6 +2137,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   const [vatRate, setVatRate] = useState(String(data.companySettings.vatRate ?? 18));
   const [paidNow, setPaidNow] = useState(true); // false = מכירה בחשבון פתוח (חוב), נכנס לדוח חובות וגבייה
   const [paymentTermsDays, setPaymentTermsDays] = useState("14");
+  const [finalPriceOverride, setFinalPriceOverride] = useState(""); // ריק = בלי עיגול/התאמה, משתמשים בסכום המחושב
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(null); // { customerId, total }
@@ -2192,6 +2198,14 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   // המחיר בפועל שנגבה ליחידה, כולל מע"מ - זה מה שנשמר בכל שורת תנועה
   const finalUnitPrice = (rawPrice) => priceMode === "excl" ? Number(rawPrice) * (1 + vatPct / 100) : Number(rawPrice);
 
+  // עיגול / התאמת מחיר סופי: מאפשר לשנות ידנית את הסכום הסופי (כולל מע"מ) לפני
+  // השמירה, בלי לגעת במחירי השורות. ה"מלאי" לא מושפע כלל - זו התאמה על סכום
+  // התשלום/החשבונית בלבד. ההפרש מהסכום המחושב נשמר כהנחה/תוספת בהערת ההזמנה.
+  const hasOverride = finalPriceOverride !== "" && !isNaN(Number(finalPriceOverride));
+  const effectiveTotal = hasOverride ? Math.round(Number(finalPriceOverride) * 100) / 100 : Math.round(total * 100) / 100;
+  const priceAdjustment = Math.round((effectiveTotal - Math.round(total * 100) / 100) * 100) / 100;
+  const roundTo = (step) => setFinalPriceOverride(String(Math.round(total / step) * step));
+
   const createNewCustomer = async () => {
     if (!newCustomerForm.name.trim()) { setError("שם הלקוח הוא שדה חובה"); return; }
     setBusy(true);
@@ -2216,6 +2230,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
       setError(`אין מספיק מלאי ל"${it?.name}" במיקום שנבחר (זמין: ${stockOf(overStock.itemId)})`);
       return;
     }
+    if (hasOverride && effectiveTotal < 0) { setError("הסכום הסופי לא יכול להיות שלילי"); return; }
     setBusy(true);
     try {
       const batchTag = `הזמנה #${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
@@ -2234,20 +2249,28 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
       // כל מכירה יוצרת חשבונית לקוח (customer_invoices), גם אם שולמה במלואה כעת -
       // כך שגם מכירות מיידיות מופיעות בהיסטוריית התיק וב"חובות וגבייה" (עם יתרה 0),
       // ולא רק מכירות בחשבון פתוח. תנועות המלאי (למעלה) הן מה שבאמת מוריד מהמלאי -
-      // החשבונית היא רק שכבת מעקב תשלום מעליהן, לא חלק מלוגיקת המלאי.
+      // החשבונית היא רק שכבת מעקב תשלום מעליהן, לא חלק מלוגיקת המלאי. אם בוצע עיגול/
+      // התאמת מחיר סופי, הסכום הסופי בפועל (effectiveTotal) נשמר כ-totalAmountOverride
+      // בחשבונית, וההפרש מתועד בטקסט ההערה - כך שהעיגול לא נוגע במלאי בכלל.
       const today = new Date().toISOString().slice(0, 10);
       const dueDate = paidNow ? today : new Date(Date.now() + Number(paymentTermsDays) * 86400000).toISOString().slice(0, 10);
+      const adjNote = priceAdjustment !== 0
+        ? `עיגול מחיר: ${priceAdjustment > 0 ? "תוספת" : "הנחה"} ₪${Math.abs(priceAdjustment).toFixed(2)} (מ-₪${(Math.round(total * 100) / 100).toFixed(2)} ל-₪${effectiveTotal.toFixed(2)})`
+        : "";
+      const fullNote = [note, adjNote].filter(Boolean).join(" - ");
       const invoiceId = await api.createCustomerInvoice(customerId, invoiceLines, {
         issueDate: today, dueDate,
-        notes: note ? `${batchTag} - ${note}` : batchTag,
+        notes: fullNote ? `${batchTag} - ${fullNote}` : batchTag,
+        totalAmountOverride: effectiveTotal,
       });
       if (paidNow) {
-        await api.addInvoicePayment(invoiceId, Math.round(total * 100) / 100, today, "immediate", "שולם במלואו בעת המכירה");
+        await api.addInvoicePayment(invoiceId, effectiveTotal, today, "immediate", "שולם במלואו בעת המכירה");
       }
       await refresh();
-      setSuccess({ customerId, total });
+      setSuccess({ customerId, total: effectiveTotal });
       setLines([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
       setNote("");
+      setFinalPriceOverride("");
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
@@ -2363,6 +2386,25 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
           <span className="font-bold text-slate-800">סה"כ הזמנה (כולל מע"מ)</span>
           <span className="font-bold text-slate-800 text-lg">₪{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <span className="text-sm font-bold text-slate-700 block mb-2">עיגול / התאמת מחיר סופי (לא חובה)</span>
+        <p className="text-xs text-slate-500 mb-2">לדוגמה: הסכום יוצא ₪{(Math.round(total * 100) / 100).toFixed(2)} ורוצים לעגל ל-₪500 - ההפרש יישמר אוטומטית כהנחה/תוספת קטנה.</p>
+        <div className="flex gap-2 mb-2">
+          <button type="button" onClick={() => roundTo(5)} className={btnGhost + " !py-1.5 !px-3 text-xs"}>עיגול ל-5 הקרוב</button>
+          <button type="button" onClick={() => roundTo(10)} className={btnGhost + " !py-1.5 !px-3 text-xs"}>עיגול ל-10 הקרוב</button>
+          <button type="button" onClick={() => roundTo(50)} className={btnGhost + " !py-1.5 !px-3 text-xs"}>עיגול ל-50 הקרוב</button>
+          {hasOverride && <button type="button" onClick={() => setFinalPriceOverride("")} className="text-xs text-rose-600 hover:underline px-1">ביטול עיגול</button>}
+        </div>
+        <Field label='סכום סופי (₪, כולל מע"מ)'>
+          <input type="number" min="0" step="0.01" className={inputCls} placeholder={`ברירת מחדל: ₪${(Math.round(total * 100) / 100).toFixed(2)}`} value={finalPriceOverride} onChange={(e) => setFinalPriceOverride(e.target.value)} />
+        </Field>
+        {hasOverride && priceAdjustment !== 0 && (
+          <div className={"text-sm font-medium rounded-xl px-3 py-2 mt-1 " + (priceAdjustment < 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+            {priceAdjustment < 0 ? `הנחה של ₪${Math.abs(priceAdjustment).toFixed(2)}` : `תוספת של ₪${priceAdjustment.toFixed(2)}`} · סכום סופי לתשלום: ₪{effectiveTotal.toFixed(2)}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
