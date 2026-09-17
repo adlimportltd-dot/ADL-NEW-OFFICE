@@ -2516,6 +2516,11 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
     const m = (text || "").match(/הזמנה #\S+/);
     return m ? m[0] : null;
   };
+  const extractExtraNote = (text, tag) => {
+    if (!text) return "";
+    let rest = tag ? text.replace(tag, "") : text;
+    return rest.replace(/^\s*-\s*/, "").trim();
+  };
   const customerInvoices = (data.customerInvoices || []).filter((inv) => inv.customerId === customerId);
   const invoiceOrderTags = new Set(customerInvoices.map((inv) => extractOrderTag(inv.notes)).filter(Boolean));
   const uncoveredInstall = purchases.filter((t) => {
@@ -2529,26 +2534,34 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
     legacyGroups[tag].txs.push(t);
   });
   const orders = [
-    ...customerInvoices.map((inv) => ({
-      key: `inv_${inv.id}`,
-      date: inv.issueDate,
-      label: extractOrderTag(inv.notes) || inv.invoiceNumber,
-      total: inv.totalAmount,
-      lines: inv.lines.map((l) => {
-        const item = l.itemId ? data.items.find((i) => i.id === l.itemId) : null;
-        return { name: item?.name || l.description || "פריט", item, qty: l.qty, unitPrice: l.unitPrice };
-      }),
-    })),
-    ...Object.values(legacyGroups).map((g) => ({
-      key: g.key,
-      date: g.date,
-      label: g.key.startsWith("__single_") ? "רכישה" : g.key,
-      total: g.txs.reduce((s, t) => s + (t.unitPrice != null ? t.unitPrice * t.qty : 0), 0),
-      lines: g.txs.map((t) => {
-        const item = data.items.find((i) => i.id === t.itemId);
-        return { name: item?.name || "-", item, qty: t.qty, unitPrice: t.unitPrice };
-      }),
-    })),
+    ...customerInvoices.map((inv) => {
+      const tag = extractOrderTag(inv.notes);
+      return {
+        key: `inv_${inv.id}`,
+        date: inv.issueDate,
+        label: tag || inv.invoiceNumber,
+        note: extractExtraNote(inv.notes, tag),
+        total: inv.totalAmount,
+        lines: inv.lines.map((l) => {
+          const item = l.itemId ? data.items.find((i) => i.id === l.itemId) : null;
+          return { name: item?.name || l.description || "פריט", item, qty: l.qty, unitPrice: l.unitPrice };
+        }),
+      };
+    }),
+    ...Object.values(legacyGroups).map((g) => {
+      const tag = g.key.startsWith("__single_") ? null : g.key;
+      return {
+        key: g.key,
+        date: g.date,
+        label: tag || "רכישה",
+        note: extractExtraNote(g.txs[0].note, tag),
+        total: g.txs.reduce((s, t) => s + (t.unitPrice != null ? t.unitPrice * t.qty : 0), 0),
+        lines: g.txs.map((t) => {
+          const item = data.items.find((i) => i.id === t.itemId);
+          return { name: item?.name || "-", item, qty: t.qty, unitPrice: t.unitPrice };
+        }),
+      };
+    }),
   ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
@@ -2585,6 +2598,7 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
               <th className="px-5 py-4 font-medium w-8"></th>
               <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">מס' הזמנה</th>
               <th className="px-5 py-4 font-medium">פריטים</th><th className="px-5 py-4 font-medium">סה"כ הזמנה</th>
+              <th className="px-5 py-4 font-medium">הערה</th>
             </tr>
           </thead>
           <tbody>
@@ -2598,10 +2612,11 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
                     <td className="px-5 py-4 font-medium text-slate-800">{o.label}</td>
                     <td className="px-5 py-4 text-slate-500">{o.lines.length}</td>
                     <td className="px-5 py-4 font-bold">₪{o.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td className="px-5 py-4 text-slate-500">{o.note || "-"}</td>
                   </tr>
                   {isOpen && (
                     <tr className="border-t bg-gray-50/70">
-                      <td colSpan={5} className="px-5 py-3">
+                      <td colSpan={6} className="px-5 py-3">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="text-slate-500 text-right">
@@ -2628,13 +2643,14 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
                 </React.Fragment>
               );
             })}
-            {orders.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">אין היסטוריית הזמנות עדיין ללקוח זה</td></tr>}
+            {orders.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">אין היסטוריית הזמנות עדיין ללקוח זה</td></tr>}
           </tbody>
           {orders.length > 0 && (
             <tfoot>
               <tr className="border-t bg-gray-50">
                 <td colSpan={4} className="px-5 py-4 text-left font-bold text-slate-700">סה"כ שולם על ידי הלקוח</td>
                 <td className="px-5 py-4 font-bold text-amber-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                <td></td>
               </tr>
             </tfoot>
           )}
