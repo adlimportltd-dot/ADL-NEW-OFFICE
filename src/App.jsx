@@ -2331,14 +2331,29 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <span className="text-sm font-bold text-slate-700 block mb-2">מע"מ</span>
+        <div className="flex gap-2 mb-3">
+          <button type="button" onClick={() => setPriceMode("excl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "excl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למטה לפני מע"מ (ברירת מחדל)</button>
+          <button type="button" onClick={() => setPriceMode("incl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "incl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למטה כוללים מע"מ</button>
+        </div>
+        <Field label={'אחוז מע"מ נוכחי'}>
+          <input type="number" min="0" step="0.1" className={inputCls + " w-28"} value={vatRate} onChange={(e) => setVatRate(e.target.value)} />
+        </Field>
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-bold text-slate-700">שורות מוצרים</span>
+          <span className="text-sm font-bold text-slate-700">שורות מוצרים <span className="font-normal text-slate-400">({priceMode === "excl" ? 'מחירים לפני מע"מ' : 'מחירים כולל מע"מ'})</span></span>
           <button onClick={addLine} className={btnGhost + " !py-1 !px-2.5 text-xs"}><Plus size={14} className="inline" /> שורה</button>
         </div>
         <div className="space-y-2">
           {lines.map((l) => {
             const available = l.itemId ? stockOf(l.itemId) : null;
             const overLimit = l.itemId && Number(l.qty) > available;
+            const vatPctNow = Number(vatRate) || 0;
+            const convertedLastPrice = l.lastPriceInclVat != null
+              ? (priceMode === "incl" ? l.lastPriceInclVat : l.lastPriceInclVat / (1 + vatPctNow / 100))
+              : null;
             return (
               <div key={l.id}>
                 <div className="grid grid-cols-6 gap-1.5 items-center">
@@ -2347,30 +2362,19 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
                     {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
                   </select>
                   <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
-                  <input type="number" min="0" step="0.01" placeholder="מחיר (₪)" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
+                  <input type="number" min="0" step="0.01" placeholder={priceMode === "excl" ? 'מחיר לפני מע"מ' : 'מחיר כולל מע"מ'} className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
                   {lines.length > 1 && <button onClick={() => removeLine(l.id)} className="text-gray-400 hover:text-rose-600 justify-self-center"><Trash2 size={15} /></button>}
                 </div>
                 {l.itemId && <div className={`text-xs mt-0.5 ${overLimit ? "text-rose-500" : "text-slate-500"}`}>זמין במקור שנבחר: {available}{overLimit ? " - לא מספיק!" : ""}</div>}
-                {l.itemId && l.lastPriceInclVat != null && (
+                {l.itemId && convertedLastPrice != null && (
                   <div className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
-                    <Banknote size={11} /> המחיר מולא אוטומטית לפי המחיר האחרון שנמכר ללקוח זה (₪{l.lastPriceInclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })} כולל מע"מ) - ניתן לשנות ידנית
+                    <Banknote size={11} /> המחיר מולא אוטומטית לפי המחיר האחרון שנמכר ללקוח זה (₪{convertedLastPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })} {priceMode === "excl" ? 'לפני מע"מ' : 'כולל מע"מ'}) - ניתן לשנות ידנית
                   </div>
                 )}
               </div>
             );
           })}
         </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
-        <span className="text-sm font-bold text-slate-700 block mb-2">מע"מ</span>
-        <div className="flex gap-2 mb-3">
-          <button type="button" onClick={() => setPriceMode("excl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "excl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למעלה לפני מע"מ</button>
-          <button type="button" onClick={() => setPriceMode("incl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "incl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למעלה כוללים מע"מ</button>
-        </div>
-        <Field label={'אחוז מע"מ נוכחי'}>
-          <input type="number" min="0" step="0.1" className={inputCls + " w-28"} value={vatRate} onChange={(e) => setVatRate(e.target.value)} />
-        </Field>
       </div>
 
       <div className="bg-gray-50 rounded-2xl p-4 mb-4 space-y-1.5">
