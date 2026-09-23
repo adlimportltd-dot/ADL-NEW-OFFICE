@@ -1261,7 +1261,7 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
 }
 
 // ==================== Dashboard ====================
-function Dashboard({ data, onExport, isAdmin }) {
+function Dashboard({ data, onExport, isAdmin, onQuickPO }) {
   const { items, locations, stock } = data;
   const warehouse = locations.find((l) => l.type === "warehouse");
   const vehicles = locations.filter((l) => l.type === "vehicle");
@@ -1360,8 +1360,13 @@ function Dashboard({ data, onExport, isAdmin }) {
           </div>
           <div className="flex flex-wrap gap-2">
             {lowStock.map((r) => (
-              <span key={r.item.id} className="bg-white border border-rose-200 rounded-lg px-3 py-1.5 text-sm text-rose-700">
+              <span key={r.item.id} className="bg-white border border-rose-200 rounded-lg px-3 py-1.5 text-sm text-rose-700 flex items-center gap-2">
                 {r.item.name}: <b>{r.total}</b> / סף {r.item.minThreshold}
+                {isAdmin && onQuickPO && (
+                  <button onClick={() => onQuickPO(r.item.id)} className="text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-2 py-1 flex items-center gap-1" title="הפקת הזמנת רכש לפריט זה">
+                    <ShoppingCart size={12} /> PO
+                  </button>
+                )}
               </span>
             ))}
           </div>
@@ -5671,7 +5676,7 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
 }
 
 // ==================== הזמנות רכש (Purchase Orders) ====================
-function POsScreen({ data, refresh, onPrint }) {
+function POsScreen({ data, refresh, onPrint, prefillItemId, onPrefillConsumed }) {
   const [open, setOpen] = useState(false);
   const [editingPOId, setEditingPOId] = useState(null);
   const [supplierId, setSupplierId] = useState("");
@@ -5726,6 +5731,19 @@ function POsScreen({ data, refresh, onPrint }) {
   const removeLine = (id) => setLines(lines.filter((l) => l.id !== id));
   const onPickItem = (id, itemId) => { const it = data.items.find((i) => i.id === itemId); setLine(id, { itemId, unitPrice: it?.unitCost ? String(it.unitCost) : "" }); };
   const itemLabel = (it) => it.supplierSku ? `${it.name} (${it.supplierSku})` : it.name;
+
+  // מעבר מהיר מהתראת "מתחת לסף" בדשבורד: פותח PO חדש עם הפריט כבר בחור בשורה
+  // הראשונה, וכמות מוצעת שתחזיר את המלאי לסף המינימום. הספק עדיין נבחר ידנית,
+  // כי אין קישור ספק<->פריט בסכימה. onPrefillConsumed מאפס את הבקשה אצל ההורה
+  // כדי שהמסך לא ייפתח שוב אוטומטית בפעם הבאה שנכנסים לטאב הזה.
+  useEffect(() => {
+    if (!prefillItemId) return;
+    const item = data.items.find((i) => i.id === prefillItemId);
+    openNew();
+    setLines([{ id: Math.random().toString(36).slice(2), itemId: prefillItemId, qty: String(item?.minThreshold > 0 ? item.minThreshold : 10), unitPrice: item?.unitCost ? String(item.unitCost) : "" }]);
+    onPrefillConsumed && onPrefillConsumed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillItemId]);
 
   const openNewItemFor = (lineId) => {
     setNewItemForLineId(lineId);
@@ -6385,6 +6403,7 @@ export default function App() {
   const [quoteBuilderFor, setQuoteBuilderFor] = useState(null); // { customerId, leadId }
   const [saleInitialCustomerId, setSaleInitialCustomerId] = useState(null);
   const [printQuoteId, setPrintQuoteId] = useState(null);
+  const [poPrefillItemId, setPoPrefillItemId] = useState(null); // מעבר מהיר מהתראת "מתחת לסף" בדשבורד ליצירת PO
   const [mfaPendingFactorId, setMfaPendingFactorId] = useState(null); // אם קיים, יש session אמיתי אבל הוא עדיין ב-aal1 וצריך קוד 2FA
 
   const loadEverything = useCallback(async (userId) => {
@@ -6635,7 +6654,7 @@ export default function App() {
               />
             ) : (
               <>
-                {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} />}
+                {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} onQuickPO={(itemId) => { setPoPrefillItemId(itemId); setTab("po"); }} />}
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setLocationFileId} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
@@ -6648,7 +6667,7 @@ export default function App() {
                 {tab === "sale" && <SaleScreen data={data} refresh={refresh} initialCustomerId={saleInitialCustomerId} onOpenCustomer={(id) => { setCustomerFileId(id); setTab("customers"); }} />}
                 {tab === "landedCost" && isAdmin && <LandedCostScreen data={data} refresh={refresh} />}
                 {tab === "reports" && <ReportsScreen data={data} />}
-                {tab === "po" && isAdmin && <POsScreen data={data} refresh={refresh} onPrint={setPrintPOId} />}
+                {tab === "po" && isAdmin && <POsScreen data={data} refresh={refresh} onPrint={setPrintPOId} prefillItemId={poPrefillItemId} onPrefillConsumed={() => setPoPrefillItemId(null)} />}
                 {tab === "expenses" && <ExpensesScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "receivables" && isAdmin && <ReceivablesScreen data={data} refresh={refresh} />}
                 {tab === "log" && <AuditLog data={data} />}
