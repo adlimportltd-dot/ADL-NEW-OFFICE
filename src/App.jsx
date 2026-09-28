@@ -5636,7 +5636,7 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
           <thead>
             <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">קטגוריה</th>
-              <th className="px-5 py-4 font-medium">ספק</th><th className="px-5 py-4 font-medium">חשבונית</th>
+              <th className="px-5 py-4 font-medium">ספק</th><th className="px-5 py-4 font-medium">תיאור</th><th className="px-5 py-4 font-medium">חשבונית</th>
               <th className="px-5 py-4 font-medium">לפני מע"מ</th><th className="px-5 py-4 font-medium">מע"מ</th>
               <th className="px-5 py-4 font-medium">סה"כ</th><th className="px-5 py-4 font-medium">תשלום</th><th className="px-5 py-4"></th>
             </tr>
@@ -5649,6 +5649,7 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
                   <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{new Date(e.expenseDate).toLocaleDateString("he-IL")}</td>
                   <td className="px-5 py-4">{EXPENSE_CATEGORIES[e.category]}</td>
                   <td className="px-5 py-4 text-slate-500">{supplier?.name || "-"}</td>
+                  <td className="px-5 py-4 text-slate-600 max-w-[260px] truncate" title={e.description || ""}>{e.description || "-"}</td>
                   <td className="px-5 py-4 text-slate-500">{e.invoiceNumber || "-"}</td>
                   <td className="px-5 py-4">₪{e.amountExclVat.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                   <td className="px-5 py-4 text-slate-500">₪{e.vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
@@ -5664,7 +5665,7 @@ function ExpensesScreen({ data, refresh, isAdmin }) {
                 </tr>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={9} className="px-5 py-8 text-center text-slate-500">אין עדיין הוצאות רשומות</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={10} className="px-5 py-8 text-center text-slate-500">אין עדיין הוצאות רשומות</td></tr>}
           </tbody>
         </table>
       </div>
