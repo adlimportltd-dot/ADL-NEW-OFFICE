@@ -5,7 +5,7 @@ import {
   CircleCheck, CircleX, Trash2, ChevronLeft, ChevronDown, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
-  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History,
+  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History, Undo2, Repeat,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
@@ -71,7 +71,18 @@ const mapInvoice = (r) => ({
   status: r.status, notes: r.notes || "",
   lines: (r.customer_invoice_lines || []).map((l) => ({ id: l.id, itemId: l.item_id, description: l.description || "", qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
 });
-const mapInvoicePayment = (r) => ({ id: r.id, invoiceId: r.invoice_id, amount: Number(r.amount), paidDate: r.paid_date, method: r.method || "", note: r.note || "" });
+const mapInvoicePayment = (r) => ({ id: r.id, invoiceId: r.invoice_id, amount: Number(r.amount), paidDate: r.paid_date, method: r.method || "", note: r.note || "", kind: r.kind || "payment" });
+const mapCustomerReturn = (r) => ({
+  id: r.id, returnNumber: r.return_number, kind: r.kind, customerId: r.customer_id, invoiceId: r.invoice_id,
+  returnDate: r.return_date, reason: r.reason || "", notes: r.notes || "",
+  returnedItems: Array.isArray(r.returned_items) ? r.returned_items : [], newItems: Array.isArray(r.new_items) ? r.new_items : [],
+  returnLocationId: r.return_location_id, newLocationId: r.new_location_id,
+  returnedTotal: Number(r.returned_total || 0), newItemsTotal: Number(r.new_items_total || 0),
+  invoiceTotalBefore: Number(r.invoice_total_before || 0), invoiceTotalAfter: Number(r.invoice_total_after || 0),
+  settlement: r.settlement || "none", settlementAmount: Number(r.settlement_amount || 0), settlementMethod: r.settlement_method || "",
+  date: r.created_at,
+});
+const mapCustomerCredit = (r) => ({ id: r.id, customerId: r.customer_id, amount: Number(r.amount), returnId: r.return_id, invoiceId: r.invoice_id, note: r.note || "", date: r.created_at });
 
 // ---------- Auth ----------
 async function signIn(email, password) {
@@ -171,6 +182,13 @@ async function fetchAllData() {
     if (r.error) throw r.error;
   }
 
+  // החזרות/החלפות וזיכויי לקוחות - נטענים בנפרד ולא חוסמים את טעינת המערכת
+  // אם משהו נכשל (למשל לפני שהורץ ה-SQL של מודול ההחזרות ב-Supabase).
+  const [returnsRes, creditsRes] = await Promise.all([
+    supabase.from("customer_returns").select("*").order("created_at", { ascending: false }),
+    supabase.from("customer_credits").select("*").order("created_at", { ascending: false }),
+  ]);
+
   const stock = {};
   stockRes.data.forEach((row) => {
     stock[`${row.item_id}|${row.location_id}`] = Number(row.quantity);
@@ -200,6 +218,8 @@ async function fetchAllData() {
     expensePayments: (expensePaymentsRes.data || []).map(mapExpensePayment),
     customerInvoices: (invoicesRes.data || []).map(mapInvoice),
     invoicePayments: (invoicePaymentsRes.data || []).map(mapInvoicePayment),
+    customerReturns: returnsRes.error ? [] : (returnsRes.data || []).map(mapCustomerReturn),
+    customerCredits: creditsRes.error ? [] : (creditsRes.data || []).map(mapCustomerCredit),
     logoUrl: settings.logo_url || null,
     companySettings,
   };
@@ -567,6 +587,16 @@ async function correctInvoiceLine({ invoiceId, lineId, locationId, customerId, o
   if (invErr) throw invErr;
 }
 
+// ---------- החזרה / החלפה מלקוח ----------
+// כל הלוגיקה (מלאי, עדכון סכום ההזמנה, החזר כספי/זיכוי/תשלום הפרש, תיעוד)
+// מתבצעת בטרנזקציה אחת בצד השרת בפונקציה process_customer_return - כך אין
+// מצב ביניים שבו המלאי עודכן אבל הסכום לא (או להפך).
+async function processCustomerReturn(payload) {
+  const { data, error } = await supabase.rpc("process_customer_return", { p: payload });
+  if (error) throw error;
+  return data;
+}
+
 // ---------- סריקת חשבונית חכמה (AI OCR) ----------
 // ה-API של קלוד מקבל ל-image רק image/jpeg, image/png, image/gif, image/webp -
 // PDF חייב להיות מומר לתמונה אמיתית (rendering ל-canvas) לפני שהוא נשלח,
@@ -739,7 +769,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, correctInvoiceLine, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, correctInvoiceLine, processCustomerReturn, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -1092,7 +1122,7 @@ function AddToGoogleCalendarButton({ title, description, date, label = "הוסף
   );
 }
 
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, wide = false }) {
   // בלי זה, גלילת העמוד הראשי נשארת פעילה מתחת למודל - כל שינוי שגורם ל-reflow
   // (כמו הקלדה בשדה כמות שמפעילה חישוב מחדש של הטופס) עלול לגרום לדפדפן "לתקן"
   // את מיקום הגלילה של הדף הראשי בטעות, ונראה כאילו העמוד קופץ לראש בזמן הקלדה.
@@ -1103,8 +1133,8 @@ function Modal({ title, onClose, children }) {
   }, []);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-5 border-b sticky top-0 bg-white">
+      <div className={"bg-white w-full " + (wide ? "sm:max-w-3xl" : "sm:max-w-md") + " sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-xl"} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-5 border-b sticky top-0 bg-white z-10">
           <h3 className="font-bold text-lg tracking-tight text-slate-800">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-slate-800 transition"><X size={20} /></button>
         </div>
@@ -2596,10 +2626,15 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
   const history = data.transactions.filter((t) => t.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [editingLine, setEditingLine] = useState(null); // { order, line, lineIndex }
+  const [returningOrder, setReturningOrder] = useState(null); // הזמנה שעליה מבצעים החזרה/החלפה
   if (!customer) return null;
 
   const purchases = history.filter((t) => t.type === "install");
-  const grandTotal = purchases.reduce((s, t) => s + (t.unitPrice != null ? t.unitPrice * t.qty : 0), 0);
+  // החזרות עם מחיר (נרשמות ע"י מודול ההחזרות/החלפות) מקוזזות מסך הרכישות
+  const returnedValue = history.filter((t) => t.type === "return" && t.unitPrice != null).reduce((s, t) => s + t.unitPrice * t.qty, 0);
+  const grandTotal = purchases.reduce((s, t) => s + (t.unitPrice != null ? t.unitPrice * t.qty : 0), 0) - returnedValue;
+  const customerReturns = (data.customerReturns || []).filter((r) => r.customerId === customerId);
+  const creditBalance = (data.customerCredits || []).filter((c) => c.customerId === customerId).reduce((s, c) => s + c.amount, 0);
   const deviceCount = purchases.filter((t) => data.items.find((i) => i.id === t.itemId)?.category === "device").reduce((s, t) => s + t.qty, 0);
   const consumableCount = purchases.filter((t) => data.items.find((i) => i.id === t.itemId)?.category === "consumable").reduce((s, t) => s + t.qty, 0);
   const customerQuotes = data.quotes.filter((q) => q.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -2643,7 +2678,10 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
         note: extractExtraNote(inv.notes, tag),
         total: inv.totalAmount,
         editable: isAdmin,
+        returnable: isAdmin && inv.status !== "void" && inv.lines.length > 0,
         invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        invoiceTotal: inv.totalAmount,
         locationId: matchingTx?.fromLocationId || null,
         tag,
         lines: inv.lines.map((l) => {
@@ -2688,10 +2726,13 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className={"grid gap-3 mb-4 " + (Math.abs(creditBalance) > 0.009 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
         <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ שולם</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
         <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מכשירים שנרכשו</div><div className="text-2xl font-bold text-slate-800">{deviceCount}</div></div>
         <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">תמציות שנרכשו</div><div className="text-2xl font-bold text-slate-800">{consumableCount}</div></div>
+        {Math.abs(creditBalance) > 0.009 && (
+          <div className="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-5"><div className="text-emerald-700 text-sm mb-1">יתרת זיכוי ללקוח</div><div className="text-2xl font-bold text-emerald-800">₪{creditBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        )}
       </div>
 
       <h3 className="font-bold text-slate-800 mb-2">היסטוריית הזמנות ורכישות</h3>
@@ -2747,6 +2788,13 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
                             ))}
                           </tbody>
                         </table>
+                        {o.returnable && (
+                          <div className="flex justify-end pt-3">
+                            <button onClick={(e) => { e.stopPropagation(); setReturningOrder(o); }} className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 rounded-xl px-3.5 py-2 transition">
+                              <Undo2 size={15} /> החזרה / החלפה
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -2766,6 +2814,48 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
           )}
         </table>
       </div>
+
+      {customerReturns.length > 0 && (
+        <>
+          <h3 className="font-bold text-slate-800 mb-2 mt-4">החזרות והחלפות</h3>
+          <div className="bg-white rounded-2xl border shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-slate-500 text-right">
+                  <th className="px-5 py-4 font-medium">תאריך</th><th className="px-5 py-4 font-medium">מס'</th><th className="px-5 py-4 font-medium">סוג</th>
+                  <th className="px-5 py-4 font-medium">הוחזר</th><th className="px-5 py-4 font-medium">נלקח במקום</th>
+                  <th className="px-5 py-4 font-medium">שינוי בהזמנה</th><th className="px-5 py-4 font-medium">סגירה כספית</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerReturns.map((r) => {
+                  const diff = r.invoiceTotalAfter - r.invoiceTotalBefore;
+                  const st = RETURN_SETTLEMENTS[r.settlement];
+                  return (
+                    <tr key={r.id} className="border-t align-top">
+                      <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{fmtDay(r.returnDate || r.date)}</td>
+                      <td className="px-5 py-4 font-medium text-slate-800 whitespace-nowrap">{r.returnNumber}</td>
+                      <td className="px-5 py-4"><Badge tone={r.kind === "exchange" ? "sky" : "violet"}>{r.kind === "exchange" ? "החלפה" : "החזרה"}</Badge></td>
+                      <td className="px-5 py-4 text-slate-700">
+                        {r.returnedItems.map((it, i) => <div key={i}>{it.qty} × {it.name}{it.condition === "faulty" && <span className="text-rose-600"> (תקול)</span>} <span className="text-slate-400">· {money(it.credit)}</span></div>)}
+                      </td>
+                      <td className="px-5 py-4 text-slate-700">
+                        {r.newItems.length === 0 ? "-" : r.newItems.map((it, i) => <div key={i}>{it.qty} × {it.name} <span className="text-slate-400">· {money(Number(it.qty) * Number(it.unit_price || 0))}</span></div>)}
+                      </td>
+                      <td className={"px-5 py-4 font-bold whitespace-nowrap " + (diff < 0 ? "text-emerald-700" : diff > 0 ? "text-amber-700" : "text-slate-600")}>{diff > 0 ? "+" : diff < 0 ? "-" : ""}{money(Math.abs(diff))}</td>
+                      <td className="px-5 py-4 text-slate-600">
+                        <div>{st?.label || r.settlement}{r.settlement !== "none" && ` · ${money(r.settlementAmount)}`}</div>
+                        {r.settlementMethod && <PaymentMethodTag method={r.settlementMethod} />}
+                        {r.reason && <div className="text-xs text-slate-400 mt-1">סיבה: {r.reason}</div>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {otherHistory.length > 0 && (
         <>
@@ -2829,7 +2919,263 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
           refresh={refresh}
         />
       )}
+      {returningOrder && (
+        <ReturnExchangeModal
+          data={data}
+          customerId={customerId}
+          order={returningOrder}
+          creditBalance={creditBalance}
+          onClose={() => setReturningOrder(null)}
+          refresh={refresh}
+        />
+      )}
     </div>
+  );
+}
+
+// ==================== החזרה / החלפה מלקוח ====================
+const RETURN_SETTLEMENTS = {
+  none: { label: "ללא סגירה כספית כעת" },
+  refund: { label: "החזר כספי ללקוח" },
+  credit: { label: "העברה ליתרת זיכוי" },
+  payment: { label: "הלקוח שילם את ההפרש" },
+  use_credit: { label: "קיזוז מיתרת זיכוי" },
+};
+const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" }) : "-");
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+const money = (n) => `₪${round2(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+const newExchangeRow = () => ({ key: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" });
+
+function ReturnExchangeModal({ data, customerId, order, creditBalance, onClose, refresh }) {
+  const [rows, setRows] = useState(() => order.lines.filter((l) => l.lineId).map((l) => ({
+    lineId: l.lineId, itemId: l.itemId, name: l.name, maxQty: Number(l.qty), unitPrice: Number(l.unitPrice || 0),
+    qty: "", credit: "", creditTouched: false, condition: "ok",
+  })));
+  const [returnLocationId, setReturnLocationId] = useState(order.locationId || "");
+  const [isExchange, setIsExchange] = useState(false);
+  const [newItems, setNewItems] = useState([newExchangeRow()]);
+  const [newLocationId, setNewLocationId] = useState(order.locationId || "");
+  const [returnDate, setReturnDate] = useState(new Date().toISOString().slice(0, 10));
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+  const [settlement, setSettlement] = useState("none");
+  const [settleAmount, setSettleAmount] = useState("");
+  const [settleTouched, setSettleTouched] = useState(false);
+  const [method, setMethod] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const updateRow = (idx, patch) => setRows((rs) => rs.map((r, i) => {
+    if (i !== idx) return r;
+    const next = { ...r, ...patch };
+    // סכום הזיכוי מתעדכן אוטומטית לפי הכמות, כל עוד לא נערך ידנית
+    if (patch.qty !== undefined && !next.creditTouched) next.credit = patch.qty === "" ? "" : String(round2(Number(patch.qty) * r.unitPrice));
+    return next;
+  }));
+  const updateNew = (key, patch) => setNewItems((ns) => ns.map((n) => (n.key === key ? { ...n, ...patch } : n)));
+
+  const selectedRows = rows.filter((r) => Number(r.qty) > 0);
+  const returnedTotal = round2(selectedRows.reduce((s, r) => s + Number(r.credit || 0), 0));
+  const activeNew = isExchange ? newItems.filter((n) => n.itemId) : [];
+  const newTotal = round2(activeNew.reduce((s, n) => s + Number(n.qty || 0) * Number(n.unitPrice || 0), 0));
+  const paid = round2(invoicePaidAmount(data, order.invoiceId));
+  const totalBefore = round2(order.invoiceTotal ?? order.total);
+  const totalAfter = round2(totalBefore - returnedTotal + newTotal);
+  const balanceAfter = round2(totalAfter - paid); // חיובי = הלקוח חייב, שלילי = מגיע ללקוח
+  const weOwe = balanceAfter < -0.009;
+  const customerOwes = balanceAfter > 0.009;
+  const availableCredit = Math.max(0, round2(creditBalance));
+  const hasCredit = availableCredit > 0.009;
+
+  const settlementOptions = weOwe ? ["refund", "credit", "none"] : customerOwes ? ["payment", ...(hasCredit ? ["use_credit"] : []), "none"] : ["none"];
+  const maxSettle = round2(weOwe ? -balanceAfter : settlement === "use_credit" ? Math.min(balanceAfter, availableCredit) : Math.max(0, balanceAfter));
+
+  // שומרים על בחירת סגירה תקפה, וסכום ברירת מחדל = מלוא ההפרש (כל עוד לא נערך ידנית)
+  React.useEffect(() => {
+    if (!settlementOptions.includes(settlement)) { setSettlement(settlementOptions[0]); setSettleTouched(false); }
+  }, [weOwe, customerOwes, hasCredit]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (!settleTouched) setSettleAmount(settlement === "none" ? "" : String(maxSettle));
+  }, [settlement, maxSettle, settleTouched]);
+
+  const stockAt = (itemId, locId) => (itemId && locId ? data.stock[`${itemId}|${locId}`] || 0 : 0);
+
+  const submit = async () => {
+    setError("");
+    if (selectedRows.length === 0) { setError("יש לבחור לפחות פריט אחד להחזרה (כמות גדולה מ-0)"); return; }
+    for (const r of selectedRows) {
+      if (Number(r.qty) > r.maxQty) { setError(`לא ניתן להחזיר ${r.qty} יח' של "${r.name}" - בהזמנה יש רק ${r.maxQty}`); return; }
+      if (r.credit === "" || Number(r.credit) < 0) { setError(`סכום זיכוי לא תקין עבור "${r.name}"`); return; }
+    }
+    if (selectedRows.some((r) => r.itemId) && !returnLocationId) { setError("יש לבחור לאיזה מיקום חוזרת הסחורה"); return; }
+    if (isExchange) {
+      if (activeNew.length === 0) { setError("יש לבחור לפחות מוצר אחד שהלקוח לוקח במקום, או לבטל את סימון ההחלפה"); return; }
+      if (!newLocationId) { setError("יש לבחור מאיזה מיקום יוצא המוצר החדש"); return; }
+      for (const n of activeNew) {
+        const it = data.items.find((i) => i.id === n.itemId);
+        if (!n.qty || Number(n.qty) <= 0) { setError(`כמות לא תקינה עבור "${it?.name}"`); return; }
+        if (n.unitPrice === "" || Number(n.unitPrice) < 0) { setError(`יש להזין מחיר עבור "${it?.name}"`); return; }
+        // אם אותו מוצר חוזר תקין לאותו מיקום באותה פעולה, ההחזרה נרשמת לפני ההוצאה ולכן נספרת כזמינה
+        const back = returnLocationId === newLocationId ? selectedRows.filter((r) => r.itemId === n.itemId && r.condition === "ok").reduce((s, r) => s + Number(r.qty), 0) : 0;
+        const needed = activeNew.filter((x) => x.itemId === n.itemId).reduce((s, x) => s + Number(x.qty || 0), 0);
+        const avail = stockAt(n.itemId, newLocationId) + back;
+        if (needed > avail) { setError(`אין מספיק מלאי של "${it?.name}" במיקום שנבחר (זמין: ${avail})`); return; }
+      }
+    }
+    if (totalAfter < 0) { setError("סכום הזיכוי גבוה מסכום ההזמנה"); return; }
+    if (settlement !== "none") {
+      const amt = Number(settleAmount);
+      if (!amt || amt <= 0 || amt > maxSettle + 0.01) { setError(`סכום הסגירה הכספית חייב להיות בין 0 ל-${money(maxSettle)}`); return; }
+      if ((settlement === "refund" || settlement === "payment") && !method) { setError("יש לבחור אמצעי תשלום"); return; }
+    }
+    setBusy(true);
+    try {
+      await api.processCustomerReturn({
+        invoice_id: order.invoiceId,
+        return_date: returnDate,
+        reason: reason.trim(),
+        notes: notes.trim(),
+        return_location_id: returnLocationId || null,
+        new_location_id: isExchange ? newLocationId || null : null,
+        returned: selectedRows.map((r) => ({ line_id: r.lineId, qty: Number(r.qty), credit: round2(r.credit), condition: r.condition, name: r.name })),
+        new_items: activeNew.map((n) => ({ item_id: n.itemId, qty: Number(n.qty), unit_price: round2(n.unitPrice), name: data.items.find((i) => i.id === n.itemId)?.name || "" })),
+        settlement,
+        settlement_amount: settlement === "none" ? 0 : round2(settleAmount),
+        settlement_method: settlement === "refund" || settlement === "payment" ? method : null,
+      });
+      await refresh();
+      onClose();
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={`החזרה / החלפה - ${order.label}`} onClose={onClose} wide>
+      <div className="text-sm text-slate-500 mb-3">סמנו כמה יחידות מכל פריט הלקוח מחזיר. סכום הזיכוי מחושב לפי מחיר ההזמנה וניתן לשינוי.</div>
+      <div className="border rounded-xl overflow-x-auto mb-4">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-slate-500 text-right">
+              <th className="px-3 py-2 font-medium">פריט</th><th className="px-3 py-2 font-medium">בהזמנה</th>
+              <th className="px-3 py-2 font-medium">כמות להחזרה</th><th className="px-3 py-2 font-medium">מצב</th><th className="px-3 py-2 font-medium">זיכוי (₪)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, idx) => (
+              <tr key={r.lineId} className={"border-t " + (Number(r.qty) > 0 ? "bg-violet-50/60" : "")}>
+                <td className="px-3 py-2 font-medium text-slate-800">{r.name}<div className="text-xs text-slate-400">{money(r.unitPrice)} ליח'</div></td>
+                <td className="px-3 py-2 text-slate-500">{r.maxQty}</td>
+                <td className="px-3 py-2 w-28"><input type="number" min="0" max={r.maxQty} step="1" className={inputCls + " !py-1.5"} value={r.qty} placeholder="0" onChange={(e) => updateRow(idx, { qty: e.target.value })} /></td>
+                <td className="px-3 py-2 w-36">
+                  <select className={inputCls + " !py-1.5"} value={r.condition} onChange={(e) => updateRow(idx, { condition: e.target.value })} disabled={!r.itemId}>
+                    <option value="ok">תקין - חוזר למלאי</option>
+                    <option value="faulty">תקול</option>
+                  </select>
+                </td>
+                <td className="px-3 py-2 w-32"><input type="number" min="0" step="0.01" className={inputCls + " !py-1.5"} value={r.credit} disabled={!(Number(r.qty) > 0)} onChange={(e) => updateRow(idx, { credit: e.target.value, creditTouched: true })} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="מיקום אליו חוזרת הסחורה">
+          <select className={inputCls} value={returnLocationId} onChange={(e) => setReturnLocationId(e.target.value)}>
+            <option value="">בחר מיקום...</option>
+            {data.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </Field>
+        <Field label="תאריך">
+          <input type="date" className={inputCls} value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
+        </Field>
+      </div>
+      {selectedRows.some((r) => r.condition === "faulty") && (
+        <div className="text-xs text-rose-700 bg-rose-50 rounded-xl px-3 py-2 mb-3">פריט שסומן "תקול" נרשם כהחזרה אבל לא נכנס למלאי הזמין למכירה.</div>
+      )}
+
+      <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
+        <input type="checkbox" className="w-4 h-4 accent-amber-500" checked={isExchange} onChange={(e) => setIsExchange(e.target.checked)} />
+        <span className="font-semibold text-slate-700 flex items-center gap-1.5"><Repeat size={16} /> הלקוח לוקח מוצר אחר במקום (החלפה)</span>
+      </label>
+
+      {isExchange && (
+        <div className="border border-sky-200 bg-sky-50/50 rounded-xl p-3 mb-4">
+          <Field label="מיקום ממנו יוצא המוצר החדש">
+            <select className={inputCls} value={newLocationId} onChange={(e) => setNewLocationId(e.target.value)}>
+              <option value="">בחר מיקום...</option>
+              {data.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </Field>
+          {newItems.map((n) => (
+            <div key={n.key} className="grid grid-cols-12 gap-2 items-end mb-2">
+              <div className="col-span-12 sm:col-span-6">
+                <label className="block text-xs font-semibold text-slate-500 mb-1">מוצר חדש</label>
+                <select className={inputCls + " !py-2"} value={n.itemId} onChange={(e) => updateNew(n.key, { itemId: e.target.value })}>
+                  <option value="">בחר מוצר...</option>
+                  {data.items.map((i) => <option key={i.id} value={i.id}>{i.name}{newLocationId ? ` (במלאי: ${stockAt(i.id, newLocationId)})` : ""}</option>)}
+                </select>
+              </div>
+              <div className="col-span-4 sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-500 mb-1">כמות</label>
+                <input type="number" min="1" step="1" className={inputCls + " !py-2"} value={n.qty} onChange={(e) => updateNew(n.key, { qty: e.target.value })} />
+              </div>
+              <div className="col-span-6 sm:col-span-3">
+                <label className="block text-xs font-semibold text-slate-500 mb-1">מחיר ליח' (₪)</label>
+                <input type="number" min="0" step="0.01" className={inputCls + " !py-2"} value={n.unitPrice} onChange={(e) => updateNew(n.key, { unitPrice: e.target.value })} />
+              </div>
+              <div className="col-span-2 sm:col-span-1 flex justify-center pb-2">
+                <button type="button" onClick={() => setNewItems((ns) => (ns.length > 1 ? ns.filter((x) => x.key !== n.key) : [newExchangeRow()]))} className="text-gray-400 hover:text-rose-600" title="הסרה"><Trash2 size={16} /></button>
+              </div>
+            </div>
+          ))}
+          <button type="button" onClick={() => setNewItems((ns) => [...ns, newExchangeRow()])} className="text-sm font-semibold text-sky-700 hover:underline flex items-center gap-1"><Plus size={14} /> מוצר נוסף</button>
+        </div>
+      )}
+
+      <div className="bg-gray-50 rounded-xl p-4 mb-4 text-sm space-y-1.5">
+        <div className="flex justify-between"><span className="text-slate-500">סכום ההזמנה לפני</span><span className="font-semibold">{money(totalBefore)}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">זיכוי על פריטים שהוחזרו</span><span className="font-semibold text-emerald-700">-{money(returnedTotal)}</span></div>
+        {isExchange && <div className="flex justify-between"><span className="text-slate-500">מוצרים חדשים</span><span className="font-semibold text-amber-700">+{money(newTotal)}</span></div>}
+        <div className="flex justify-between border-t pt-1.5"><span className="text-slate-700 font-semibold">סכום ההזמנה אחרי</span><span className="font-bold">{money(totalAfter)}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">שולם עד כה</span><span className="font-semibold">{money(paid)}</span></div>
+        <div className={"flex justify-between rounded-lg px-2 py-1.5 font-bold " + (weOwe ? "bg-emerald-100 text-emerald-800" : customerOwes ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-slate-600")}>
+          <span>{weOwe ? "מגיע ללקוח" : customerOwes ? "הלקוח צריך לשלם" : "מאוזן"}</span>
+          <span>{money(Math.abs(balanceAfter))}</span>
+        </div>
+      </div>
+
+      {settlementOptions.length > 1 && (
+        <Field label="סגירה כספית">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+            {settlementOptions.map((k) => (
+              <button key={k} type="button" onClick={() => { setSettlement(k); setSettleTouched(false); }}
+                className={"rounded-xl py-2.5 px-2 border text-sm font-semibold transition " + (settlement === k ? "bg-amber-500 text-slate-900 border-amber-500" : "bg-white border-gray-300 text-slate-600 hover:bg-gray-100")}>
+                {RETURN_SETTLEMENTS[k].label}{k === "use_credit" ? ` (${money(availableCredit)})` : ""}
+              </button>
+            ))}
+          </div>
+          {settlement !== "none" && (
+            <div className="space-y-2">
+              <input type="number" min="0" step="0.01" className={inputCls} value={settleAmount} onChange={(e) => { setSettleAmount(e.target.value); setSettleTouched(true); }} />
+              {(settlement === "refund" || settlement === "payment") && <PaymentMethodPicker value={method} onChange={setMethod} />}
+            </div>
+          )}
+        </Field>
+      )}
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="סיבת ההחזרה"><input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="למשל: ריח לא מתאים, מכשיר תקול..." /></Field>
+        <Field label="הערות"><input className={inputCls} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+      </div>
+
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={submit} disabled={busy || selectedRows.length === 0} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
+        {busy && <Loader2 size={16} className="animate-spin" />}
+        {isExchange ? "ביצוע החלפה" : "ביצוע החזרה"}
+      </button>
+    </Modal>
   );
 }
 
