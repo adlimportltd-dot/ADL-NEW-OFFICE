@@ -3069,7 +3069,7 @@ function ReturnExchangeModal({ data, customerId, order, creditBalance, onClose, 
                 <td className="px-3 py-2 w-28"><input type="number" min="0" max={r.maxQty} step="1" className={inputCls + " !py-1.5"} value={r.qty} placeholder="0" onChange={(e) => updateRow(idx, { qty: e.target.value })} /></td>
                 <td className="px-3 py-2 w-36">
                   <select className={inputCls + " !py-1.5"} value={r.condition} onChange={(e) => updateRow(idx, { condition: e.target.value })} disabled={!r.itemId}>
-                    <option value="ok">תקין - חוזר למלאי</option>
+                    <option value="ok">תקין</option>
                     <option value="faulty">תקול</option>
                   </select>
                 </td>
