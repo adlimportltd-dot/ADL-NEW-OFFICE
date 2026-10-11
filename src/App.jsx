@@ -94,7 +94,7 @@ const mapCustomerReturn = (r) => ({
   settlement: r.settlement || "none", settlementAmount: Number(r.settlement_amount || 0), settlementMethod: r.settlement_method || "",
   date: r.created_at,
 });
-const mapCustomerCredit = (r) => ({ id: r.id, customerId: r.customer_id, amount: Number(r.amount), returnId: r.return_id, invoiceId: r.invoice_id, note: r.note || "", date: r.created_at });
+const mapCustomerCredit = (r) => ({ id: r.id, customerId: r.customer_id, amount: Number(r.amount), returnId: r.return_id, invoiceId: r.invoice_id, paymentId: r.payment_id || null, note: r.note || "", date: r.created_at });
 
 // ---------- Auth ----------
 async function signIn(email, password) {
@@ -559,6 +559,18 @@ async function deleteInvoicePayment(id) {
   const { error } = await supabase.from("customer_invoice_payments").delete().eq("id", id);
   if (error) throw error;
 }
+// העברת תשלום שנרשם בטעות לחשבונית אחרת של אותו לקוח. אין הרשאת UPDATE על
+// הטבלה, לכן: קודם רושמים את התשלום על החשבונית הנכונה (אותו סכום/תאריך/אמצעי),
+// ורק אם זה הצליח - מוחקים את הרישום השגוי. כך לעולם לא "נעלם" תשלום.
+async function moveInvoicePayment(payment, targetInvoiceId, note) {
+  const { error: insErr } = await supabase.from("customer_invoice_payments").insert({
+    invoice_id: targetInvoiceId, amount: payment.amount, paid_date: payment.paidDate,
+    method: payment.method || null, note: note || null, kind: payment.kind || "payment",
+  });
+  if (insErr) throw insErr;
+  const { error: delErr } = await supabase.from("customer_invoice_payments").delete().eq("id", payment.id);
+  if (delErr) throw new Error("התשלום נרשם על החשבונית החדשה, אך מחיקת הרישום הישן נכשלה - יש למחוק אותו ידנית מהיסטוריית התשלומים. (" + delErr.message + ")");
+}
 
 // ---------- תיקון שורת הזמנה קיימת (למשל מוצר שנבחר בטעות) ----------
 // אסור לעדכן ישירות item_id/qty על שורת transactions קיימת: הטריגר שמעדכן את
@@ -805,7 +817,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, receiveShipment, finalizeShipmentCosts, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, correctInvoiceLine, processCustomerReturn, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, receiveShipment, finalizeShipmentCosts, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, moveInvoicePayment, correctInvoiceLine, processCustomerReturn, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -6085,10 +6097,118 @@ function InvoiceNoteCell({ data, refresh, invoice }) {
   );
 }
 
+// ---------- היסטוריית תשלומי לקוחות: כל התשלומים (גם של חשבוניות שכבר נסגרו), חיפוש, העברה ומחיקה ----------
+function PaymentsHistory({ data, refresh, onOpenInvoice }) {
+  const [search, setSearch] = useState("");
+  const [moving, setMoving] = useState(null);
+  const invById = Object.fromEntries((data.customerInvoices || []).map((i) => [i.id, i]));
+  const custName = (id) => data.customers.find((c) => c.id === id)?.name || "-";
+  const q = search.trim().toLowerCase();
+  const rows = (data.invoicePayments || [])
+    .map((p) => { const inv = invById[p.invoiceId]; return { ...p, inv, customer: inv ? custName(inv.customerId) : "-" }; })
+    .filter((r) => !q || r.customer.toLowerCase().includes(q) || String(r.inv?.invoiceNumber || "").toLowerCase().includes(q))
+    .sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate));
+  const fmt = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  // תשלום שקשור לזיכוי לקוח (או זיכוי/החזר) לא מעבירים - מחיקה שלו הייתה מוחקת גם את הזיכוי
+  const isMovable = (p) => (p.kind || "payment") === "payment" && !(data.customerCredits || []).some((c) => c.paymentId === p.id);
+  const remove = async (p) => {
+    if (!confirm(`למחוק את התשלום ₪${fmt(p.amount)} מ-${new Date(p.paidDate).toLocaleDateString("he-IL")} (חשבונית ${p.inv?.invoiceNumber || "-"})?\nהחשבונית תחזור להיות פתוחה ביתרה הזו.`)) return;
+    try { await api.deleteInvoicePayment(p.id); await refresh(); } catch (e) { alert(e.message); }
+  };
+  return (
+    <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div className="p-4 border-b flex items-center gap-2">
+        <Search size={16} className="text-slate-400" />
+        <input className={inputCls + " !py-2"} placeholder="חיפוש לפי שם לקוח או מספר חשבונית" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-slate-500 text-right">
+              <th className="px-4 py-3 font-medium">תאריך</th><th className="px-4 py-3 font-medium">לקוח</th><th className="px-4 py-3 font-medium">חשבונית</th>
+              <th className="px-4 py-3 font-medium">סכום</th><th className="px-4 py-3 font-medium">אמצעי</th><th className="px-4 py-3 font-medium">הערה</th><th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((p) => (
+              <tr key={p.id} className="border-t">
+                <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(p.paidDate).toLocaleDateString("he-IL")}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">{p.customer}</td>
+                <td className="px-4 py-3">{p.inv ? <button onClick={() => onOpenInvoice(p.inv)} className="text-amber-600 hover:underline">{p.inv.invoiceNumber}</button> : "-"}{p.inv?.status === "void" && <span className="text-xs text-rose-600 mr-1">(מבוטלת)</span>}</td>
+                <td className={`px-4 py-3 font-bold whitespace-nowrap ${p.amount < 0 ? "text-rose-600" : ""}`}>₪{fmt(p.amount)}</td>
+                <td className="px-4 py-3"><PaymentMethodTag method={p.method} /></td>
+                <td className="px-4 py-3 text-slate-500">{p.note}</td>
+                <td className="px-4 py-3 text-left whitespace-nowrap">
+                  {isMovable(p) && <button onClick={() => setMoving(p)} className="text-amber-600 hover:underline font-medium text-xs ml-3 inline-flex items-center gap-1"><ArrowLeftRight size={13} /> העברה לחשבונית אחרת</button>}
+                  <button onClick={() => remove(p)} title="מחיקת התשלום" className="text-gray-400 hover:text-rose-600 align-middle"><Trash2 size={15} /></button>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-500">{q ? "לא נמצאו תשלומים לחיפוש הזה" : "עדיין לא נרשמו תשלומים"}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {moving && <MovePaymentModal data={data} payment={moving} refresh={refresh} onClose={() => setMoving(null)} />}
+    </div>
+  );
+}
+
+function MovePaymentModal({ data, payment, refresh, onClose }) {
+  const fromInv = data.customerInvoices.find((i) => i.id === payment.invoiceId);
+  const customer = data.customers.find((c) => c.id === fromInv?.customerId);
+  const targets = data.customerInvoices
+    .filter((i) => i.customerId === fromInv?.customerId && i.id !== payment.invoiceId && i.status !== "void")
+    .map((i) => ({ ...i, balance: invoiceBalance(data, i) }))
+    .sort((a, b) => b.balance - a.balance || new Date(b.issueDate) - new Date(a.issueDate));
+  const [targetId, setTargetId] = useState(targets.find((t) => t.balance > 0.01)?.id || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fmt = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const target = targets.find((t) => t.id === targetId);
+  const doMove = async () => {
+    setError("");
+    if (!target) { setError("יש לבחור חשבונית יעד"); return; }
+    if (!confirm(`להעביר ₪${fmt(payment.amount)} מחשבונית ${fromInv?.invoiceNumber} לחשבונית ${target.invoiceNumber}?\n\nחשבונית ${fromInv?.invoiceNumber} תחזור להיות פתוחה ביתרה הזו.`)) return;
+    setBusy(true);
+    try {
+      const note = [payment.note, `הועבר מחשבונית ${fromInv?.invoiceNumber || "-"}`].filter(Boolean).join(" · ");
+      await api.moveInvoicePayment(payment, target.id, note);
+      await refresh();
+      onClose();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title="העברת תשלום לחשבונית אחרת" onClose={onClose}>
+      <div className="bg-gray-50 rounded-xl p-3 mb-4 text-sm">
+        <div className="font-bold text-slate-800">₪{fmt(payment.amount)} · {new Date(payment.paidDate).toLocaleDateString("he-IL")}</div>
+        <div className="text-slate-500">{customer?.name} · נרשם כרגע על חשבונית {fromInv?.invoiceNumber}</div>
+      </div>
+      {targets.length === 0 ? (
+        <div className="text-sm text-slate-500 mb-4">אין ללקוח הזה חשבוניות אחרות להעברה.</div>
+      ) : (
+        <Field label="להעביר לחשבונית">
+          <select className={inputCls} value={targetId} onChange={(e) => setTargetId(e.target.value)}>
+            <option value="">בחרו חשבונית...</option>
+            {targets.map((t) => (
+              <option key={t.id} value={t.id}>{t.invoiceNumber} · {new Date(t.issueDate).toLocaleDateString("he-IL")} · סה"כ ₪{fmt(t.totalAmount)} · יתרה ₪{fmt(t.balance)}</option>
+            ))}
+          </select>
+        </Field>
+      )}
+      {target && payment.amount > target.balance + 0.01 && (
+        <div className="bg-amber-100 text-amber-800 text-sm rounded-xl px-3 py-2 mb-3">שימו לב: הסכום גבוה מהיתרה של חשבונית {target.invoiceNumber} (₪{fmt(target.balance)}) - החשבונית תיראה כשולמה ביתר.</div>
+      )}
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={doMove} disabled={busy || !target} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}העברת התשלום</button>
+    </Modal>
+  );
+}
+
 function ReceivablesScreen({ data, refresh }) {
   const [openNewInvoice, setOpenNewInvoice] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [expandedCustomerId, setExpandedCustomerId] = useState(null);
+  const [view, setView] = useState("open"); // open = חובות פתוחים, history = היסטוריית תשלומים
 
   const openInvoices = data.customerInvoices.filter((inv) => isOpenInvoice(data, inv));
 
@@ -6121,6 +6241,15 @@ function ReceivablesScreen({ data, refresh }) {
         </div>
         <button onClick={() => setOpenNewInvoice(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> הוספת חוב פתוח</button>
       </div>
+
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setView("open")} className={`rounded-xl px-4 py-2 border font-medium text-sm ${view === "open" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>חובות פתוחים</button>
+        <button onClick={() => setView("history")} className={`rounded-xl px-4 py-2 border font-medium text-sm flex items-center gap-1.5 ${view === "history" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}><History size={15} /> היסטוריית תשלומים</button>
+      </div>
+
+      {view === "history" && <PaymentsHistory data={data} refresh={refresh} onOpenInvoice={setSelectedInvoice} />}
+
+      {view === "open" && (<>
 
       <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-5">
         <div className="bg-white rounded-2xl border shadow-sm p-4"><div className="text-slate-500 text-sm mb-1">סה"כ חוב פתוח</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div></div>
@@ -6191,6 +6320,7 @@ function ReceivablesScreen({ data, refresh }) {
           </tbody>
         </table>
       </div>
+      </>)}
 
       {openNewInvoice && <NewInvoiceModal data={data} refresh={refresh} onClose={() => setOpenNewInvoice(false)} />}
       {selectedInvoice && <InvoicePaymentsModal data={data} invoice={selectedInvoice} refresh={refresh} onClose={() => setSelectedInvoice(null)} />}
