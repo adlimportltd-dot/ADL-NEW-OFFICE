@@ -5515,6 +5515,12 @@ function ExpenseModal({ data, existing, onClose, refresh, defaultShipmentId }) {
       setForm((f) => ({
         ...f,
         supplierId: matchedSupplier ? matchedSupplier.id : f.supplierId,
+        // ספק שלא קיים ברשימת הספקים: שם העסק מהחשבונית נכנס לתיאור, כדי שתמיד יהיה ברור ממי ההוצאה
+        description: (!matchedSupplier && result.supplierName)
+          ? (!(f.description || "").trim()
+              ? result.supplierName
+              : (normalizeText(f.description).includes(normalizedName) ? f.description : `${result.supplierName} – ${f.description}`))
+          : f.description,
         invoiceNumber: result.invoiceNumber || f.invoiceNumber,
         expenseDate: result.invoiceDate || f.expenseDate,
         vatMode: "incl",
@@ -5525,7 +5531,7 @@ function ExpenseModal({ data, existing, onClose, refresh, defaultShipmentId }) {
 
       const pagesNote = files.length > 1 ? `נותחו ${files.length} עמודים יחד כחשבונית אחת. ` : "";
       if (result.supplierName && !matchedSupplier) {
-        setScanNotice(`${pagesNote}זוהה שם הספק "${result.supplierName}" אך הוא לא נמצא ברשימת הספקים - בחרו ידנית או הוסיפו אותו כספק חדש. שאר השדות מולאו אוטומטית.`);
+        setScanNotice(`${pagesNote}זוהה שם הספק "${result.supplierName}" אך הוא לא נמצא ברשימת הספקים - השם נוסף לשדה התיאור. אפשר לבחור ספק ידנית או להוסיף אותו כספק חדש. שאר השדות מולאו אוטומטית.`);
       } else {
         setScanNotice(`${pagesNote}הנתונים מולאו אוטומטית מהחשבונית - בדקו שהכל נכון לפני השמירה.`);
       }
