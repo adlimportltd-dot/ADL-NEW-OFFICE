@@ -43,8 +43,14 @@ const mapTransaction = (r) => ({
 const mapSupplier = (r) => ({
   id: r.id, name: r.name, country: r.country, contact: r.contact, phone: r.phone, email: r.email,
   currency: r.currency || "USD", notes: r.notes || "",
+  defaultPaymentTerms: r.default_payment_terms || "", defaultDepositPercent: r.default_deposit_percent ?? null, defaultNetDays: r.default_net_days ?? null,
 });
-const mapShipment = (r) => ({ id: r.id, name: r.name, status: r.status, notes: r.notes || "", date: r.created_at });
+const mapShipment = (r) => ({
+  id: r.id, name: r.name, status: r.status, notes: r.notes || "", date: r.created_at,
+  receivedAt: r.received_at || null, receivedLocationId: r.received_location_id || null, costStatus: r.cost_status || "none",
+  allocationMethod: r.allocation_method || null,
+});
+const mapShipmentItemCost = (r) => ({ id: r.id, shipmentId: r.shipment_id, itemId: r.item_id, qty: Number(r.qty), landedUnitCost: Number(r.landed_unit_cost), costStatus: r.cost_status });
 const mapRateCard = (r) => ({
   id: r.id, name: r.name, carrier: r.carrier || "", notes: r.notes || "", date: r.created_at,
   rates: (r.shipping_rates || []).map((x) => ({ id: x.id, rateType: x.rate_type, label: x.label || "", price: Number(x.price), currency: x.currency || "USD" })),
@@ -57,12 +63,18 @@ const mapPO = (r) => ({
   netDays: r.net_days !== null && r.net_days !== undefined ? Number(r.net_days) : null, dueDate: r.due_date || "",
   lines: (r.po_lines || []).map((l) => ({ itemId: l.item_id, qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
 });
-const mapPOPayment = (r) => ({ id: r.id, poId: r.po_id, amount: Number(r.amount), paidDate: r.paid_date, note: r.note || "" });
+const mapPOPayment = (r) => ({
+  id: r.id, poId: r.po_id, amount: Number(r.amount), paidDate: r.paid_date, note: r.note || "",
+  amountIls: r.amount_ils !== null && r.amount_ils !== undefined ? Number(r.amount_ils) : null,
+  feeIls: Number(r.fee_ils || 0),
+  officialRate: r.official_rate !== null && r.official_rate !== undefined ? Number(r.official_rate) : null,
+});
 const mapExpense = (r) => ({
   id: r.id, category: r.category, supplierId: r.supplier_id, description: r.description || "",
   invoiceNumber: r.invoice_number || "", expenseDate: r.expense_date,
   vatMode: r.vat_mode, amountExclVat: Number(r.amount_excl_vat), vatAmount: Number(r.vat_amount), amountInclVat: Number(r.amount_incl_vat),
   paymentStatus: r.payment_status, paymentMethod: r.payment_method || "", notes: r.notes || "", date: r.created_at,
+  shipmentId: r.shipment_id || "",
 });
 const mapExpensePayment = (r) => ({ id: r.id, expenseId: r.expense_id, amount: Number(r.amount), paidDate: r.paid_date, method: r.method || "", note: r.note || "" });
 const mapInvoice = (r) => ({
@@ -184,9 +196,10 @@ async function fetchAllData() {
 
   // החזרות/החלפות וזיכויי לקוחות - נטענים בנפרד ולא חוסמים את טעינת המערכת
   // אם משהו נכשל (למשל לפני שהורץ ה-SQL של מודול ההחזרות ב-Supabase).
-  const [returnsRes, creditsRes] = await Promise.all([
+  const [returnsRes, creditsRes, shipmentCostsRes] = await Promise.all([
     supabase.from("customer_returns").select("*").order("created_at", { ascending: false }),
     supabase.from("customer_credits").select("*").order("created_at", { ascending: false }),
+    supabase.from("shipment_item_costs").select("*"),
   ]);
 
   const stock = {};
@@ -220,6 +233,7 @@ async function fetchAllData() {
     invoicePayments: (invoicePaymentsRes.data || []).map(mapInvoicePayment),
     customerReturns: returnsRes.error ? [] : (returnsRes.data || []).map(mapCustomerReturn),
     customerCredits: creditsRes.error ? [] : (creditsRes.data || []).map(mapCustomerCredit),
+    shipmentItemCosts: shipmentCostsRes.error ? [] : (shipmentCostsRes.data || []).map(mapShipmentItemCost),
     logoUrl: settings.logo_url || null,
     companySettings,
   };
@@ -451,9 +465,10 @@ async function updatePurchaseOrder(poId, supplierId, lines, extra = {}) {
 }
 
 // ---------- PO Payments ----------
-async function addPOPayment(poId, amount, paidDate, note) {
+async function addPOPayment(poId, amount, paidDate, note, extra = {}) {
   const { error } = await supabase.from("po_payments").insert({
     po_id: poId, amount, paid_date: paidDate, note: note || null,
+    amount_ils: extra.amountIls ?? null, fee_ils: extra.feeIls ?? 0, official_rate: extra.officialRate ?? null,
   });
   if (error) throw error;
 }
@@ -469,6 +484,7 @@ async function addExpense(expense) {
     invoice_number: expense.invoiceNumber || null, expense_date: expense.expenseDate,
     vat_mode: expense.vatMode, amount_excl_vat: expense.amountExclVat, vat_amount: expense.vatAmount, amount_incl_vat: expense.amountInclVat,
     payment_status: expense.paymentStatus, payment_method: expense.paymentMethod || null, notes: expense.notes || null,
+    shipment_id: expense.shipmentId || null,
   }).select().single();
   if (error) throw error;
   return data.id;
@@ -479,6 +495,7 @@ async function updateExpense(id, expense) {
     invoice_number: expense.invoiceNumber || null, expense_date: expense.expenseDate,
     vat_mode: expense.vatMode, amount_excl_vat: expense.amountExclVat, vat_amount: expense.vatAmount, amount_incl_vat: expense.amountInclVat,
     payment_status: expense.paymentStatus, payment_method: expense.paymentMethod || null, notes: expense.notes || null,
+    shipment_id: expense.shipmentId || null,
   }).eq("id", id);
   if (error) throw error;
 }
@@ -661,10 +678,19 @@ async function analyzeInvoiceImage(files) {
 }
 
 // ---------- Suppliers ----------
+function supplierTermsPayload(s) {
+  const t = s.defaultPaymentTerms || null;
+  return {
+    default_payment_terms: t,
+    default_deposit_percent: t === "deposit_balance" ? (Number(s.defaultDepositPercent) || null) : null,
+    default_net_days: t === "net_x" ? (Number(s.defaultNetDays) || null) : null,
+  };
+}
 async function addSupplier(supplier) {
   const { error } = await supabase.from("suppliers").insert({
     name: supplier.name, country: supplier.country, contact: supplier.contact,
     phone: supplier.phone, email: supplier.email, currency: supplier.currency || "USD", notes: supplier.notes || null,
+    ...supplierTermsPayload(supplier),
   });
   if (error) throw error;
 }
@@ -677,6 +703,7 @@ async function updateSupplier(id, patch) {
   if (patch.email !== undefined) payload.email = patch.email;
   if (patch.currency !== undefined) payload.currency = patch.currency;
   if (patch.notes !== undefined) payload.notes = patch.notes;
+  if (patch.defaultPaymentTerms !== undefined) Object.assign(payload, supplierTermsPayload(patch));
   const { error } = await supabase.from("suppliers").update(payload).eq("id", id);
   if (error) throw error;
 }
@@ -698,7 +725,16 @@ async function updateShipment(id, patch) {
   if (patch.name !== undefined) payload.name = patch.name;
   if (patch.status !== undefined) payload.status = patch.status;
   if (patch.notes !== undefined) payload.notes = patch.notes;
+  if (patch.allocationMethod !== undefined) payload.allocation_method = patch.allocationMethod;
   const { error } = await supabase.from("shipments").update(payload).eq("id", id);
+  if (error) throw error;
+}
+async function receiveShipment(shipmentId, locationId, lines, costStatus) {
+  const { error } = await supabase.rpc("receive_shipment", { p_shipment_id: shipmentId, p_location_id: locationId, p_lines: lines, p_cost_status: costStatus });
+  if (error) throw error;
+}
+async function finalizeShipmentCosts(shipmentId, lines) {
+  const { error } = await supabase.rpc("finalize_shipment_costs", { p_shipment_id: shipmentId, p_lines: lines });
   if (error) throw error;
 }
 async function deleteShipment(id) {
@@ -769,7 +805,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, correctInvoiceLine, processCustomerReturn, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, receiveShipment, finalizeShipmentCosts, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, correctInvoiceLine, processCustomerReturn, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -913,6 +949,7 @@ const SHIPMENT_STATUSES = {
   preparing: { label: "בהכנה", tone: "amber" },
   in_transit: { label: "בדרך", tone: "sky" },
   planned: { label: "מתוכנן לחודש הבא", tone: "violet" },
+  received: { label: "נקלט במלאי", tone: "emerald" },
 };
 const PAYMENT_TERMS = {
   prepaid_100: { label: "100% מראש" },
@@ -4342,9 +4379,36 @@ function ForecastReport({ data }) {
 
 // ==================== הזמנות רכש (Purchase Orders) ====================
 // ==================== Suppliers ====================
+function supplierTermsLabel(s) {
+  if (s.defaultPaymentTerms === "prepaid_100") return "100% מראש";
+  if (s.defaultPaymentTerms === "deposit_balance") return `מקדמה ${s.defaultDepositPercent ?? ""}% + יתרה`;
+  if (s.defaultPaymentTerms === "net_x") return `תשלום אחרי ${s.defaultNetDays ?? ""} יום`;
+  return "-";
+}
+function SupplierTermsFields({ form, setForm }) {
+  return (
+    <div className="bg-gray-50 rounded-xl p-3 mb-3">
+      <Field label="תנאי תשלום קבועים (ימולאו אוטומטית בכל הזמנת רכש חדשה)">
+        <select className={inputCls} value={form.defaultPaymentTerms} onChange={(e) => setForm({ ...form, defaultPaymentTerms: e.target.value })}>
+          <option value="">לא הוגדר</option>
+          <option value="prepaid_100">100% מראש</option>
+          <option value="deposit_balance">מקדמה + יתרה</option>
+          <option value="net_x">תשלום אחרי X ימים מההזמנה</option>
+        </select>
+      </Field>
+      {form.defaultPaymentTerms === "deposit_balance" && (
+        <Field label="אחוז מקדמה"><input type="number" min="1" max="99" className={inputCls} value={form.defaultDepositPercent} onChange={(e) => setForm({ ...form, defaultDepositPercent: e.target.value })} /></Field>
+      )}
+      {form.defaultPaymentTerms === "net_x" && (
+        <Field label="מספר ימים מההזמנה עד התשלום"><input type="number" min="1" className={inputCls} value={form.defaultNetDays} onChange={(e) => setForm({ ...form, defaultNetDays: e.target.value })} /></Field>
+      )}
+    </div>
+  );
+}
+
 function SuppliersScreen({ data, refresh }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", country: "", contact: "", phone: "", email: "", currency: "USD", notes: "" });
+  const [form, setForm] = useState({ name: "", country: "", contact: "", phone: "", email: "", currency: "USD", notes: "", defaultPaymentTerms: "", defaultDepositPercent: "30", defaultNetDays: "60" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -4353,7 +4417,7 @@ function SuppliersScreen({ data, refresh }) {
   const [editError, setEditError] = useState("");
   const [editBusy, setEditBusy] = useState(false);
 
-  const openNew = () => { setForm({ name: "", country: "", contact: "", phone: "", email: "", currency: "USD", notes: "" }); setError(""); setOpen(true); };
+  const openNew = () => { setForm({ name: "", country: "", contact: "", phone: "", email: "", currency: "USD", notes: "", defaultPaymentTerms: "", defaultDepositPercent: "30", defaultNetDays: "60" }); setError(""); setOpen(true); };
 
   const submit = async () => {
     if (!form.name.trim()) { setError("שם הספק הוא שדה חובה"); return; }
@@ -4367,7 +4431,7 @@ function SuppliersScreen({ data, refresh }) {
 
   const openEdit = (s) => {
     setEditSupplier(s);
-    setEditForm({ name: s.name, country: s.country || "", contact: s.contact || "", phone: s.phone || "", email: s.email || "", currency: s.currency, notes: s.notes || "" });
+    setEditForm({ name: s.name, country: s.country || "", contact: s.contact || "", phone: s.phone || "", email: s.email || "", currency: s.currency, notes: s.notes || "", defaultPaymentTerms: s.defaultPaymentTerms || "", defaultDepositPercent: s.defaultDepositPercent != null ? String(s.defaultDepositPercent) : "30", defaultNetDays: s.defaultNetDays != null ? String(s.defaultNetDays) : "60" });
     setEditError("");
   };
 
@@ -4399,7 +4463,7 @@ function SuppliersScreen({ data, refresh }) {
             <tr className="bg-gray-50 text-slate-500 text-right">
               <th className="px-5 py-4 font-medium">שם ספק</th><th className="px-5 py-4 font-medium">מדינה</th>
               <th className="px-5 py-4 font-medium">איש קשר</th><th className="px-5 py-4 font-medium">טלפון</th>
-              <th className="px-5 py-4 font-medium">אימייל</th><th className="px-5 py-4 font-medium">מטבע</th><th className="px-4 py-2"></th>
+              <th className="px-5 py-4 font-medium">אימייל</th><th className="px-5 py-4 font-medium">מטבע</th><th className="px-5 py-4 font-medium">תנאי תשלום</th><th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -4411,6 +4475,7 @@ function SuppliersScreen({ data, refresh }) {
                 <td className="px-5 py-4 text-slate-500">{s.phone || "-"}</td>
                 <td className="px-5 py-4 text-slate-500">{s.email || "-"}</td>
                 <td className="px-5 py-4"><Badge tone="sky">{CURRENCY_SYMBOLS[s.currency]} {s.currency}</Badge></td>
+                <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{supplierTermsLabel(s)}</td>
                 <td className="px-5 py-4 text-left" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-2 justify-end">
                     <button onClick={() => openEdit(s)} className="text-gray-400 hover:text-amber-600" title="עריכה"><Pencil size={16} /></button>
@@ -4419,7 +4484,7 @@ function SuppliersScreen({ data, refresh }) {
                 </td>
               </tr>
             ))}
-            {data.suppliers.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">אין ספקים עדיין</td></tr>}
+            {data.suppliers.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">אין ספקים עדיין</td></tr>}
           </tbody>
         </table>
       </div>
@@ -4436,6 +4501,7 @@ function SuppliersScreen({ data, refresh }) {
               {CURRENCIES.map((c) => <option key={c} value={c}>{CURRENCY_SYMBOLS[c]} {c}</option>)}
             </select>
           </Field>
+          <SupplierTermsFields form={form} setForm={setForm} />
           <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת ספק</button>
@@ -4454,11 +4520,305 @@ function SuppliersScreen({ data, refresh }) {
               {CURRENCIES.map((c) => <option key={c} value={c}>{CURRENCY_SYMBOLS[c]} {c}</option>)}
             </select>
           </Field>
+          <SupplierTermsFields form={editForm} setForm={setEditForm} />
           <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
           {editError && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{editError}</div>}
           <button onClick={saveEdit} disabled={editBusy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{editBusy && <Loader2 size={16} className="animate-spin" />}שמירת שינויים</button>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ==================== חישוב עלות נחיתה למכולה (תשלומים בפועל + הוצאות משויכות) ====================
+// לכל ספק: מה ששולם - לפי השקלים שירדו בפועל; מה שעוד לא שולם - לפי שער הערכה.
+// הוצאות המכולה (ללא מע"מ) + עמלות ההעברה מתחלקות בין הפריטים לפי ערך הסחורה.
+function computeShipmentCosts(data, shipmentId, estRates, method = "value") {
+  const pos = data.purchaseOrders.filter((p) => p.shipmentId === shipmentId);
+  const rateOf = (cur) => (cur === "ILS" ? 1 : Number(estRates[cur]) || DEFAULT_FX_RATES[cur] || 1);
+  const poRows = pos.map((po) => {
+    const supplier = data.suppliers.find((s) => s.id === po.supplierId);
+    const payments = (data.poPayments || []).filter((p) => p.poId === po.id);
+    const totalFx = poTotalAmount(po);
+    const paidFx = payments.reduce((s, p) => s + p.amount, 0);
+    const estRate = rateOf(po.currency);
+    const paidIls = payments.reduce((s, p) => s + (p.amountIls != null ? p.amountIls : p.amount * estRate), 0);
+    const fees = payments.reduce((s, p) => s + (p.feeIls || 0), 0);
+    const remainingFx = Math.max(0, totalFx - paidFx);
+    const goodsIls = paidIls + remainingFx * estRate;
+    const effRate = paidFx > 0 ? paidIls / paidFx : null;
+    return { po, supplier, totalFx, paidFx, paidIls, fees, remainingFx, goodsIls, effRate, estimated: remainingFx > 0.01, poRate: totalFx > 0 ? goodsIls / totalFx : estRate };
+  });
+  const expenses = (data.expenses || []).filter((e) => e.shipmentId === shipmentId);
+  const expensesTotal = expenses.reduce((s, e) => s + (e.amountExclVat || 0), 0);
+  const feesTotal = poRows.reduce((s, r) => s + r.fees, 0);
+  const overhead = expensesTotal + feesTotal;
+  const byItem = {};
+  poRows.forEach((r) => {
+    r.po.lines.forEach((l) => {
+      if (!byItem[l.itemId]) byItem[l.itemId] = { itemId: l.itemId, item: data.items.find((i) => i.id === l.itemId), qty: 0, valueIls: 0, supplierId: r.po.supplierId };
+      byItem[l.itemId].qty += l.qty;
+      byItem[l.itemId].valueIls += l.qty * l.unitPrice * r.poRate;
+    });
+  });
+  const goodsTotal = Object.values(byItem).reduce((s, x) => s + x.valueIls, 0);
+  const qtyTotal = Object.values(byItem).reduce((s, x) => s + x.qty, 0);
+  const items = Object.values(byItem).filter((x) => x.qty > 0).map((x) => {
+    // חלוקת ההוצאות: לפי כמות (כל ק"ג/יחידה נושא אותו חלק) או לפי ערך הסחורה
+    const share = method === "quantity" ? (qtyTotal > 0 ? x.qty / qtyTotal : 0) : (goodsTotal > 0 ? x.valueIls / goodsTotal : 0);
+    const allocated = overhead * share;
+    const landedTotal = x.valueIls + allocated;
+    const currentStock = Object.entries(data.stock || {}).reduce((s, [k, q]) => (k.startsWith(x.itemId + "|") ? s + q : s), 0);
+    const currentCost = x.item?.unitCost ?? null;
+    const unitCost = landedTotal / x.qty;
+    const newAvg = currentStock > 0 && currentCost != null ? (currentStock * currentCost + x.qty * unitCost) / (currentStock + x.qty) : unitCost;
+    return { ...x, share, allocated, landedTotal, unitCost, goodsUnitIls: x.valueIls / x.qty, currentStock, currentCost, newAvg };
+  });
+  return { pos, poRows, expenses, expensesTotal, feesTotal, overhead, goodsTotal, qtyTotal, items, estimated: poRows.some((r) => r.estimated), total: goodsTotal + overhead };
+}
+
+function ShipmentDetail({ data, refresh, shipment, onBack }) {
+  const currencies = [...new Set(data.purchaseOrders.filter((p) => p.shipmentId === shipment.id).map((p) => p.currency))].filter((c) => c !== "ILS");
+  const [estRates, setEstRates] = useState(() => Object.fromEntries(currencies.map((c) => [c, String(DEFAULT_FX_RATES[c] ?? 1)])));
+  const [paymentsPO, setPaymentsPO] = useState(null);
+  const [expenseModal, setExpenseModal] = useState(null);
+  const warehouses = data.locations.filter((l) => l.type === "warehouse");
+  const [locationId, setLocationId] = useState(warehouses[0]?.id || "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // ברירת מחדל: כשכל הפריטים באותה יחידה (הכל ק"ג / הכל יחידות) - חלוקה לפי כמות; מכולה מעורבת - לפי ערך
+  const autoMethod = (() => {
+    const units = new Set();
+    data.purchaseOrders.filter((p) => p.shipmentId === shipment.id).forEach((po) => po.lines.forEach((l) => units.add(data.items.find((i) => i.id === l.itemId)?.unit || "")));
+    return units.size === 1 ? "quantity" : "value";
+  })();
+  const [method, setMethod] = useState(shipment.allocationMethod || autoMethod);
+  const saveMethod = async (m) => {
+    setMethod(m);
+    try { await api.updateShipment(shipment.id, { allocationMethod: m }); await refresh(); } catch (e) { alert(e.message); }
+  };
+  const c = computeShipmentCosts(data, shipment.id, estRates, method);
+  const manualReceived = shipment.status === "received" && !shipment.receivedAt;
+  const fmt = (n, d = 2) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: d });
+  const received = !!shipment.receivedAt;
+  const allPOsAlreadyReceived = c.pos.length > 0 && c.pos.every((p) => p.status === "received");
+  const savedCosts = (data.shipmentItemCosts || []).filter((x) => x.shipmentId === shipment.id);
+  const costsChanged = received && c.items.some((it) => {
+    const saved = savedCosts.find((x) => x.itemId === it.itemId);
+    return saved && Math.abs(saved.landedUnitCost - it.unitCost) > 0.01;
+  });
+
+  const doReceive = async () => {
+    if (!locationId) { alert("יש לבחור מחסן"); return; }
+    if (c.items.length === 0) { alert("אין פריטים בהזמנות הרכש של המכולה"); return; }
+    const jumps = c.items.filter((it) => it.currentCost && Math.abs(it.unitCost - it.currentCost) / it.currentCost > 0.5);
+    if (jumps.length > 0) {
+      const list = jumps.map((it) => `• ${it.item?.name}: היום ₪${it.currentCost.toFixed(2)} ← במכולה ₪${it.unitCost.toFixed(2)}`).join("\n");
+      if (!confirm(`⚠️ אזהרה: בפריטים הבאים העלות במכולה שונה ביותר מ-50% מהעלות שיש היום במערכת.\nבדרך כלל זה אומר שהשורה בהזמנה מחוברת לפריט ביחידה לא נכונה (למשל ק"ג מול ג'ריקן).\n\n${list}\n\nלהמשיך בכל זאת?`)) return;
+    }
+    const loc = data.locations.find((l) => l.id === locationId);
+    const txt = `לקלוט את המכולה "${shipment.name}" למחסן "${loc?.name}"?\n\n` +
+      `${c.items.length} פריטים ייכנסו למלאי, ועלות כל פריט תתעדכן לפי ממוצע משוקלל.\n` +
+      (c.estimated ? "שימו לב: יש ספקים שעוד לא שולמו - העלות תיקלט כמשוערת ותתוקן אחרי התשלום.\n" : "") +
+      "לא ניתן לקלוט את אותה מכולה פעמיים.";
+    if (!confirm(txt)) return;
+    setBusy(true); setMsg("");
+    try {
+      if (shipment.allocationMethod !== method) await api.updateShipment(shipment.id, { allocationMethod: method });
+      await api.receiveShipment(shipment.id, locationId,
+        c.items.map((it) => ({ item_id: it.itemId, qty: it.qty, unit_cost: Math.round(it.unitCost * 10000) / 10000, supplier_id: it.supplierId })),
+        c.estimated ? "estimated" : "final");
+      await refresh();
+      setMsg("המכולה נקלטה למלאי והעלויות עודכנו");
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+
+  // מכולה שהסחורה שלה כבר נקלטה ידנית בעבר (למשל דרך "תנועת מלאי"): מסמנים בלי להוסיף מלאי
+  const markManuallyReceived = async () => {
+    if (!confirm(`לסמן את "${shipment.name}" כמכולה שכבר נקלטה ידנית?\n\nלא ייכנס שום מלאי ולא תשתנה שום עלות - רק הזמנות הרכש יסומנו "התקבל" וכפתור הקליטה ייעלם, כדי שלא תהיה קליטה כפולה.`)) return;
+    setBusy(true); setMsg("");
+    try {
+      for (const po of c.pos) { if (po.status !== "received") await api.updatePOStatus(po.id, "received"); }
+      await api.updateShipment(shipment.id, { status: "received" });
+      await refresh();
+      setMsg("המכולה סומנה כנקלטה ידנית - לא נוסף מלאי");
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+
+  const doFinalize = async () => {
+    if (c.estimated) { alert("עדיין יש ספקים עם יתרה לתשלום - רשמו קודם את התשלום"); return; }
+    if (!confirm("לעדכן את עלות הפריטים לעלות הסופית? ההפרש מהעלות המשוערת יתוקן על המלאי הנוכחי.")) return;
+    setBusy(true); setMsg("");
+    try {
+      await api.finalizeShipmentCosts(shipment.id, c.items.map((it) => ({ item_id: it.itemId, unit_cost: Math.round(it.unitCost * 10000) / 10000 })));
+      await refresh();
+      setMsg("העלות הסופית עודכנה במלאי");
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+
+  const costBadge = manualReceived ? <Badge tone="gray">נקלט ידנית בעבר (לפני המודול החדש)</Badge>
+    : shipment.costStatus === "final" ? <Badge tone="emerald">עלות סופית</Badge>
+    : shipment.costStatus === "estimated" ? <Badge tone="amber">עלות משוערת</Badge>
+    : c.estimated ? <Badge tone="amber">עלות משוערת (יש יתרות לתשלום)</Badge> : <Badge tone="emerald">כל הספקים שולמו</Badge>;
+
+  return (
+    <div>
+      <button onClick={onBack} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת משלוחים</button>
+      <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+        <div className="flex items-center gap-3 mb-1 flex-wrap">
+          <h2 className="font-bold text-xl text-slate-800">{shipment.name}</h2>
+          <Badge tone={SHIPMENT_STATUSES[shipment.status]?.tone}>{SHIPMENT_STATUSES[shipment.status]?.label}</Badge>
+          {costBadge}
+        </div>
+        {shipment.notes && <p className="text-slate-500 mt-1">{shipment.notes}</p>}
+        {received && <p className="text-slate-500 text-sm mt-1">נקלט במלאי ב-{new Date(shipment.receivedAt).toLocaleDateString("he-IL")}{shipment.receivedLocationId ? ` · ${data.locations.find((l) => l.id === shipment.receivedLocationId)?.name || ""}` : ""}</p>}
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="bg-white rounded-2xl border shadow-sm p-4"><div className="text-slate-500 text-sm mb-1">עלות סחורה (₪)</div><div className="text-xl font-bold text-slate-800">₪{fmt(c.goodsTotal, 0)}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-4"><div className="text-slate-500 text-sm mb-1">הוצאות מכולה (ללא מע"מ)</div><div className="text-xl font-bold text-slate-800">₪{fmt(c.expensesTotal, 0)}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-4"><div className="text-slate-500 text-sm mb-1">עמלות העברה</div><div className="text-xl font-bold text-slate-800">₪{fmt(c.feesTotal, 0)}</div></div>
+        <div className="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-4"><div className="text-slate-500 text-sm mb-1">עלות כוללת למכולה</div><div className="text-xl font-bold text-amber-800">₪{fmt(c.total, 0)}</div></div>
+      </div>
+
+      <h3 className="font-bold text-slate-800 mb-2">ספקים ותשלומים</h3>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto mb-4">
+        <table className="w-full text-sm">
+          <thead><tr className="bg-gray-50 text-slate-500 text-right">
+            <th className="px-4 py-3 font-medium">ספק / הזמנה</th><th className="px-4 py-3 font-medium">תנאי תשלום</th><th className="px-4 py-3 font-medium">סה"כ</th>
+            <th className="px-4 py-3 font-medium">שולם</th><th className="px-4 py-3 font-medium">יתרה</th><th className="px-4 py-3 font-medium">ירד בש"ח</th>
+            <th className="px-4 py-3 font-medium">שער בפועל</th><th className="px-4 py-3 font-medium">עמלות</th><th className="px-4 py-3"></th>
+          </tr></thead>
+          <tbody>
+            {c.poRows.map((r) => {
+              const sym = CURRENCY_SYMBOLS[r.po.currency] || r.po.currency;
+              const terms = r.po.paymentTerms === "deposit_balance" ? `מקדמה ${r.po.depositPercent ?? ""}% + יתרה` : r.po.paymentTerms === "net_x" ? `אחרי ${r.po.netDays ?? ""} יום` : "100% מראש";
+              return (
+                <tr key={r.po.id} className="border-t">
+                  <td className="px-4 py-3"><div className="font-medium text-slate-800">{r.supplier?.name || "-"}</div><div className="text-xs text-slate-500">{r.po.poNumber}</div></td>
+                  <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{terms}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{sym}{fmt(r.totalFx)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-emerald-700">{sym}{fmt(r.paidFx)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{r.remainingFx > 0.01 ? <span className="text-amber-700 font-medium">{sym}{fmt(r.remainingFx)}</span> : <Badge tone="emerald">שולם</Badge>}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{r.paidFx > 0 ? `₪${fmt(r.paidIls)}` : "-"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{r.po.currency !== "ILS" && r.effRate ? fmt(r.effRate, 4) : "-"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{r.fees ? `₪${fmt(r.fees)}` : "-"}</td>
+                  <td className="px-4 py-3"><button onClick={() => setPaymentsPO(r.po)} className={btnGhost + " !py-1.5 !px-3 text-sm whitespace-nowrap"}>העברות</button></td>
+                </tr>
+              );
+            })}
+            {c.poRows.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">אין עדיין הזמנות רכש משויכות למכולה זו (משייכים בטאב "הזמנות רכש PO")</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {c.estimated && currencies.length > 0 && !manualReceived && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+          <div className="font-bold text-slate-800 mb-1">שער להערכת היתרה שעוד לא שולמה</div>
+          <p className="text-slate-500 text-sm mb-3">החלק ששולם מחושב לפי השקלים שירדו בפועל. רק היתרה הפתוחה מוערכת לפי השער כאן, וכשתשלמו - העלות תתעדכן לפי השער האמיתי.</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {currencies.map((cur) => (
+              <Field key={cur} label={`1 ${cur} = ? ₪`}><input type="number" min="0" step="0.0001" className={inputCls} value={estRates[cur] ?? ""} onChange={(e) => setEstRates({ ...estRates, [cur]: e.target.value })} /></Field>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-bold text-slate-800">הוצאות המכולה (שילוח, עמיל מכס, נמל, הובלה)</h3>
+        <button onClick={() => setExpenseModal({})} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Plus size={16} /> הוצאה / סריקת חשבונית</button>
+      </div>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto mb-4">
+        <table className="w-full text-sm">
+          <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-4 py-3 font-medium">תאריך</th><th className="px-4 py-3 font-medium">תיאור</th><th className="px-4 py-3 font-medium">חשבונית</th><th className="px-4 py-3 font-medium">ללא מע"מ (נכנס לעלות)</th><th className="px-4 py-3 font-medium">מע"מ (לא נכנס)</th></tr></thead>
+          <tbody>
+            {c.expenses.map((e) => (
+              <tr key={e.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setExpenseModal(e)}>
+                <td className="px-4 py-3 whitespace-nowrap">{new Date(e.expenseDate).toLocaleDateString("he-IL")}</td>
+                <td className="px-4 py-3">{e.description || data.suppliers.find((s) => s.id === e.supplierId)?.name || "-"}</td>
+                <td className="px-4 py-3 text-slate-500">{e.invoiceNumber || "-"}</td>
+                <td className="px-4 py-3 font-medium">₪{fmt(e.amountExclVat)}</td>
+                <td className="px-4 py-3 text-slate-500">₪{fmt(e.vatAmount)}</td>
+              </tr>
+            ))}
+            {c.expenses.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">עדיין לא שויכו הוצאות. בטאב "הוצאות וחשבוניות" בוחרים בשדה "שיוך למכולה" - או מוסיפים כאן.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <h3 className="font-bold text-slate-800">עלות סופית לכל מוצר</h3>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-slate-500">חלוקת הוצאות:</span>
+          <button disabled={received} onClick={() => saveMethod("quantity")} className={`rounded-xl px-3 py-1.5 border font-medium ${method === "quantity" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי כמות (ק"ג / יחידות)</button>
+          <button disabled={received} onClick={() => saveMethod("value")} className={`rounded-xl px-3 py-1.5 border font-medium ${method === "value" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי ערך</button>
+        </div>
+      </div>
+      {method === "quantity" && c.qtyTotal > 0 && (
+        <p className="text-sm text-slate-500 mb-2">הוצאות + עמלות ₪{fmt(c.overhead)} ÷ {fmt(c.qtyTotal)} = <b>₪{fmt(c.overhead / c.qtyTotal)}</b> לכל ק"ג / יחידה</p>
+      )}
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto mb-4">
+        <table className="w-full text-sm">
+          <thead><tr className="bg-gray-50 text-slate-500 text-right">
+            <th className="px-4 py-3 font-medium">פריט</th><th className="px-4 py-3 font-medium">כמות</th><th className="px-4 py-3 font-medium">מחיר ספק ליח' (₪)</th>
+            <th className="px-4 py-3 font-medium">הוצאות ליח'</th><th className="px-4 py-3 font-medium">עלות נחיתה ליח'</th>
+            {!received && !manualReceived && <><th className="px-4 py-3 font-medium">עלות היום במערכת</th><th className="px-4 py-3 font-medium">מלאי היום</th><th className="px-4 py-3 font-medium">עלות חדשה (ממוצע משוקלל)</th></>}
+            {received && <th className="px-4 py-3 font-medium">נקלט בעלות</th>}
+          </tr></thead>
+          <tbody>
+            {c.items.map((it) => {
+              const saved = savedCosts.find((x) => x.itemId === it.itemId);
+              return (
+                <tr key={it.itemId} className="border-t">
+                  <td className="px-4 py-3 font-medium text-slate-800">{it.item?.name || "-"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{fmt(it.qty)} {it.item?.unit || ""}</td>
+                  <td className="px-4 py-3">₪{fmt(it.goodsUnitIls)}</td>
+                  <td className="px-4 py-3">₪{fmt(it.allocated / it.qty)}</td>
+                  <td className="px-4 py-3 font-bold text-amber-800 whitespace-nowrap">₪{fmt(it.unitCost)}{it.item?.unit && it.item.unit !== "יחידה" ? <span className="text-xs font-normal text-slate-500"> / {it.item.unit}</span> : null}</td>
+                  {!received && !manualReceived && <>
+                    <td className="px-4 py-3 text-slate-500">{it.currentCost != null ? `₪${fmt(it.currentCost)}` : "-"}</td>
+                    <td className="px-4 py-3 text-slate-500">{fmt(it.currentStock)}</td>
+                    <td className="px-4 py-3 font-medium">₪{fmt(it.newAvg)}</td>
+                  </>}
+                  {received && <td className="px-4 py-3 text-slate-500">{saved ? `₪${fmt(saved.landedUnitCost)} (${saved.costStatus === "final" ? "סופי" : "משוער"})` : "-"}</td>}
+                </tr>
+              );
+            })}
+            {c.items.length === 0 && <tr><td colSpan={8} className="px-4 py-6 text-center text-slate-500">אין פריטים</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
+        {msg && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3 flex items-center gap-1.5"><CircleCheck size={16} /> {msg}</div>}
+        {!received && allPOsAlreadyReceived && (
+          <div className="text-sm text-slate-500">כל הזמנות הרכש במכולה הזו כבר מסומנות "התקבל" (נקלטו ידנית בעבר) - לכן אין קליטה נוספת, כדי לא להכפיל מלאי.</div>
+        )}
+        {!received && !allPOsAlreadyReceived && (
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <Field label="מחסן לקליטה">
+                <select className={inputCls} value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                  {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </Field>
+            </div>
+            <button onClick={doReceive} disabled={busy || c.items.length === 0} className={btnPrimary + " flex items-center gap-2 mb-3"}>{busy && <Loader2 size={16} className="animate-spin" />}<Package size={18} /> קליטת המכולה למלאי</button>
+            <button onClick={markManuallyReceived} disabled={busy} className={btnGhost + " text-sm mb-3"}>הסחורה כבר נקלטה ידנית בעבר - סמן בלי להוסיף מלאי</button>
+          </div>
+        )}
+        {received && (shipment.costStatus === "estimated" || costsChanged) && (
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-sm text-slate-600">{c.estimated ? "המכולה נקלטה בעלות משוערת. אחרי רישום התשלום לספק, יופיע כאן כפתור לעדכון העלות הסופית." : "כל הספקים שולמו - אפשר לעדכן את העלות הסופית במלאי."}</div>
+            {!c.estimated && <button onClick={doFinalize} disabled={busy} className={btnPrimary + " flex items-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}<CircleCheck size={18} /> עדכון לעלות סופית</button>}
+          </div>
+        )}
+        {received && shipment.costStatus === "final" && !costsChanged && <div className="text-sm text-emerald-700 flex items-center gap-1.5"><CircleCheck size={16} /> המכולה נקלטה והעלות הסופית מעודכנת במלאי ובערך המלאי.</div>}
+      </div>
+
+      {paymentsPO && <POPaymentsModal data={data} po={data.purchaseOrders.find((p) => p.id === paymentsPO.id) || paymentsPO} refresh={refresh} onClose={() => setPaymentsPO(null)} />}
+      {expenseModal && <ExpenseModal data={data} existing={expenseModal.id ? expenseModal : null} defaultShipmentId={shipment.id} onClose={() => setExpenseModal(null)} refresh={refresh} />}
     </div>
   );
 }
@@ -4507,79 +4867,8 @@ function ShipmentsScreen({ data, refresh }) {
 
   if (viewShipmentId) {
     const shipment = data.shipments.find((s) => s.id === viewShipmentId);
-    const pos = posFor(viewShipmentId);
     if (!shipment) { setViewShipmentId(null); return null; }
-
-    const itemTotals = {};
-    pos.forEach((po) => {
-      const supplier = data.suppliers.find((s) => s.id === po.supplierId);
-      po.lines.forEach((l) => {
-        const item = data.items.find((i) => i.id === l.itemId);
-        const key = l.itemId;
-        if (!itemTotals[key]) itemTotals[key] = { item, qty: 0, suppliers: new Set() };
-        itemTotals[key].qty += l.qty;
-        if (supplier) itemTotals[key].suppliers.add(supplier.name);
-      });
-    });
-
-    return (
-      <div>
-        <button onClick={() => setViewShipmentId(null)} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-4 text-sm"><ChevronLeft size={16} /> חזרה לרשימת משלוחים</button>
-        <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
-          <div className="flex items-center gap-3 mb-1">
-            <h2 className="font-bold text-xl text-slate-800">{shipment.name}</h2>
-            <Badge tone={SHIPMENT_STATUSES[shipment.status]?.tone}>{SHIPMENT_STATUSES[shipment.status]?.label}</Badge>
-          </div>
-          {shipment.notes && <p className="text-slate-500 mt-1">{shipment.notes}</p>}
-        </div>
-
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">הזמנות רכש</div><div className="text-2xl font-bold text-slate-800">{pos.length}</div></div>
-          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">ספקים</div><div className="text-2xl font-bold text-slate-800">{suppliersFor(viewShipmentId).length}</div></div>
-          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">שורות פריטים</div><div className="text-2xl font-bold text-slate-800">{Object.keys(itemTotals).length}</div></div>
-        </div>
-
-        <h3 className="font-bold text-slate-800 mb-2">הזמנות הרכש במשלוח זה</h3>
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-4">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">מס' הזמנה</th><th className="px-5 py-4 font-medium">ספק</th><th className="px-5 py-4 font-medium">מטבע</th><th className="px-5 py-4 font-medium">שורות</th><th className="px-5 py-4 font-medium">סטטוס PO</th></tr></thead>
-            <tbody>
-              {pos.map((po) => {
-                const supplier = data.suppliers.find((s) => s.id === po.supplierId);
-                return (
-                  <tr key={po.id} className="border-t">
-                    <td className="px-5 py-4 font-medium text-slate-800">{po.poNumber}</td>
-                    <td className="px-5 py-4 text-slate-500">{supplier?.name || "-"} {supplier?.country ? `(${supplier.country})` : ""}</td>
-                    <td className="px-5 py-4 text-slate-500">{po.currency}</td>
-                    <td className="px-5 py-4">{po.lines.length}</td>
-                    <td className="px-5 py-4"><Badge tone={PO_STATUSES[po.status]?.tone}>{PO_STATUSES[po.status]?.label}</Badge></td>
-                  </tr>
-                );
-              })}
-              {pos.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">אין עדיין הזמנות רכש משויכות למשלוח זה</td></tr>}
-            </tbody>
-          </table>
-        </div>
-
-        <h3 className="font-bold text-slate-800 mb-2">פריטים וכמויות מרוכזים (כל הספקים יחד)</h3>
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות כוללת</th><th className="px-5 py-4 font-medium">מגיע מספקים</th></tr></thead>
-            <tbody>
-              {Object.values(itemTotals).map((r, i) => (
-                <tr key={i} className="border-t">
-                  <td className="px-5 py-4 font-medium text-slate-800">{r.item?.name || "-"}</td>
-                  <td className="px-5 py-4">{r.qty} {r.item?.unit || ""}</td>
-                  <td className="px-5 py-4 text-slate-500">{[...r.suppliers].join(", ")}</td>
-                </tr>
-              ))}
-              {Object.keys(itemTotals).length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-500">אין עדיין פריטים</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-slate-500 text-xs mt-3">כדי לחשב עלות נחיתה למשלוח הזה, עברו ל"מחשבון יבוא ועליות נחיתה" ובחרו את המשלוח הזה מהרשימה.</p>
-      </div>
-    );
+    return <ShipmentDetail data={data} refresh={refresh} shipment={shipment} onBack={() => setViewShipmentId(null)} />;
   }
 
   return (
@@ -4617,7 +4906,7 @@ function ShipmentsScreen({ data, refresh }) {
           <Field label="שם המשלוח"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder='לדוגמה: מכולה אוגוסט 2026' /></Field>
           <Field label="סטטוס">
             <select className={inputCls} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              {Object.entries(SHIPMENT_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+              {Object.entries(SHIPMENT_STATUSES).filter(([key]) => key !== "received").map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
             </select>
           </Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
@@ -4631,7 +4920,7 @@ function ShipmentsScreen({ data, refresh }) {
           <Field label="שם המשלוח"><input className={inputCls} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></Field>
           <Field label="סטטוס">
             <select className={inputCls} value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
-              {Object.entries(SHIPMENT_STATUSES).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+              {Object.entries(SHIPMENT_STATUSES).filter(([key]) => key !== "received").map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
             </select>
           </Field>
           <Field label="הערות"><textarea className={inputCls} rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></Field>
@@ -5136,19 +5425,20 @@ function emptyExpenseForm() {
     category: "goods", supplierId: "", description: "", invoiceNumber: "",
     expenseDate: new Date().toISOString().slice(0, 10),
     vatMode: "incl", amount: "", vatOverride: false, vatAmountOverride: "",
-    paymentStatus: "pending", paymentMethod: "bank_transfer", notes: "",
+    paymentStatus: "pending", paymentMethod: "bank_transfer", notes: "", shipmentId: "",
   };
 }
 
-function ExpenseModal({ data, existing, onClose, refresh }) {
+function ExpenseModal({ data, existing, onClose, refresh, defaultShipmentId }) {
   const [form, setForm] = useState(() => {
-    if (!existing) return emptyExpenseForm();
+    if (!existing) return { ...emptyExpenseForm(), shipmentId: defaultShipmentId || "" };
     return {
       category: existing.category, supplierId: existing.supplierId || "", description: existing.description,
       invoiceNumber: existing.invoiceNumber, expenseDate: existing.expenseDate,
       vatMode: existing.vatMode, amount: existing.vatMode === "incl" ? String(existing.amountInclVat) : String(existing.amountExclVat),
       vatOverride: true, vatAmountOverride: String(existing.vatAmount),
       paymentStatus: existing.paymentStatus, paymentMethod: existing.paymentMethod || "bank_transfer", notes: existing.notes,
+      shipmentId: existing.shipmentId || "",
     };
   });
   const [error, setError] = useState("");
@@ -5386,7 +5676,7 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
         vatAmount: Math.round(vatAmount * 100) / 100,
         amountInclVat: Math.round(amountInclVat * 100) / 100,
         paymentStatus: form.paymentStatus, paymentMethod: form.paymentStatus === "paid" ? form.paymentMethod : null,
-        notes: form.notes,
+        notes: form.notes, shipmentId: form.shipmentId || null,
       };
       if (existing) await api.updateExpense(existing.id, payload);
       else await api.addExpense(payload);
@@ -5488,6 +5778,12 @@ function ExpenseModal({ data, existing, onClose, refresh }) {
         <select className={inputCls} value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
           <option value="">ללא / לא רלוונטי</option>
           {data.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </Field>
+      <Field label="שיוך למכולה (שילוח / עמיל מכס / נמל / מכס - ייכנס לעלות המוצרים במכולה)">
+        <select className={inputCls} value={form.shipmentId || ""} onChange={(e) => setForm({ ...form, shipmentId: e.target.value })}>
+          <option value="">לא שייך למכולה</option>
+          {data.shipments.map((sh) => <option key={sh.id} value={sh.id}>{sh.name} - {SHIPMENT_STATUSES[sh.status]?.label || sh.status}</option>)}
         </select>
       </Field>
       <Field label="תיאור"><input className={inputCls} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
@@ -6055,8 +6351,23 @@ function POsScreen({ data, refresh, onPrint, prefillItemId, onPrefillConsumed })
     setSupplierId(data.suppliers[0]?.id || "");
     setStatus("draft"); setShipmentId(""); setShippingTerms(""); setNotes("");
     setPaymentTerms("prepaid_100"); setDepositPercent("30"); setNetDays("60"); setDueDate("");
+    applySupplierDefaults(data.suppliers[0]?.id || "");
     setLines([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "", unitPrice: "" }]);
     setError(""); setOpen(true);
+  };
+  // תנאי התשלום הקבועים מכרטיס הספק ממולאים אוטומטית בהזמנה חדשה (ניתן לשנות ידנית)
+  const applySupplierDefaults = (sid) => {
+    const sup = data.suppliers.find((x) => x.id === sid);
+    if (!sup || !sup.defaultPaymentTerms) return;
+    setPaymentTerms(sup.defaultPaymentTerms);
+    if (sup.defaultDepositPercent != null) setDepositPercent(String(sup.defaultDepositPercent));
+    if (sup.defaultNetDays != null) {
+      setNetDays(String(sup.defaultNetDays));
+      if (sup.defaultPaymentTerms === "net_x") {
+        const d = new Date(); d.setDate(d.getDate() + Number(sup.defaultNetDays));
+        setDueDate(d.toISOString().slice(0, 10));
+      }
+    }
   };
   const openEditPO = (po) => {
     setEditingPOId(po.id);
@@ -6222,7 +6533,7 @@ function POsScreen({ data, refresh, onPrint, prefillItemId, onPrefillConsumed })
       {open && (
         <Modal title={editingPOId ? "עריכת הזמנת רכש" : "הזמנת רכש חדשה"} onClose={() => setOpen(false)}>
           <Field label="ספק">
-            <select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+            <select className={inputCls} value={supplierId} onChange={(e) => { setSupplierId(e.target.value); if (!editingPOId) applySupplierDefaults(e.target.value); }}>
               <option value="">בחר ספק...</option>
               {data.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} {s.country ? `(${s.country})` : ""} - {s.currency}</option>)}
             </select>
@@ -6329,26 +6640,41 @@ function POsScreen({ data, refresh, onPrint, prefillItemId, onPrefillConsumed })
 
 function POPaymentsModal({ data, po, refresh, onClose }) {
   const [amount, setAmount] = useState("");
+  const [amountIls, setAmountIls] = useState("");
+  const [feeIls, setFeeIls] = useState("");
+  const [officialRate, setOfficialRate] = useState("");
   const [paidDate, setPaidDate] = useState(new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const sym = CURRENCY_SYMBOLS[po.currency] || po.currency;
+  const isForeign = po.currency !== "ILS";
   const total = poTotalAmount(po);
   const payments = (data.poPayments || []).filter((p) => p.poId === po.id).sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate));
   const paid = payments.reduce((s, p) => s + p.amount, 0);
   const balance = total - paid;
   const depositAmount = po.paymentTerms === "deposit_balance" && po.depositPercent ? total * po.depositPercent / 100 : null;
+  const paidIls = payments.reduce((s, p) => s + (p.amountIls || 0), 0);
+  const paidFxWithIls = payments.filter((p) => p.amountIls).reduce((s, p) => s + p.amount, 0);
+  const totalFees = payments.reduce((s, p) => s + (p.feeIls || 0), 0);
+  const avgRate = paidFxWithIls > 0 ? paidIls / paidFxWithIls : null;
+  const liveRate = Number(amount) > 0 && Number(amountIls) > 0 ? Number(amountIls) / Number(amount) : null;
+  const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
 
   const addPayment = async () => {
     setError("");
     if (!amount || Number(amount) <= 0) { setError("יש להזין סכום תקין"); return; }
+    if (isForeign && (!amountIls || Number(amountIls) <= 0)) { setError('יש להזין כמה ירד מהבנק בש"ח בפועל'); return; }
     setBusy(true);
     try {
-      await api.addPOPayment(po.id, Number(amount), paidDate, note);
+      await api.addPOPayment(po.id, Number(amount), paidDate, note, {
+        amountIls: isForeign ? Number(amountIls) : Number(amount),
+        feeIls: Number(feeIls) || 0,
+        officialRate: officialRate ? Number(officialRate) : null,
+      });
       await refresh();
-      setAmount(""); setNote("");
+      setAmount(""); setAmountIls(""); setFeeIls(""); setOfficialRate(""); setNote("");
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
@@ -6359,38 +6685,67 @@ function POPaymentsModal({ data, po, refresh, onClose }) {
 
   return (
     <Modal title={`תשלומים - ${po.poNumber}`} onClose={onClose}>
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ הזמנה</div><div className="font-bold text-slate-800">{sym}{total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-emerald-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שולם</div><div className="font-bold text-emerald-700">{sym}{paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
-        <div className="bg-amber-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">יתרה</div><div className="font-bold text-amber-800">{sym}{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ הזמנה</div><div className="font-bold text-slate-800">{sym}{fmt(total)}</div></div>
+        <div className="bg-emerald-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שולם</div><div className="font-bold text-emerald-700">{sym}{fmt(paid)}</div></div>
+        <div className="bg-amber-100 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">יתרה</div><div className="font-bold text-amber-800">{sym}{fmt(balance)}</div></div>
       </div>
+      {isForeign && paidIls > 0 && (
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="bg-sky-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">ירד מהבנק</div><div className="font-bold text-slate-800">₪{fmt(paidIls)}</div></div>
+          <div className="bg-sky-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">שער ממוצע בפועל</div><div className="font-bold text-slate-800">{avgRate ? fmt(avgRate, 4) : "-"}</div></div>
+          <div className="bg-sky-50 rounded-xl p-3 text-center"><div className="text-xs text-slate-500 mb-1">סה"כ עמלות</div><div className="font-bold text-slate-800">₪{fmt(totalFees)}</div></div>
+        </div>
+      )}
       {depositAmount != null && (
-        <div className="text-xs text-slate-500 mb-4 bg-sky-100 rounded-xl p-2.5">תנאי תשלום: מקדמה {po.depositPercent}% ({sym}{depositAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}) + יתרה {sym}{(total - depositAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+        <div className="text-xs text-slate-500 mb-4 bg-sky-100 rounded-xl p-2.5">תנאי תשלום: מקדמה {po.depositPercent}% ({sym}{fmt(depositAmount)}) + יתרה {sym}{fmt(total - depositAmount)}</div>
+      )}
+      {po.paymentTerms === "net_x" && (
+        <div className="text-xs text-slate-500 mb-4 bg-sky-100 rounded-xl p-2.5">תנאי תשלום: אחרי {po.netDays} יום{po.dueDate ? ` · מועד תשלום ${new Date(po.dueDate).toLocaleDateString("he-IL")}` : ""}</div>
       )}
 
       <div className="mb-4">
-        <div className="text-sm font-medium text-slate-500 mb-2">היסטוריית תשלומים</div>
+        <div className="text-sm font-medium text-slate-500 mb-2">היסטוריית העברות</div>
         {payments.length === 0 && <div className="text-sm text-slate-500 text-center py-3">עדיין לא נרשמו תשלומים</div>}
-        {payments.map((p) => (
-          <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
-            <div>
-              <div className="font-medium text-slate-800">{sym}{p.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-              <div className="text-xs text-slate-500">{new Date(p.paidDate).toLocaleDateString("he-IL")} {p.note && `· ${p.note}`}</div>
+        {payments.map((p) => {
+          const rate = p.amountIls && p.amount ? p.amountIls / p.amount : null;
+          return (
+            <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
+              <div>
+                <div className="font-medium text-slate-800">{sym}{fmt(p.amount)}{isForeign && p.amountIls ? <span className="text-slate-500 font-normal"> = ₪{fmt(p.amountIls)}</span> : null}</div>
+                <div className="text-xs text-slate-500">
+                  {new Date(p.paidDate).toLocaleDateString("he-IL")}
+                  {isForeign && rate ? ` · שער בפועל ${fmt(rate, 4)}` : ""}
+                  {p.officialRate ? ` · שער יציג ${fmt(p.officialRate, 4)}` : ""}
+                  {rate && p.officialRate ? ` (הפרש ₪${fmt((rate - p.officialRate) * p.amount)})` : ""}
+                  {p.feeIls ? ` · עמלה ₪${fmt(p.feeIls)}` : ""}
+                  {p.note && ` · ${p.note}`}
+                </div>
+              </div>
+              <button onClick={() => removePayment(p.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={15} /></button>
             </div>
-            <button onClick={() => removePayment(p.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={15} /></button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="border-t pt-3">
-        <div className="text-sm font-bold text-slate-700 mb-2">רישום תשלום חדש</div>
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <Field label={`סכום (${sym})`}><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
-          <Field label="תאריך תשלום"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
+        <div className="text-sm font-bold text-slate-700 mb-2">רישום העברה חדשה</div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label={`סכום שהועבר לספק (${sym})`}><input type="number" min="0" step="0.01" className={inputCls} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+          <Field label="תאריך העברה"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
+          {isForeign && <Field label='כמה ירד מהבנק בש"ח (בלי העמלה)'><input type="number" min="0" step="0.01" className={inputCls} value={amountIls} onChange={(e) => setAmountIls(e.target.value)} /></Field>}
+          <Field label='עמלת העברה (₪)'><input type="number" min="0" step="0.01" className={inputCls} value={feeIls} onChange={(e) => setFeeIls(e.target.value)} /></Field>
+          {isForeign && <Field label="שער יציג באותו יום (לא חובה)"><input type="number" min="0" step="0.0001" className={inputCls} value={officialRate} onChange={(e) => setOfficialRate(e.target.value)} /></Field>}
         </div>
+        {isForeign && liveRate && (
+          <div className="text-sm bg-sky-50 rounded-xl px-3 py-2 mb-3">
+            השער שהבנק נתן בפועל: <b>{fmt(liveRate, 4)}</b>
+            {Number(officialRate) > 0 && <> · מול שער יציג {fmt(Number(officialRate), 4)} - הבנק לקח <b>₪{fmt((liveRate - Number(officialRate)) * Number(amount))}</b></>}
+          </div>
+        )}
         <Field label="הערה (לדוגמה: מקדמה 30%, יתרה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
-        <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום תשלום</button>
+        <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום העברה</button>
       </div>
     </Modal>
   );
