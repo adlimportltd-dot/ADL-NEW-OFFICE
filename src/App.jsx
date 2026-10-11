@@ -4612,6 +4612,18 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
     } catch (e) { alert(e.message); } finally { setBusy(false); }
   };
 
+  // מכולה שהסחורה שלה כבר נקלטה ידנית בעבר (למשל דרך "תנועת מלאי"): מסמנים בלי להוסיף מלאי
+  const markManuallyReceived = async () => {
+    if (!confirm(`לסמן את "${shipment.name}" כמכולה שכבר נקלטה ידנית?\n\nלא ייכנס שום מלאי ולא תשתנה שום עלות - רק הזמנות הרכש יסומנו "התקבל" וכפתור הקליטה ייעלם, כדי שלא תהיה קליטה כפולה.`)) return;
+    setBusy(true); setMsg("");
+    try {
+      for (const po of c.pos) { if (po.status !== "received") await api.updatePOStatus(po.id, "received"); }
+      await api.updateShipment(shipment.id, { status: "received" });
+      await refresh();
+      setMsg("המכולה סומנה כנקלטה ידנית - לא נוסף מלאי");
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+
   const doFinalize = async () => {
     if (c.estimated) { alert("עדיין יש ספקים עם יתרה לתשלום - רשמו קודם את התשלום"); return; }
     if (!confirm("לעדכן את עלות הפריטים לעלות הסופית? ההפרש מהעלות המשוערת יתוקן על המלאי הנוכחי.")) return;
@@ -4760,6 +4772,7 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
               </Field>
             </div>
             <button onClick={doReceive} disabled={busy || c.items.length === 0} className={btnPrimary + " flex items-center gap-2 mb-3"}>{busy && <Loader2 size={16} className="animate-spin" />}<Package size={18} /> קליטת המכולה למלאי</button>
+            <button onClick={markManuallyReceived} disabled={busy} className={btnGhost + " text-sm mb-3"}>הסחורה כבר נקלטה ידנית בעבר - סמן בלי להוסיף מלאי</button>
           </div>
         )}
         {received && (shipment.costStatus === "estimated" || costsChanged) && (
