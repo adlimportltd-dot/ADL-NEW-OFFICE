@@ -48,6 +48,7 @@ const mapSupplier = (r) => ({
 const mapShipment = (r) => ({
   id: r.id, name: r.name, status: r.status, notes: r.notes || "", date: r.created_at,
   receivedAt: r.received_at || null, receivedLocationId: r.received_location_id || null, costStatus: r.cost_status || "none",
+  allocationMethod: r.allocation_method || null,
 });
 const mapShipmentItemCost = (r) => ({ id: r.id, shipmentId: r.shipment_id, itemId: r.item_id, qty: Number(r.qty), landedUnitCost: Number(r.landed_unit_cost), costStatus: r.cost_status });
 const mapRateCard = (r) => ({
@@ -724,6 +725,7 @@ async function updateShipment(id, patch) {
   if (patch.name !== undefined) payload.name = patch.name;
   if (patch.status !== undefined) payload.status = patch.status;
   if (patch.notes !== undefined) payload.notes = patch.notes;
+  if (patch.allocationMethod !== undefined) payload.allocation_method = patch.allocationMethod;
   const { error } = await supabase.from("shipments").update(payload).eq("id", id);
   if (error) throw error;
 }
@@ -4531,7 +4533,7 @@ function SuppliersScreen({ data, refresh }) {
 // ==================== חישוב עלות נחיתה למכולה (תשלומים בפועל + הוצאות משויכות) ====================
 // לכל ספק: מה ששולם - לפי השקלים שירדו בפועל; מה שעוד לא שולם - לפי שער הערכה.
 // הוצאות המכולה (ללא מע"מ) + עמלות ההעברה מתחלקות בין הפריטים לפי ערך הסחורה.
-function computeShipmentCosts(data, shipmentId, estRates) {
+function computeShipmentCosts(data, shipmentId, estRates, method = "value") {
   const pos = data.purchaseOrders.filter((p) => p.shipmentId === shipmentId);
   const rateOf = (cur) => (cur === "ILS" ? 1 : Number(estRates[cur]) || DEFAULT_FX_RATES[cur] || 1);
   const poRows = pos.map((po) => {
@@ -4560,8 +4562,10 @@ function computeShipmentCosts(data, shipmentId, estRates) {
     });
   });
   const goodsTotal = Object.values(byItem).reduce((s, x) => s + x.valueIls, 0);
+  const qtyTotal = Object.values(byItem).reduce((s, x) => s + x.qty, 0);
   const items = Object.values(byItem).filter((x) => x.qty > 0).map((x) => {
-    const share = goodsTotal > 0 ? x.valueIls / goodsTotal : 0;
+    // חלוקת ההוצאות: לפי כמות (כל ק"ג/יחידה נושא אותו חלק) או לפי ערך הסחורה
+    const share = method === "quantity" ? (qtyTotal > 0 ? x.qty / qtyTotal : 0) : (goodsTotal > 0 ? x.valueIls / goodsTotal : 0);
     const allocated = overhead * share;
     const landedTotal = x.valueIls + allocated;
     const currentStock = Object.entries(data.stock || {}).reduce((s, [k, q]) => (k.startsWith(x.itemId + "|") ? s + q : s), 0);
@@ -4570,7 +4574,7 @@ function computeShipmentCosts(data, shipmentId, estRates) {
     const newAvg = currentStock > 0 && currentCost != null ? (currentStock * currentCost + x.qty * unitCost) / (currentStock + x.qty) : unitCost;
     return { ...x, share, allocated, landedTotal, unitCost, goodsUnitIls: x.valueIls / x.qty, currentStock, currentCost, newAvg };
   });
-  return { pos, poRows, expenses, expensesTotal, feesTotal, overhead, goodsTotal, items, estimated: poRows.some((r) => r.estimated), total: goodsTotal + overhead };
+  return { pos, poRows, expenses, expensesTotal, feesTotal, overhead, goodsTotal, qtyTotal, items, estimated: poRows.some((r) => r.estimated), total: goodsTotal + overhead };
 }
 
 function ShipmentDetail({ data, refresh, shipment, onBack }) {
@@ -4583,7 +4587,19 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const c = computeShipmentCosts(data, shipment.id, estRates);
+  // ברירת מחדל: כשכל הפריטים באותה יחידה (הכל ק"ג / הכל יחידות) - חלוקה לפי כמות; מכולה מעורבת - לפי ערך
+  const autoMethod = (() => {
+    const units = new Set();
+    data.purchaseOrders.filter((p) => p.shipmentId === shipment.id).forEach((po) => po.lines.forEach((l) => units.add(data.items.find((i) => i.id === l.itemId)?.unit || "")));
+    return units.size === 1 ? "quantity" : "value";
+  })();
+  const [method, setMethod] = useState(shipment.allocationMethod || autoMethod);
+  const saveMethod = async (m) => {
+    setMethod(m);
+    try { await api.updateShipment(shipment.id, { allocationMethod: m }); await refresh(); } catch (e) { alert(e.message); }
+  };
+  const c = computeShipmentCosts(data, shipment.id, estRates, method);
+  const manualReceived = shipment.status === "received" && !shipment.receivedAt;
   const fmt = (n, d = 2) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: d });
   const received = !!shipment.receivedAt;
   const allPOsAlreadyReceived = c.pos.length > 0 && c.pos.every((p) => p.status === "received");
@@ -4596,6 +4612,11 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
   const doReceive = async () => {
     if (!locationId) { alert("יש לבחור מחסן"); return; }
     if (c.items.length === 0) { alert("אין פריטים בהזמנות הרכש של המכולה"); return; }
+    const jumps = c.items.filter((it) => it.currentCost && Math.abs(it.unitCost - it.currentCost) / it.currentCost > 0.5);
+    if (jumps.length > 0) {
+      const list = jumps.map((it) => `• ${it.item?.name}: היום ₪${it.currentCost.toFixed(2)} ← במכולה ₪${it.unitCost.toFixed(2)}`).join("\n");
+      if (!confirm(`⚠️ אזהרה: בפריטים הבאים העלות במכולה שונה ביותר מ-50% מהעלות שיש היום במערכת.\nבדרך כלל זה אומר שהשורה בהזמנה מחוברת לפריט ביחידה לא נכונה (למשל ק"ג מול ג'ריקן).\n\n${list}\n\nלהמשיך בכל זאת?`)) return;
+    }
     const loc = data.locations.find((l) => l.id === locationId);
     const txt = `לקלוט את המכולה "${shipment.name}" למחסן "${loc?.name}"?\n\n` +
       `${c.items.length} פריטים ייכנסו למלאי, ועלות כל פריט תתעדכן לפי ממוצע משוקלל.\n` +
@@ -4604,6 +4625,7 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
     if (!confirm(txt)) return;
     setBusy(true); setMsg("");
     try {
+      if (shipment.allocationMethod !== method) await api.updateShipment(shipment.id, { allocationMethod: method });
       await api.receiveShipment(shipment.id, locationId,
         c.items.map((it) => ({ item_id: it.itemId, qty: it.qty, unit_cost: Math.round(it.unitCost * 10000) / 10000, supplier_id: it.supplierId })),
         c.estimated ? "estimated" : "final");
@@ -4635,7 +4657,8 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
     } catch (e) { alert(e.message); } finally { setBusy(false); }
   };
 
-  const costBadge = shipment.costStatus === "final" ? <Badge tone="emerald">עלות סופית</Badge>
+  const costBadge = manualReceived ? <Badge tone="gray">נקלט ידנית בעבר (לפני המודול החדש)</Badge>
+    : shipment.costStatus === "final" ? <Badge tone="emerald">עלות סופית</Badge>
     : shipment.costStatus === "estimated" ? <Badge tone="amber">עלות משוערת</Badge>
     : c.estimated ? <Badge tone="amber">עלות משוערת (יש יתרות לתשלום)</Badge> : <Badge tone="emerald">כל הספקים שולמו</Badge>;
 
@@ -4690,7 +4713,7 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
         </table>
       </div>
 
-      {c.estimated && currencies.length > 0 && (
+      {c.estimated && currencies.length > 0 && !manualReceived && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
           <div className="font-bold text-slate-800 mb-1">שער להערכת היתרה שעוד לא שולמה</div>
           <p className="text-slate-500 text-sm mb-3">החלק ששולם מחושב לפי השקלים שירדו בפועל. רק היתרה הפתוחה מוערכת לפי השער כאן, וכשתשלמו - העלות תתעדכן לפי השער האמיתי.</p>
@@ -4724,13 +4747,23 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
         </table>
       </div>
 
-      <h3 className="font-bold text-slate-800 mb-2">עלות סופית לכל מוצר (חלוקת ההוצאות לפי ערך הסחורה)</h3>
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <h3 className="font-bold text-slate-800">עלות סופית לכל מוצר</h3>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-slate-500">חלוקת הוצאות:</span>
+          <button disabled={received} onClick={() => saveMethod("quantity")} className={`rounded-xl px-3 py-1.5 border font-medium ${method === "quantity" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי כמות (ק"ג / יחידות)</button>
+          <button disabled={received} onClick={() => saveMethod("value")} className={`rounded-xl px-3 py-1.5 border font-medium ${method === "value" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>לפי ערך</button>
+        </div>
+      </div>
+      {method === "quantity" && c.qtyTotal > 0 && (
+        <p className="text-sm text-slate-500 mb-2">הוצאות + עמלות ₪{fmt(c.overhead)} ÷ {fmt(c.qtyTotal)} = <b>₪{fmt(c.overhead / c.qtyTotal)}</b> לכל ק"ג / יחידה</p>
+      )}
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden overflow-x-auto mb-4">
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-50 text-slate-500 text-right">
             <th className="px-4 py-3 font-medium">פריט</th><th className="px-4 py-3 font-medium">כמות</th><th className="px-4 py-3 font-medium">מחיר ספק ליח' (₪)</th>
             <th className="px-4 py-3 font-medium">הוצאות ליח'</th><th className="px-4 py-3 font-medium">עלות נחיתה ליח'</th>
-            {!received && <><th className="px-4 py-3 font-medium">עלות היום במערכת</th><th className="px-4 py-3 font-medium">מלאי היום</th><th className="px-4 py-3 font-medium">עלות חדשה (ממוצע משוקלל)</th></>}
+            {!received && !manualReceived && <><th className="px-4 py-3 font-medium">עלות היום במערכת</th><th className="px-4 py-3 font-medium">מלאי היום</th><th className="px-4 py-3 font-medium">עלות חדשה (ממוצע משוקלל)</th></>}
             {received && <th className="px-4 py-3 font-medium">נקלט בעלות</th>}
           </tr></thead>
           <tbody>
@@ -4743,7 +4776,7 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
                   <td className="px-4 py-3">₪{fmt(it.goodsUnitIls)}</td>
                   <td className="px-4 py-3">₪{fmt(it.allocated / it.qty)}</td>
                   <td className="px-4 py-3 font-bold text-amber-800 whitespace-nowrap">₪{fmt(it.unitCost)}{it.item?.unit && it.item.unit !== "יחידה" ? <span className="text-xs font-normal text-slate-500"> / {it.item.unit}</span> : null}</td>
-                  {!received && <>
+                  {!received && !manualReceived && <>
                     <td className="px-4 py-3 text-slate-500">{it.currentCost != null ? `₪${fmt(it.currentCost)}` : "-"}</td>
                     <td className="px-4 py-3 text-slate-500">{fmt(it.currentStock)}</td>
                     <td className="px-4 py-3 font-medium">₪{fmt(it.newAvg)}</td>
