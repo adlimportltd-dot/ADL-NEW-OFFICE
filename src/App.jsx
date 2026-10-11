@@ -6137,7 +6137,7 @@ function PaymentsHistory({ data, refresh, onOpenInvoice }) {
                 <td className="px-4 py-3">{p.inv ? <button onClick={() => onOpenInvoice(p.inv)} className="text-amber-600 hover:underline">{p.inv.invoiceNumber}</button> : "-"}{p.inv?.status === "void" && <span className="text-xs text-rose-600 mr-1">(מבוטלת)</span>}</td>
                 <td className={`px-4 py-3 font-bold whitespace-nowrap ${p.amount < 0 ? "text-rose-600" : ""}`}>₪{fmt(p.amount)}</td>
                 <td className="px-4 py-3"><PaymentMethodTag method={p.method} /></td>
-                <td className="px-4 py-3 text-slate-500">{p.note}</td>
+                <td className="px-4 py-3 text-slate-500">{p.note && <div>{p.note}</div>}{p.inv?.notes && p.inv.notes !== p.note && <div className="text-xs text-slate-400 mt-0.5">{p.inv.notes}</div>}</td>
                 <td className="px-4 py-3 text-left whitespace-nowrap">
                   {isMovable(p) && <button onClick={() => setMoving(p)} className="text-amber-600 hover:underline font-medium text-xs ml-3 inline-flex items-center gap-1"><ArrowLeftRight size={13} /> העברה לחשבונית אחרת</button>}
                   <button onClick={() => remove(p)} title="מחיקת התשלום" className="text-gray-400 hover:text-rose-600 align-middle"><Trash2 size={15} /></button>
