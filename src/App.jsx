@@ -2456,7 +2456,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
                 <div className="grid grid-cols-6 gap-1.5 items-center">
                   <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
                     <option value="">פריט...</option>
-                    {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                    {data.items.filter((it) => !isEmptyBulkKg(it, data.stock) || it.id === l.itemId).map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
                   </select>
                   <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
                   <input type="number" min="0" step="0.01" placeholder={priceMode === "excl" ? 'מחיר לפני מע"מ' : 'מחיר כולל מע"מ'} className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
@@ -3176,7 +3176,7 @@ function ReturnExchangeModal({ data, customerId, order, creditBalance, onClose, 
                 <label className="block text-xs font-semibold text-slate-500 mb-1">מוצר חדש</label>
                 <select className={inputCls + " !py-2"} value={n.itemId} onChange={(e) => updateNew(n.key, { itemId: e.target.value })}>
                   <option value="">בחר מוצר...</option>
-                  {data.items.map((i) => <option key={i.id} value={i.id}>{i.name}{newLocationId ? ` (במלאי: ${stockAt(i.id, newLocationId)})` : ""}</option>)}
+                  {data.items.filter((i) => !isEmptyBulkKg(i, data.stock) || i.id === n.itemId).map((i) => <option key={i.id} value={i.id}>{i.name}{newLocationId ? ` (במלאי: ${stockAt(i.id, newLocationId)})` : ""}</option>)}
                 </select>
               </div>
               <div className="col-span-4 sm:col-span-2">
@@ -3287,7 +3287,7 @@ function EditOrderLineModal({ data, customerId, order, line, onClose, refresh })
       <Field label="מוצר">
         <select className={inputCls} value={itemId} onChange={(e) => setItemId(e.target.value)}>
           <option value="">בחר מוצר...</option>
-          {data.items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+          {data.items.filter((i) => !isEmptyBulkKg(i, data.stock) || i.id === itemId).map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
         </select>
       </Field>
       <div className="grid grid-cols-2 gap-2">
@@ -5358,7 +5358,7 @@ function QuoteBuilderModal({ data, customerId, leadId, refresh, onClose, onCreat
             <div className="grid grid-cols-6 gap-1.5 items-center">
               <select className={inputCls + " col-span-3 !py-2 text-sm"} value={l.itemId} onChange={(e) => onPickItem(l.id, e.target.value)}>
                 <option value="">פריט...</option>
-                {data.items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                {data.items.filter((it) => !isEmptyBulkKg(it, data.stock) || it.id === l.itemId).map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
               </select>
               <input type="number" min="1" placeholder="כמות" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} />
               <input type="number" min="0" step="0.01" placeholder="מחיר (₪)" className={inputCls + " col-span-1 !py-2 text-sm"} value={l.unitPrice} onChange={(e) => setLine(l.id, { unitPrice: e.target.value })} />
