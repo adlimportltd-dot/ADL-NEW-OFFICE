@@ -1351,6 +1351,29 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   );
 }
 
+// מלאי במינוס (אחרי "מכירה במינוס") - רשימה לתיקון בלוח הבקרה
+const negativeStockRows = (data) => Object.entries(data.stock || {}).filter(([, q]) => q < 0).map(([key, q]) => {
+  const [itemId, locationId] = key.split("|");
+  return { key, qty: q, item: data.items.find((i) => i.id === itemId), location: data.locations.find((l) => l.id === locationId) };
+}).filter((r) => r.item);
+
+function NegativeStockCard({ data }) {
+  const neg = negativeStockRows(data);
+  if (neg.length === 0) return null;
+  return (
+    <div className="bg-rose-50 border border-rose-200 rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-2 px-5 pt-4 pb-2 text-rose-700 font-semibold"><TriangleAlert size={18} /> מלאי במינוס – לתקן ({neg.length})</div>
+      <div className="px-5 pb-1 text-xs text-rose-700/80">נוצר ממכירה במינוס. יש לסדר ע"י המרת אריזות, קליטה או ספירת מלאי.</div>
+      {neg.map((r) => (
+        <div key={r.key} className="flex items-center justify-between gap-3 px-5 py-2.5 border-t border-rose-100 text-sm">
+          <div className="min-w-0"><span className="font-medium text-slate-800">{r.item.name}</span><span className="text-xs text-slate-500"> · {r.location?.name || "מיקום"}</span></div>
+          <b className="text-rose-700 tabular-nums shrink-0" dir="ltr">{r.qty}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ==================== Dashboard (wrapper: modern / classic) ====================
 // כל משתמש בוחר לעצמו תצוגה (נשמר בדפדפן שלו בלבד). ברירת מחדל: התצוגה החדשה.
 const UI_STYLE_KEY = "adl_ui_style";
@@ -1466,6 +1489,8 @@ function DashboardModern({ data, onExport, isAdmin, onQuickPO, onSwitchClassic, 
           {isAdmin && <button onClick={() => onNavigate("po")} className="rounded-xl px-4 py-2 text-sm font-semibold bg-white border border-gray-300 text-slate-600 hover:border-amber-400 hover:text-amber-700 transition">הזמנת רכש</button>}
         </div>
       </div>
+
+      <NegativeStockCard data={data} />
 
       <div className={`grid grid-cols-2 gap-3.5 sm:gap-4 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         {kpis.map((k, i) => {
@@ -1671,6 +1696,7 @@ function DashboardClassic({ data, onExport, isAdmin, onQuickPO }) {
 
   return (
     <div className="space-y-5">
+      <NegativeStockCard data={data} />
       {isAdmin && cashflowAlerts.length > 0 && (
         <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b flex items-center gap-2"><Database size={18} className="text-amber-600" /><h3 className="font-bold text-slate-800">מרכז התראות תזרים</h3></div>
@@ -2479,7 +2505,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   const [newCustomerForm, setNewCustomerForm] = useState({ name: "", phone: "", address: "", clientType: "private" });
   const [sourceLocationId, setSourceLocationId] = useState("");
   const [lines, setLines] = useState([{ id: Math.random().toString(36).slice(2), itemId: "", qty: "1", unitPrice: "" }]);
-  const [note, setNote] = useState("");
+  const [noteState, setNote] = useState("");
   const [priceMode, setPriceMode] = useState("excl"); // excl = prices before VAT, incl = prices include VAT
   const [vatRate, setVatRate] = useState(String(data.companySettings.vatRate ?? 18));
   const [paidNow, setPaidNow] = useState(true); // false = מכירה בחשבון פתוח (חוב), נכנס לדוח חובות וגבייה
@@ -2488,6 +2514,9 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(null); // { customerId, total }
+  // מכירה במינוס: כשאין מספיק מלאי - חלון אישור עם סיבה חובה (טעות בגריעה / מלאי לא עודכן)
+  const [negConfirm, setNegConfirm] = useState(null); // [{ name, qty, available }]
+  const [negReason, setNegReason] = useState("");
 
   const warehouse = data.locations.find((l) => l.type === "warehouse");
   const vehicles = data.locations.filter((l) => l.type === "vehicle");
@@ -2565,18 +2594,27 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
-  const submit = async () => {
+  const submit = async (negativeReason = "") => {
+    const noteInput = noteState;
     setError("");
     if (!customerId) { setError("יש לבחור לקוח"); return; }
     if (!sourceLocationId) { setError("יש לבחור מיקום מקור"); return; }
     const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
     if (validLines.length === 0) { setError("יש להוסיף לפחות שורת מוצר אחת"); return; }
-    const overStock = validLines.find((l) => Number(l.qty) > stockOf(l.itemId));
-    if (overStock) {
-      const it = data.items.find((i) => i.id === overStock.itemId);
-      setError(`אין מספיק מלאי ל"${it?.name}" במיקום שנבחר (זמין: ${stockOf(overStock.itemId)})`);
+    // סכימה לפי פריט (אם אותו פריט מופיע בכמה שורות)
+    const qtyByItem = {};
+    validLines.forEach((l) => { qtyByItem[l.itemId] = (qtyByItem[l.itemId] || 0) + Number(l.qty); });
+    const shortages = Object.entries(qtyByItem).filter(([itemId, q]) => q > stockOf(itemId)).map(([itemId, q]) => ({
+      name: data.items.find((i) => i.id === itemId)?.name || "פריט", qty: q, available: stockOf(itemId),
+    }));
+    if (shortages.length > 0 && !negativeReason) {
+      setNegReason("");
+      setNegConfirm(shortages);
       return;
     }
+    const note = negativeReason
+      ? [noteInput, `⚠️ מכירה במינוס: ${negativeReason}`].filter(Boolean).join(" - ")
+      : noteInput;
     if (hasOverride && effectiveTotal < 0) { setError("הסכום הסופי לא יכול להיות שלילי"); return; }
     setBusy(true);
     try {
@@ -2778,11 +2816,29 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
-        <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Field label="הערה (לא חובה)"><input className={inputCls} value={noteState} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
 
       {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
-      <button onClick={submit} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2 text-lg py-3.5"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת הזמנה ועדכון מלאי אוטומטי</button>
+      <button onClick={() => submit()} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2 text-lg py-3.5"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת הזמנה ועדכון מלאי אוטומטי</button>
+
+      {negConfirm && (
+        <Modal title="אין מספיק מלאי" onClose={() => setNegConfirm(null)}>
+          <div className="space-y-3">
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-800 space-y-1">
+              {negConfirm.map((s, i) => (
+                <div key={i}><b>{s.name}</b>: מבקשים {s.qty}, במלאי {s.available} → אחרי המכירה: <b>{s.available - s.qty}</b></div>
+              ))}
+            </div>
+            <p className="text-sm text-slate-600">אפשר לבצע את המכירה בכל זאת - המלאי ייכנס למינוס ויופיע בלוח הבקרה תחת "מלאי במינוס – לתקן" עד שיסודר (למשל ע"י המרת אריזות או קליטה).</p>
+            <Field label="סיבה (חובה)"><input className={inputCls} value={negReason} onChange={(e) => setNegReason(e.target.value)} placeholder='למשל: פירקנו חבית לגלונים ולא עודכן' /></Field>
+            <div className="flex gap-2">
+              <button disabled={busy || !negReason.trim()} onClick={() => { const r = negReason.trim(); setNegConfirm(null); submit(r); }} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl px-4 py-3 transition disabled:opacity-40 disabled:cursor-not-allowed">למכור במינוס</button>
+              <button onClick={() => setNegConfirm(null)} className={btnGhost + " flex-1"}>ביטול</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
