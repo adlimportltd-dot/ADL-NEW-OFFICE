@@ -5,7 +5,7 @@ import {
   CircleCheck, CircleX, Trash2, ChevronLeft, ChevronDown, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
-  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History, Undo2, Repeat,
+  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History, Undo2, Repeat, Eye, EyeOff,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
@@ -1351,8 +1351,258 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   );
 }
 
-// ==================== Dashboard ====================
-function Dashboard({ data, onExport, isAdmin, onQuickPO }) {
+// ==================== Dashboard (wrapper: modern / classic) ====================
+// כל משתמש בוחר לעצמו תצוגה (נשמר בדפדפן שלו בלבד). ברירת מחדל: התצוגה החדשה.
+const UI_STYLE_KEY = "adl_ui_style";
+const PRIVACY_KEY = "adl_privacy";
+const readPref = (key, fallback) => { try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; } };
+const writePref = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
+
+function Dashboard({ data, onExport, isAdmin, onQuickPO, uiStyle, onUiStyleChange, onNavigate, userName }) {
+  if (uiStyle === "classic") {
+    return (
+      <div className="space-y-3">
+        <div className="flex justify-end">
+          <button onClick={() => onUiStyleChange("modern")} className="text-xs font-semibold text-amber-700 hover:underline">מעבר לתצוגה החדשה</button>
+        </div>
+        <DashboardClassic data={data} onExport={onExport} isAdmin={isAdmin} onQuickPO={onQuickPO} />
+      </div>
+    );
+  }
+  return <DashboardModern data={data} onExport={onExport} isAdmin={isAdmin} onQuickPO={onQuickPO} onSwitchClassic={() => onUiStyleChange("classic")} onNavigate={onNavigate} userName={userName} />;
+}
+
+function DashboardModern({ data, onExport, isAdmin, onQuickPO, onSwitchClassic, onNavigate, userName }) {
+  const [privacy, setPrivacyState] = useState(() => readPref(PRIVACY_KEY, "on") === "on");
+  const setPrivacy = (on) => { setPrivacyState(on); writePref(PRIVACY_KEY, on ? "on" : "off"); };
+  const [showAllLow, setShowAllLow] = useState(false);
+  const [showTable, setShowTable] = useState(false);
+
+  const { locations, stock } = data;
+  const items = data.items.filter((it) => !isEmptyBulkKg(it, data.stock));
+  const warehouse = locations.find((l) => l.type === "warehouse");
+  const vehicles = locations.filter((l) => l.type === "vehicle");
+  const rows = items.map((item) => {
+    const whQty = stock[`${item.id}|${warehouse?.id}`] || 0;
+    const vehicleQty = vehicles.reduce((s, v) => s + (stock[`${item.id}|${v.id}`] || 0), 0);
+    const total = whQty + vehicleQty;
+    return { item, whQty, vehicleQty, total, low: total < item.minThreshold };
+  });
+  const totalUnits = rows.reduce((s, r) => s + r.total, 0);
+  const stockValue = rows.reduce((s, r) => s + r.total * (r.item.unitCost || 0), 0);
+  const lowStock = rows.filter((r) => r.low).sort((a, b) => (a.total / (a.item.minThreshold || 1)) - (b.total / (b.item.minThreshold || 1)));
+
+  const now = new Date(new Date().toDateString());
+  const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
+  const dayDiff = (d) => Math.round((d - now) / 86400000);
+
+  // חובות לקוחות באיחור - מקובצים לפי לקוח
+  const overdueInvoices = isAdmin ? data.customerInvoices.filter((inv) => isOpenInvoice(data, inv) && new Date(inv.dueDate) < now) : [];
+  const overdueTotal = overdueInvoices.reduce((s, inv) => s + invoiceBalance(data, inv), 0);
+  const debtByCustomer = {};
+  overdueInvoices.forEach((inv) => {
+    const key = inv.customerId || "none";
+    const g = debtByCustomer[key] || (debtByCustomer[key] = { name: data.customers.find((c) => c.id === inv.customerId)?.name || "לקוח", amount: 0, count: 0, maxDays: 0 });
+    g.amount += invoiceBalance(data, inv);
+    g.count += 1;
+    g.maxDays = Math.max(g.maxDays, -dayDiff(new Date(inv.dueDate)));
+  });
+  const topDebts = Object.values(debtByCustomer).sort((a, b) => b.amount - a.amount).slice(0, 5);
+
+  // תשלומים לספקים: באיחור או עד 30 יום קדימה
+  const upcomingPayments = isAdmin ? data.purchaseOrders.map((po) => {
+    const balance = poTotalAmount(po) - poPaidAmount(data, po.id);
+    if (balance <= 0.01 || !po.dueDate) return null;
+    const due = new Date(po.dueDate);
+    if (due > in30) return null;
+    return { po, balance, due, days: dayDiff(due), supplier: data.suppliers.find((s) => s.id === po.supplierId)?.name || "ספק", sym: CURRENCY_SYMBOLS[po.currency] || po.currency || "₪" };
+  }).filter(Boolean).sort((a, b) => a.due - b.due) : [];
+  const payByCurrency = {};
+  upcomingPayments.forEach((p) => { payByCurrency[p.sym] = (payByCurrency[p.sym] || 0) + p.balance; });
+
+  const fmt0 = (n) => Math.round(n).toLocaleString();
+  const money = (sym, n) => (privacy ? `${sym}•••••` : `${sym}${fmt0(n)}`);
+  const secret = (txt) => (privacy ? "•••" : txt);
+  const supplierName = (txt) => (privacy ? "ספק •••" : txt);
+  const payTotalLabel = Object.keys(payByCurrency).length === 0 ? "—" : Object.entries(payByCurrency).map(([sym, n]) => money(sym, n)).join(" + ");
+  const firstPay = upcomingPayments[0];
+
+  const firstName = (userName || "").split(" ")[0];
+  const todayLabel = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const avatarTones = ["bg-orange-50 text-orange-700", "bg-blue-50 text-blue-700", "bg-emerald-50 text-emerald-700", "bg-violet-50 text-violet-700", "bg-pink-50 text-pink-700"];
+  const daysLabel = (d) => (d < 0 ? `באיחור ${-d} ימים` : d === 0 ? "היום" : `עוד ${d} ימים`);
+
+  const kpis = isAdmin ? [
+    { label: "ערך מלאי", value: money("₪", stockValue), sub: <>{secret(totalUnits.toLocaleString())} יחידות · {locations.length} מיקומים</>, icon: Package, bar: "bg-emerald-600", ic: "bg-emerald-50 text-emerald-600" },
+    { label: "חובות באיחור", value: money("₪", overdueTotal), sub: `${overdueInvoices.length} חשבוניות פתוחות`, icon: Wallet, bar: "bg-rose-600", ic: "bg-rose-50 text-rose-600", valueCls: "text-rose-600" },
+    { label: "לתשלום לספקים", value: payTotalLabel, sub: firstPay ? <>{supplierName(firstPay.supplier)} · עד {firstPay.due.toLocaleDateString("he-IL")}</> : "אין תשלומים ב-30 הימים הקרובים", icon: CreditCard, bar: "bg-blue-600", ic: "bg-blue-50 text-blue-600" },
+    { label: "מלאי נמוך", value: `${lowStock.length} פריטים`, sub: "מתחת לסף המינימלי", icon: TriangleAlert, bar: "bg-amber-500", ic: "bg-amber-50 text-amber-600" },
+  ] : [
+    { label: "סה\"כ יחידות במלאי", value: totalUnits.toLocaleString(), sub: `${items.length} פריטים בקטלוג`, icon: Package, bar: "bg-emerald-600", ic: "bg-emerald-50 text-emerald-600" },
+    { label: "מיקומים פעילים", value: String(locations.length), sub: "מחסן ורכבים", icon: Warehouse, bar: "bg-blue-600", ic: "bg-blue-50 text-blue-600" },
+    { label: "מלאי נמוך", value: `${lowStock.length} פריטים`, sub: "מתחת לסף המינימלי", icon: TriangleAlert, bar: "bg-amber-500", ic: "bg-amber-50 text-amber-600" },
+  ];
+
+  const cardH = "flex items-center justify-between px-5 pt-4 pb-3";
+  const rowCls = "flex items-center justify-between gap-3 px-5 py-3 border-t border-slate-100 hover:bg-slate-50/70 transition";
+  const linkCls = "text-xs font-semibold text-amber-700 hover:underline";
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="text-xs text-slate-500 mb-1">{todayLabel}</div>
+          <h1 className="text-2xl sm:text-[27px] font-light text-slate-800">שלום{firstName ? <>, <b className="font-semibold">{firstName}</b></> : ""}</h1>
+          {isAdmin && privacy && <div className="text-xs text-amber-700 mt-1">מצב פרטיות פעיל – סכומים ושמות ספקים מוסתרים</div>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <button onClick={() => setPrivacy(!privacy)} className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold border transition ${privacy ? "bg-amber-50 border-amber-400 text-amber-700" : "bg-white border-gray-300 text-slate-600 hover:border-amber-400"}`}>
+              {privacy ? <EyeOff size={16} /> : <Eye size={16} />} {privacy ? "הצג סכומים" : "הסתר סכומים"}
+            </button>
+          )}
+          {isAdmin && <button onClick={() => onNavigate("sale")} className="rounded-xl px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/30 transition">+ מכירה חדשה</button>}
+          {isAdmin && <button onClick={() => onNavigate("transaction")} className="rounded-xl px-4 py-2 text-sm font-semibold bg-white border border-gray-300 text-slate-600 hover:border-amber-400 hover:text-amber-700 transition">תנועת מלאי</button>}
+          {isAdmin && <button onClick={() => onNavigate("po")} className="rounded-xl px-4 py-2 text-sm font-semibold bg-white border border-gray-300 text-slate-600 hover:border-amber-400 hover:text-amber-700 transition">הזמנת רכש</button>}
+        </div>
+      </div>
+
+      <div className={`grid grid-cols-2 gap-3.5 sm:gap-4 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        {kpis.map((k, i) => {
+          const Icon = k.icon;
+          return (
+            <div key={i} className="relative overflow-hidden bg-white rounded-2xl border p-4 sm:p-5 min-w-0 transition hover:-translate-y-0.5 hover:shadow-md">
+              <div className={`absolute top-0 inset-x-0 h-[3px] ${k.bar}`} />
+              <div className="flex items-center justify-between">
+                <span className="text-xs sm:text-[13px] font-medium text-slate-500">{k.label}</span>
+                <span className={`p-2 rounded-xl ${k.ic}`}><Icon size={17} /></span>
+              </div>
+              <div className={`text-xl sm:text-[28px] font-light mt-3 mb-1.5 tabular-nums truncate ${privacy && isAdmin && i < 3 ? "text-slate-400 tracking-widest" : k.valueCls || "text-slate-800"}`}>{k.value}</div>
+              <div className="text-xs text-slate-500 truncate">{k.sub}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className={`grid gap-5 ${isAdmin ? "lg:grid-cols-[1.35fr_1fr]" : ""}`}>
+        {isAdmin && (
+          <div className="bg-white rounded-2xl border overflow-hidden self-start">
+            <div className={cardH}>
+              <h3 className="font-semibold text-slate-800 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-rose-600" /> חובות גדולים בפיגור</h3>
+              {overdueInvoices.length > 0 && <button onClick={() => onNavigate("receivables")} className={linkCls}>כל {overdueInvoices.length} החשבוניות ←</button>}
+            </div>
+            {topDebts.length === 0 && <div className="px-5 py-6 border-t border-slate-100 text-sm text-slate-500">אין חובות באיחור</div>}
+            {topDebts.map((d, i) => (
+              <div key={i} className={rowCls}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-9 h-9 rounded-full grid place-items-center text-sm font-semibold shrink-0 ${avatarTones[i % avatarTones.length]}`}>{d.name.trim().charAt(0)}</span>
+                  <div className="min-w-0">
+                    <div className="font-medium text-slate-800 truncate">{d.name}</div>
+                    <div className="text-xs text-slate-500">{d.count === 1 ? "חשבונית אחת" : `${d.count} חשבוניות`}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 shrink-0">
+                  <span className={`text-xs ${d.maxDays > 30 ? "text-rose-600 font-medium" : "text-slate-500"}`}>{d.maxDays} ימים</span>
+                  <span className={`tabular-nums font-medium ${privacy ? "text-slate-400 tracking-widest" : "text-slate-800"}`}>{money("₪", d.amount)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-5">
+          <div className="bg-white rounded-2xl border overflow-hidden">
+            <div className={cardH}>
+              <h3 className="font-semibold text-slate-800 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500" /> מלאי נמוך</h3>
+              {lowStock.length > 5 && <button onClick={() => setShowAllLow(!showAllLow)} className={linkCls}>{showAllLow ? "הצג פחות" : `הצג את כל ${lowStock.length} ←`}</button>}
+            </div>
+            {lowStock.length === 0 && <div className="px-5 py-6 border-t border-slate-100 text-sm text-slate-500">כל הפריטים מעל הסף</div>}
+            {(showAllLow ? lowStock : lowStock.slice(0, 5)).map((r) => {
+              const pct = Math.max(4, Math.min(100, (r.total / (r.item.minThreshold || 1)) * 100));
+              return (
+                <div key={r.item.id} className={rowCls}>
+                  <div className="min-w-0">
+                    <div className="font-medium text-slate-800 truncate">{r.item.name}</div>
+                    <div className="h-1.5 w-28 sm:w-36 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+                      <div className={`h-full rounded-full ${pct <= 40 ? "bg-gradient-to-l from-rose-600 to-rose-400" : "bg-gradient-to-l from-amber-500 to-amber-300"}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs text-slate-600 tabular-nums"><b className="font-semibold">{r.total}</b> / {r.item.minThreshold}</span>
+                    {isAdmin && onQuickPO && <button onClick={() => onQuickPO(r.item.id)} className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-500 hover:text-white hover:border-amber-500 rounded-lg px-3 py-1 transition">להזמין</button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {isAdmin && (
+            <div className="bg-white rounded-2xl border overflow-hidden">
+              <div className={cardH}>
+                <h3 className="font-semibold text-slate-800 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-600" /> תשלומים קרובים לספקים</h3>
+                <button onClick={() => onNavigate("po")} className={linkCls}>הזמנות רכש ←</button>
+              </div>
+              {upcomingPayments.length === 0 && <div className="px-5 py-6 border-t border-slate-100 text-sm text-slate-500">אין תשלומים ב-30 הימים הקרובים</div>}
+              {upcomingPayments.slice(0, 5).map((p) => (
+                <div key={p.po.id} className={rowCls}>
+                  <div className="min-w-0">
+                    <div className="font-medium text-slate-800 truncate">{supplierName(p.supplier)}</div>
+                    <div className="text-xs text-slate-500">{p.po.poNumber} · {p.due.toLocaleDateString("he-IL")}</div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${p.days < 0 ? "bg-rose-50 text-rose-600" : "bg-blue-50 text-blue-600"}`}>{daysLabel(p.days)}</span>
+                    <span className={`tabular-nums font-medium ${privacy ? "text-slate-400 tracking-widest" : "text-slate-800"}`}>{money(p.sym, p.balance)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+          <button onClick={() => setShowTable(!showTable)} className="font-semibold text-slate-800 flex items-center gap-2">
+            <ChevronDown size={18} className={`transition ${showTable ? "rotate-180" : ""}`} /> מבט-על מלאי לפי פריט ומיקום
+          </button>
+          <button onClick={onExport} className={btnGhost + " flex items-center gap-1.5 !py-1.5 !px-3 text-sm"}><Download size={16} /> ייצוא ל-CSV</button>
+        </div>
+        {showTable && (
+          <div className="overflow-x-auto border-t">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-slate-500 text-right">
+                  <th className="px-5 py-3 font-medium">פריט</th><th className="px-5 py-3 font-medium">קטגוריה</th>
+                  <th className="px-5 py-3 font-medium">מחסן מרכזי</th><th className="px-5 py-3 font-medium">ברכבים</th>
+                  <th className="px-5 py-3 font-medium">סה"כ</th><th className="px-5 py-3 font-medium">סטטוס</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.item.id} className="border-t">
+                    <td className="px-5 py-3 font-medium text-slate-800">{r.item.name}</td>
+                    <td className="px-5 py-3 text-slate-500">{CATEGORIES[r.item.category]}</td>
+                    <td className="px-5 py-3">{r.whQty} {r.item.unit}</td>
+                    <td className="px-5 py-3">{r.vehicleQty} {r.item.unit}</td>
+                    <td className="px-5 py-3 font-bold">{r.total} {r.item.unit}</td>
+                    <td className="px-5 py-3">{r.low ? <Badge tone="rose">מתחת לסף</Badge> : <Badge tone="emerald">תקין</Badge>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="text-center">
+        <button onClick={onSwitchClassic} className="text-xs text-slate-400 hover:text-amber-700 hover:underline">מעבר לתצוגה הקלאסית (הישנה)</button>
+      </div>
+    </div>
+  );
+}
+
+// ==================== Dashboard (classic - התצוגה הישנה, נשמרת כמו שהיא) ====================
+function DashboardClassic({ data, onExport, isAdmin, onQuickPO }) {
   const { locations, stock } = data;
   const items = data.items.filter((it) => !isEmptyBulkKg(it, data.stock));
   const warehouse = locations.find((l) => l.type === "warehouse");
@@ -7246,25 +7496,27 @@ function SettingsScreen({ data, refresh, userEmail, logoUrl, onLogoChange, isAdm
 
 const FULL_NAV = [
   { key: "dashboard", label: "לוח בקרה", icon: LayoutDashboard },
-  { key: "transaction", label: "תנועת מלאי", icon: ArrowLeftRight, adminOnly: true },
-  { key: "sale", label: "מכירה / הזמנה חדשה", icon: ShoppingCart, adminOnly: true },
-  { key: "items", label: "פריטים", icon: Package, adminOnly: true },
-  { key: "locations", label: "מיקומים", icon: Warehouse, adminOnly: true },
-  { key: "customers", label: "לקוחות", icon: Users },
-  { key: "leads", label: "לידים (CRM)", icon: TrendingUp, adminOnly: true },
-  { key: "quotes", label: "הצעות מחיר", icon: FileText, adminOnly: true },
-  { key: "suppliers", label: "ספקים", icon: Building2, adminOnly: true },
-  { key: "shipments", label: "משלוחים / מכולות", icon: Ship, adminOnly: true },
-  { key: "shippingRates", label: "מחירוני שילוח", icon: Database, adminOnly: true },
-  { key: "landedCost", label: "מחשבון יבוא ועליות נחיתה", icon: Calculator, adminOnly: true },
-  { key: "reports", label: "דוחות וערך מלאי", icon: BarChart3 },
-  { key: "po", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
-  { key: "expenses", label: "הוצאות וחשבוניות", icon: Calculator },
-  { key: "receivables", label: "חובות וגבייה", icon: Wallet, adminOnly: true },
-  { key: "log", label: "יומן אירועים", icon: ScrollText },
-  { key: "settings", label: "הגדרות", icon: Settings },
+  { key: "transaction", group: "מלאי", label: "תנועת מלאי", icon: ArrowLeftRight, adminOnly: true },
+  { key: "sale", group: "מכירות ולקוחות", label: "מכירה / הזמנה חדשה", icon: ShoppingCart, adminOnly: true },
+  { key: "items", group: "מלאי", label: "פריטים", icon: Package, adminOnly: true },
+  { key: "locations", group: "מלאי", label: "מיקומים", icon: Warehouse, adminOnly: true },
+  { key: "customers", group: "מכירות ולקוחות", label: "לקוחות", icon: Users },
+  { key: "leads", group: "מכירות ולקוחות", label: "לידים (CRM)", icon: TrendingUp, adminOnly: true },
+  { key: "quotes", group: "מכירות ולקוחות", label: "הצעות מחיר", icon: FileText, adminOnly: true },
+  { key: "suppliers", group: "רכש ויבוא", label: "ספקים", icon: Building2, adminOnly: true },
+  { key: "shipments", group: "רכש ויבוא", label: "משלוחים / מכולות", icon: Ship, adminOnly: true },
+  { key: "shippingRates", group: "רכש ויבוא", label: "מחירוני שילוח", icon: Database, adminOnly: true },
+  { key: "landedCost", group: "רכש ויבוא", label: "מחשבון יבוא ועליות נחיתה", icon: Calculator, adminOnly: true },
+  { key: "reports", group: "מלאי", label: "דוחות וערך מלאי", icon: BarChart3 },
+  { key: "po", group: "רכש ויבוא", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
+  { key: "expenses", group: "כספים", label: "הוצאות וחשבוניות", icon: Calculator },
+  { key: "receivables", group: "כספים", label: "חובות וגבייה", icon: Wallet, adminOnly: true },
+  { key: "log", group: "מערכת", label: "יומן אירועים", icon: ScrollText },
+  { key: "settings", group: "מערכת", label: "הגדרות", icon: Settings },
 ];
 const MOBILE_NAV = ["dashboard", "transaction", "customers", "log"];
+// סדר הקבוצות בתפריט בתצוגה החדשה (בתצוגה הקלאסית התפריט נשאר רשימה אחת כמו קודם)
+const NAV_GROUP_ORDER = [null, "מלאי", "מכירות ולקוחות", "רכש ויבוא", "כספים", "מערכת"];
 
 // ==================== App ====================
 export default function App() {
@@ -7274,6 +7526,8 @@ export default function App() {
   const [data, setData] = useState(null);
   const [dataError, setDataError] = useState("");
   const [tab, setTab] = useState("dashboard");
+  const [uiStyle, setUiStyleState] = useState(() => readPref(UI_STYLE_KEY, "modern"));
+  const setUiStyle = (v) => { setUiStyleState(v); writePref(UI_STYLE_KEY, v); };
   const [customerFileId, setCustomerFileId] = useState(null);
   const [locationFileId, setLocationFileId] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -7436,6 +7690,8 @@ export default function App() {
   const isViewer = profile.role === "viewer";
   const roleLabel = isAdmin ? "מנהל" : isViewer ? "צפייה בלבד" : "טכנאי";
   const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
+  // בתצוגה החדשה: התפריט מחולק לקבוצות עם כותרת קטנה לכל קבוצה
+  const navSections = uiStyle === "classic" ? [{ title: null, items: nav }] : NAV_GROUP_ORDER.map((g) => ({ title: g, items: nav.filter((n) => (n.group || null) === g) })).filter((sec) => sec.items.length > 0);
   const goTab = (key) => { setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
@@ -7466,10 +7722,15 @@ export default function App() {
             </div>
           </div>
           <nav className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto sidebar-scroll">
-            {nav.map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14.5px] font-semibold tracking-tight transition shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
-                <Icon size={18} /> {label}
-              </button>
+            {navSections.map((sec, si) => (
+              <React.Fragment key={si}>
+                {sec.title && <div className="px-3.5 pt-3 pb-1 text-[10.5px] font-medium tracking-widest text-slate-500 shrink-0">{sec.title}</div>}
+                {sec.items.map(({ key, label, icon: Icon }) => (
+                  <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14.5px] font-semibold tracking-tight transition shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
+                    <Icon size={18} /> {label}
+                  </button>
+                ))}
+              </React.Fragment>
             ))}
           </nav>
           <div className="border-t border-slate-800 pt-3 px-2 shrink-0">
@@ -7496,10 +7757,15 @@ export default function App() {
               <div className="bg-white w-64 h-full p-4 flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setMobileMenuOpen(false)} className="mb-4 p-1.5 shrink-0"><X size={20} /></button>
                 <nav className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto mobile-nav-scroll">
-                  {nav.map(({ key, label, icon: Icon }) => (
-                    <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-semibold tracking-tight shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
-                      <Icon size={18} /> {label}
-                    </button>
+                  {navSections.map((sec, si) => (
+                    <React.Fragment key={si}>
+                      {sec.title && <div className="px-3 pt-3 pb-1 text-[10.5px] font-medium tracking-widest text-slate-400 shrink-0">{sec.title}</div>}
+                      {sec.items.map(({ key, label, icon: Icon }) => (
+                        <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-semibold tracking-tight shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
+                          <Icon size={18} /> {label}
+                        </button>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </nav>
                 <div className="border-t pt-3 shrink-0">
@@ -7533,7 +7799,7 @@ export default function App() {
               />
             ) : (
               <>
-                {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} onQuickPO={(itemId) => { setPoPrefillItemId(itemId); setTab("po"); }} />}
+                {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} onQuickPO={(itemId) => { setPoPrefillItemId(itemId); setTab("po"); }} uiStyle={uiStyle} onUiStyleChange={setUiStyle} onNavigate={goTab} userName={profile.fullName} />}
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setLocationFileId} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
