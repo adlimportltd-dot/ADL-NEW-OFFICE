@@ -112,7 +112,8 @@ async function signUp(email, password, fullName) {
   return data;
 }
 async function signOut() {
-  await supabase.auth.signOut();
+  // התנתקות רק מהמכשיר הזה (ברירת המחדל של Supabase מנתקת את כל המכשירים)
+  await supabase.auth.signOut({ scope: "local" });
 }
 function onAuthChange(callback) {
   const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
