@@ -34,7 +34,10 @@ export default function MobileSale({ profile, onHome }) {
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
 
   const [screen, setScreen] = useState("customer"); // customer | items | summary | done
-  const [catalog, setCatalog] = useState([]);
+  const [rawCatalog, setCatalog] = useState([]);
+  const [vehicle, setVehicle] = useState(null);   // הרכב של המוכר (נתי) – אם יש
+  const [vehStock, setVehStock] = useState({});   // itemId -> כמות ברכב
+  const [source, setSource] = useState(null);      // "vehicle" | "warehouse"
   const [customers, setCustomers] = useState([]);
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,16 +66,21 @@ export default function MobileSale({ profile, onHome }) {
   const load = useCallback(async () => {
     setLoadError("");
     try {
-      const [cat, cust, rec] = await Promise.all([
+      const [cat, cust, rec, veh] = await Promise.all([
         supabase.rpc("mobile_catalog"),
         supabase.from("customers").select("id,name,phone").order("name"),
         supabase.rpc("mobile_recent_customers"),
+        supabase.rpc("my_vehicle"),
       ]);
       if (cat.error) throw cat.error;
       if (cust.error) throw cust.error;
       setCatalog(cat.data || []);
       setCustomers(cust.data || []);
       setRecent(rec.error ? [] : rec.data || []);
+      const v = !veh.error && veh.data?.vehicle ? veh.data.vehicle : null;
+      setVehicle(v);
+      setVehStock(Object.fromEntries(((!veh.error && veh.data?.stock) || []).map((r) => [r.item_id, Number(r.qty)])));
+      setSource((cur) => cur || (v ? "vehicle" : "warehouse"));
     } catch (e) {
       setLoadError(e.message || "שגיאה בטעינה");
     } finally {
@@ -81,6 +89,13 @@ export default function MobileSale({ profile, onHome }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // המלאי שמוצג ונבדק תלוי במקור: הרכב של המוכר או המחסן
+  const catalog = useMemo(
+    () => (source === "vehicle" ? rawCatalog.map((i) => ({ ...i, stock: vehStock[i.id] || 0 })) : rawCatalog),
+    [rawCatalog, vehStock, source]
+  );
+  const sourceName = source === "vehicle" ? "מהרכב שלי" : "מהמחסן";
 
   const byId = useMemo(() => Object.fromEntries(catalog.map((i) => [i.id, i])), [catalog]);
 
@@ -106,8 +121,10 @@ export default function MobileSale({ profile, onHome }) {
   );
 
   const q = norm(query);
-  const shownScents = scents.filter((s) => !q || norm(s.scent).includes(q) || norm(s.aliases).includes(q));
-  const shownDevices = devices.filter((d) => !q || norm(d.name).includes(q));
+  // ברכב מציגים רק מה שבאמת יש בו
+  const inCar = (i) => source !== "vehicle" || Number(i?.stock || 0) > 0;
+  const shownScents = scents.filter((s) => (!q || norm(s.scent).includes(q) || norm(s.aliases).includes(q)) && Object.values(s.sizes).some(inCar));
+  const shownDevices = devices.filter((d) => (!q || norm(d.name).includes(q)) && inCar(d));
 
   const cartLines = Object.entries(cart).filter(([, n]) => n > 0).map(([id, n]) => ({ item: byId[id], qty: n })).filter((l) => l.item);
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
@@ -172,6 +189,7 @@ export default function MobileSale({ profile, onHome }) {
         p_vat_rate: Number(vatRate),
         p_note: note || null,
         p_approved_by: isAdmin ? (approvedBy || null) : approvedBy,
+        p_source: source === "vehicle" ? "vehicle" : "warehouse",
       });
       if (e) throw e;
       setResult(data);
@@ -208,7 +226,7 @@ export default function MobileSale({ profile, onHome }) {
     return shell(<>
       <Header
         title="מכירה חדשה"
-        subtitle={`שלום ${userName} · מחסן מרכזי`}
+        subtitle={`שלום ${userName} · מוכר ${sourceName}`}
         step={1}
         onBack={onHome}
       />
@@ -287,6 +305,18 @@ export default function MobileSale({ profile, onHome }) {
     return shell(<>
       <Header title="מה הוא לוקח?" subtitle={`לקוח: ${customer?.name}`} step={2} onBack={() => setScreen("customer")} />
       <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
+        {vehicle && (
+          <div className="flex flex-col gap-1.5">
+            <div className="text-[13px] text-slate-600 font-medium">מאיפה הסחורה יוצאת?</div>
+            <div className="grid grid-cols-2 gap-2">
+              {[["vehicle", "הרכב שלי"], ["warehouse", "המחסן"]].map(([k, label]) => (
+                <button key={k} onClick={() => { if (source !== k) { setSource(k); setCart({}); } }}
+                  className={`h-11 rounded-xl font-semibold ${source === k ? "text-white" : "bg-white border-[1.5px] border-slate-300"}`}
+                  style={source === k ? { background: NAVY } : {}}>{label}</button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => setTab("consumable")} className={`h-11 rounded-xl font-semibold flex items-center justify-center gap-1.5 ${tab === "consumable" ? "bg-slate-900 text-white" : "bg-white border-[1.5px] border-slate-300"}`}><Droplets size={16} /> תמציות</button>
           <button onClick={() => setTab("device")} className={`h-11 rounded-xl font-semibold flex items-center justify-center gap-1.5 ${tab === "device" ? "bg-slate-900 text-white" : "bg-white border-[1.5px] border-slate-300"}`}><Package size={16} /> מכשירים</button>
@@ -345,7 +375,7 @@ export default function MobileSale({ profile, onHome }) {
           );
         })}
         {((tab === "consumable" && shownScents.length === 0) || (tab === "device" && shownDevices.length === 0)) && (
-          <div className="text-center text-slate-500 py-6">לא נמצא</div>
+          <div className="text-center text-slate-500 py-6">{source === "vehicle" && !q ? "אין כלום ברכב – אפשר לבקש העמסה ממסך \"הרכב שלי\" או לבחור \"המחסן\"" : "לא נמצא"}</div>
         )}
       </div>
       <BottomBar>
@@ -474,7 +504,7 @@ export default function MobileSale({ profile, onHome }) {
       <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
         <div className="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center"><CircleCheck size={52} className="text-green-700" /></div>
         <div className="text-[26px] font-bold">המכירה נשמרה</div>
-        <div className="text-[15px] text-slate-700">הסחורה ירדה מהמלאי{result.icon ? " ונרשמה לאייקון אייר" : ""}</div>
+        <div className="text-[15px] text-slate-700">הסחורה ירדה מהמלאי {result.source === "vehicle" ? "של הרכב" : "במחסן"}{result.icon ? " ונרשמה לאייקון אייר" : ""}</div>
         <div className="w-full bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2 text-sm">
           <div className="flex justify-between"><span className="text-slate-600">לקוח</span><span className="font-semibold">{result.icon ? `אייקון אייר (${endCustomer || customer?.name})` : customer?.name}</span></div>
           <div className="flex justify-between"><span className="text-slate-600">פריטים</span><span className="font-semibold">{cartCount}</span></div>
