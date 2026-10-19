@@ -29,7 +29,7 @@ const PAYMENTS = [
   { key: "open", label: "חוב פתוח" },
 ];
 
-export default function MobileSale({ profile, onHome }) {
+export default function MobileSale({ profile, onHome, embedded = false }) {
   const isAdmin = profile?.role === "admin";
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
 
@@ -201,11 +201,16 @@ export default function MobileSale({ profile, onHome }) {
     } finally { setBusy(false); }
   };
 
-  const shell = (children) => (
+  // במחשב (בתוך המערכת, ליד התפריט) – רוחב מלא יותר; בטלפון – מסך צר לכל הגובה
+  const shell = (children) => (embedded ? (
+    <div dir="rtl" lang="he" className="w-full max-w-3xl mx-auto">
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col text-slate-900 min-h-[calc(100vh-7rem)] [&>div:first-child]:rounded-t-2xl">{children}</div>
+    </div>
+  ) : (
     <div dir="rtl" lang="he" className="min-h-screen bg-slate-100 flex justify-center" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
       <div className="w-full max-w-md min-h-screen bg-slate-50 flex flex-col text-slate-900">{children}</div>
     </div>
-  );
+  ));
 
   if (loading) return shell(<div className="flex-1 flex items-center justify-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={18} /> טוען...</div>);
   if (loadError) return shell(
