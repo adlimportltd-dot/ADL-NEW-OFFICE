@@ -4,7 +4,7 @@ import {
   TriangleAlert, Info, Package, Droplets, X,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
-import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn } from "./mobileUi";
+import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn, Shell } from "./mobileUi";
 
 // ============================================================
 // מכירה מהירה בטלפון (אדל)
@@ -202,15 +202,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
   };
 
   // במחשב (בתוך המערכת, ליד התפריט) – רוחב מלא יותר; בטלפון – מסך צר לכל הגובה
-  const shell = (children) => (embedded ? (
-    <div dir="rtl" lang="he" className="w-full max-w-3xl mx-auto">
-      <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col text-slate-900 min-h-[calc(100vh-7rem)] [&>div:first-child]:rounded-t-2xl">{children}</div>
-    </div>
-  ) : (
-    <div dir="rtl" lang="he" className="min-h-screen bg-slate-100 flex justify-center" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
-      <div className="w-full max-w-md min-h-screen bg-slate-50 flex flex-col text-slate-900">{children}</div>
-    </div>
-  ));
+  const shell = (children) => <Shell embedded={embedded} wide={false}>{children}</Shell>;
 
   if (loading) return shell(<div className="flex-1 flex items-center justify-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={18} /> טוען...</div>);
   if (loadError) return shell(
@@ -219,7 +211,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
       <div className="font-bold">לא הצלחנו לטעון את מסך המכירה</div>
       <div className="text-sm text-slate-600">{loadError}</div>
       <button onClick={() => { setLoading(true); load(); }} className={bigBtn} style={{ background: AMBER }}>נסה שוב</button>
-      <button onClick={onHome} className="text-sm text-slate-600 underline">חזרה למסך הבית</button>
+      <button onClick={onHome} className="text-sm text-slate-600 underline">{embedded ? "חזרה ללוח הבקרה" : "חזרה למסך הבית"}</button>
     </div>
   );
 
@@ -242,7 +234,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
           <input id="cust" value={custQuery} onChange={(e) => setCustQuery(e.target.value)} placeholder="שם לקוח או טלפון" className="flex-1 bg-transparent outline-none text-base" />
           {custQuery && <button aria-label="ניקוי" onClick={() => setCustQuery("")}><X size={18} className="text-slate-400" /></button>}
         </div>
-        <div className="text-[13px] text-slate-600 font-medium mt-1">{cq ? (found.length ? "תוצאות" : "לא נמצא לקוח בשם הזה") : "לקוחות אחרונים"}</div>
+        <div className="text-[13px] font-semibold text-slate-500 mt-1">{cq ? (found.length ? "תוצאות" : "לא נמצא לקוח בשם הזה") : "לקוחות אחרונים"}</div>
         <div className="flex flex-col gap-2.5">
           {list.map((c) => (
             <button key={c.id} onClick={() => pickCustomer(c)} className="flex items-center gap-3 bg-white border-[1.5px] border-slate-200 active:border-amber-500 rounded-2xl px-3.5 py-3 min-h-[64px] text-right">
@@ -312,7 +304,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
       <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
         {vehicle && (
           <div className="flex flex-col gap-1.5">
-            <div className="text-[13px] text-slate-600 font-medium">מאיפה הסחורה יוצאת?</div>
+            <div className="text-[13px] font-semibold text-slate-500">מאיפה הסחורה יוצאת?</div>
             <div className="grid grid-cols-2 gap-2">
               {[["vehicle", "הרכב שלי"], ["warehouse", "המחסן"]].map(([k, label]) => (
                 <button key={k} onClick={() => { if (source !== k) { setSource(k); setCart({}); } }}
@@ -520,7 +512,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
       </div>
       <div className="px-4 pb-6 flex flex-col gap-2.5">
         <button onClick={resetSale} className={bigBtn} style={{ background: AMBER, color: NAVY }}>מכירה חדשה</button>
-        <button onClick={onHome} className="h-12 rounded-2xl border border-slate-300 bg-white font-semibold">למסך הבית</button>
+        <button onClick={onHome} className="h-12 rounded-2xl border border-slate-300 bg-white font-semibold hover:bg-slate-50 transition">{embedded ? "ללוח הבקרה" : "למסך הבית"}</button>
       </div>
     </>);
   }

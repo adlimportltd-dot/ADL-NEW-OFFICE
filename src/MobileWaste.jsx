@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { Search, Check, Loader2, CircleCheck, TriangleAlert, X, Gift, Droplet, Ban, Home, HelpCircle } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
-import { NAVY, AMBER, norm, Header, BottomBar, bigBtn } from "./mobileUi";
+import { NAVY, AMBER, norm, Header, BottomBar, bigBtn, WIDE, SectionTitle } from "./mobileUi";
 import { Stepper, groupItems, linesText } from "./MobileVehicle";
 
 // ============================================================
@@ -17,6 +17,9 @@ export const WASTE_REASONS = [
   { key: "internal", label: "שימוש פנימי", icon: Home },
   { key: "other", label: "אחר", icon: HelpCircle },
 ];
+const Step = ({ n, children }) => (
+  <div className="font-semibold flex items-center gap-2 mt-1"><span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center">{n}</span>{children}</div>
+);
 export const reasonLabel = (k) => WASTE_REASONS.find((r) => r.key === k)?.label || k;
 const STATUS = {
   done: { label: "ירד מהמלאי", cls: "bg-green-100 text-green-800" },
@@ -93,19 +96,20 @@ export function WasteScreen({ userName, onBack }) {
         </div>
       )}
 
+      {veh && <Step n={1}>מאיפה?</Step>}
       {veh && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 lg:group-[.wide]/w:max-w-md">
           {[["vehicle", "מהרכב שלי"], ["warehouse", "מהמחסן"]].map(([k, l]) => (
             <button key={k} onClick={() => { if (source !== k) { setSource(k); setQty({}); } }} className={`h-11 rounded-xl font-semibold ${source === k ? "text-white" : "bg-white border-[1.5px] border-slate-300"}`} style={source === k ? { background: NAVY } : {}}>{l}</button>
           ))}
         </div>
       )}
 
-      <div className="font-semibold">למה זה יצא?</div>
-      <div className="grid grid-cols-2 gap-2">
+      <Step n={veh ? 2 : 1}>למה זה יצא?</Step>
+      <div className="grid grid-cols-2 gap-2 lg:group-[.wide]/w:grid-cols-5">
         {WASTE_REASONS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => { setReason(key); setError(""); }}
-            className={`h-14 rounded-xl flex items-center justify-center gap-2 font-semibold border-[1.5px] ${reason === key ? "border-transparent" : "bg-white border-slate-300"} ${key === "other" ? "col-span-2" : ""}`}
+            className={`h-14 rounded-xl flex items-center justify-center gap-2 font-semibold border-[1.5px] ${reason === key ? "border-transparent" : "bg-white border-slate-300"} ${key === "other" ? "col-span-2 lg:group-[.wide]/w:col-span-1" : ""} transition hover:border-slate-400`}
             style={reason === key ? { background: AMBER, color: NAVY } : {}}>
             <Icon size={18} /> {label}
           </button>
@@ -118,7 +122,7 @@ export function WasteScreen({ userName, onBack }) {
         </div>
       )}
 
-      <div className="font-semibold mt-1">מה יצא?</div>
+      <Step n={veh ? 3 : 2}>מה יצא?</Step>
       <div className="flex items-center gap-2.5 bg-white border-[1.5px] border-slate-300 rounded-2xl px-3.5 h-[50px]">
         <Search size={20} className="text-slate-500" />
         <label htmlFor="wq" className="sr-only">חיפוש</label>
@@ -126,7 +130,7 @@ export function WasteScreen({ userName, onBack }) {
         {query && <button aria-label="ניקוי" onClick={() => setQuery("")}><X size={18} className="text-slate-400" /></button>}
       </div>
       {!q && picked.length === 0 && <div className="text-xs text-slate-500">חפש את הריח או המכשיר, ובחר כמות.</div>}
-      {(q || picked.length > 0) && shown.slice(0, 15).map((g) => (
+      <div className={WIDE}>{(q || picked.length > 0) && shown.slice(0, 15).map((g) => (
         <div key={g.key} className={`bg-white rounded-2xl p-3.5 flex flex-col gap-2.5 border-[1.5px] ${g.rows.some((r) => qty[r.id]) ? "border-amber-500" : "border-slate-200"}`}>
           <div className="font-bold text-[17px]">{g.title}</div>
           {g.rows.map((r) => (
@@ -136,7 +140,7 @@ export function WasteScreen({ userName, onBack }) {
             </div>
           ))}
         </div>
-      ))}
+      ))}</div>
       {q && shown.length === 0 && <div className="text-center text-slate-500 py-4">לא נמצא</div>}
 
       <div className="flex flex-col gap-1.5">
@@ -147,8 +151,8 @@ export function WasteScreen({ userName, onBack }) {
 
       {mine.length > 0 && (
         <div className="flex flex-col gap-2 mt-2">
-          <div className="text-[13px] text-slate-600 font-medium">הרישומים האחרונים שלי</div>
-          {mine.map((w) => {
+          <SectionTitle>הרישומים האחרונים שלי</SectionTitle>
+          <div className="grid grid-cols-1 gap-2 lg:group-[.wide]/w:grid-cols-2">{mine.map((w) => {
             const st = STATUS[w.status] || STATUS.done;
             return (
               <div key={w.id} className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex flex-col gap-1">
@@ -160,11 +164,11 @@ export function WasteScreen({ userName, onBack }) {
                 {w.status === "rejected" && w.decision_note && <div className="text-xs text-rose-700">נדחה ע"י {w.decided_by}: {w.decision_note}</div>}
               </div>
             );
-          })}
+          })}</div>
         </div>
       )}
     </div>
-    <BottomBar>
+    <BottomBar hint={!reason ? "בחר למה זה יצא" : !picked.length ? "בחר מה יצא מהמלאי" : reason === "sample" && !customer.trim() ? "רשום לאיזה לקוח" : reason === "other" && !note.trim() ? "כתוב מה קרה" : null}>
       <button disabled={busy || !reason || !picked.length} onClick={submit} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
         {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} רישום
       </button>

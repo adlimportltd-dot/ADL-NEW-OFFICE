@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { Search, Plus, Minus, Check, Loader2, CircleCheck, TriangleAlert, X, Truck, PackagePlus, Undo2 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
-import { NAVY, AMBER, norm, parseEssence, Header, BottomBar, bigBtn } from "./mobileUi";
+import { NAVY, AMBER, norm, parseEssence, Header, BottomBar, bigBtn, WIDE, SectionTitle } from "./mobileUi";
 
 // ============================================================
 // הרכב שלי (נתי): מה יש ברכב, בקשת העמסה מהמחסן, בקשת החזרה למחסן.
@@ -115,19 +115,19 @@ export function VehicleScreen({ userName, onBack }) {
         </div>
       )}
       <ErrorBox>{error}</ErrorBox>
-      <div className="grid grid-cols-2 gap-2.5">
-        <button onClick={() => { setSent(null); setView("load"); }} className="rounded-2xl p-3.5 min-h-[92px] flex flex-col items-start justify-between font-bold text-right" style={{ background: AMBER, color: NAVY }}>
+      <div className="grid grid-cols-2 gap-2.5 lg:group-[.wide]/w:max-w-xl">
+        <button onClick={() => { setSent(null); setView("load"); }} className="rounded-2xl p-3.5 min-h-[92px] flex flex-col items-start justify-between font-bold text-right shadow-sm transition hover:brightness-105 active:scale-[0.98]" style={{ background: AMBER, color: NAVY }}>
           <PackagePlus size={24} /> <span>בקשת העמסה מהמחסן</span>
         </button>
-        <button disabled={!stockGroups.length} onClick={() => { setSent(null); setView("return"); }} className="rounded-2xl p-3.5 min-h-[92px] flex flex-col items-start justify-between font-bold text-right bg-white border-[1.5px] border-slate-200 disabled:opacity-50">
+        <button disabled={!stockGroups.length} onClick={() => { setSent(null); setView("return"); }} className="rounded-2xl p-3.5 min-h-[92px] flex flex-col items-start justify-between font-bold text-right bg-white border-[1.5px] border-slate-200 transition hover:border-slate-300 active:scale-[0.98] disabled:opacity-50">
           <Undo2 size={24} /> <span>החזרה למחסן</span>
         </button>
       </div>
 
       {requests.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="text-[13px] text-slate-600 font-medium">הבקשות שלי{pendingCount ? ` · ${pendingCount} ממתינות` : ""}</div>
-          {requests.map((r) => {
+          <SectionTitle>הבקשות שלי{pendingCount ? ` · ${pendingCount} ממתינות` : ""}</SectionTitle>
+          <div className="grid grid-cols-1 gap-2 lg:group-[.wide]/w:grid-cols-2">{requests.map((r) => {
             const st = STATUS[r.status] || STATUS.pending;
             return (
               <div key={r.id} className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex flex-col gap-1">
@@ -140,19 +140,21 @@ export function VehicleScreen({ userName, onBack }) {
                 {r.status === "pending" && <button onClick={() => cancel(r.id)} className="self-start text-xs text-slate-600 underline">ביטול הבקשה</button>}
               </div>
             );
-          })}
+          })}</div>
         </div>
       )}
 
       <div className="flex flex-col gap-2">
-        <div className="text-[13px] text-slate-600 font-medium flex items-center gap-1.5"><Truck size={15} /> מה יש עכשיו ברכב</div>
-        {stockGroups.length === 0 && <div className="bg-white border border-dashed border-slate-300 rounded-xl px-3 py-5 text-center text-slate-500">הרכב ריק במערכת</div>}
+        <SectionTitle icon={Truck}>מה יש עכשיו ברכב</SectionTitle>
+        <div className="grid grid-cols-1 gap-2 lg:group-[.wide]/w:grid-cols-2">
+        {stockGroups.length === 0 && <div className="bg-white border border-dashed border-slate-300 rounded-xl px-3 py-5 text-center text-slate-500 lg:group-[.wide]/w:col-span-2">הרכב ריק במערכת</div>}
         {stockGroups.map((g) => (
           <div key={g.key} className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-2">
             <span className="font-semibold flex-1">{g.title}</span>
-            <span className="text-sm text-slate-700">{g.rows.map((r) => `${r.label} ${qtyTxt(r.qty)}`).join(" · ")}</span>
+            <span className="flex flex-wrap gap-1 justify-end">{g.rows.map((r) => <span key={r.label} className="text-[13px] bg-slate-100 rounded-lg px-2 py-0.5">{r.label} <b>{qtyTxt(r.qty)}</b></span>)}</span>
           </div>
         ))}
+        </div>
       </div>
     </div>
   </>);
@@ -193,7 +195,7 @@ function RequestBuilder({ kind, items, onCancel, onSent }) {
       {kind === "return" && items.length > 0 && (
         <button onClick={() => setQty(Object.fromEntries(items.map((i) => [i.id, Math.floor(i.avail)])))} className="h-11 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold">להחזיר הכול</button>
       )}
-      {shown.map((g) => {
+      <div className={WIDE}>{shown.map((g) => {
         const has = g.rows.some((r) => toInt(qty[r.id]) > 0);
         return (
           <div key={g.key} className={`bg-white rounded-2xl p-3.5 flex flex-col gap-2.5 border-[1.5px] ${has ? "border-amber-500" : "border-slate-200"}`}>
@@ -212,7 +214,7 @@ function RequestBuilder({ kind, items, onCancel, onSent }) {
             ))}
           </div>
         );
-      })}
+      })}</div>
       {shown.length === 0 && <div className="text-center text-slate-500 py-6">{items.length ? "לא נמצא" : kind === "load" ? "אין מלאי במחסן" : "הרכב ריק"}</div>}
       {picked.length > 0 && (
         <div className="flex flex-col gap-1.5">
@@ -222,7 +224,7 @@ function RequestBuilder({ kind, items, onCancel, onSent }) {
       )}
       <ErrorBox>{error}</ErrorBox>
     </div>
-    <BottomBar>
+    <BottomBar hint={picked.length === 0 ? (kind === "load" ? "בחר מה לוקחים לרכב" : "בחר מה מחזירים") : null}>
       <button disabled={busy || picked.length === 0} onClick={submit} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
         {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} שליחה לאישור{total ? ` (${total} פריטים)` : ""}
       </button>

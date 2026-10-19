@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { Search, Plus, Minus, Check, Loader2, CircleCheck, TriangleAlert, X, ChevronDown, ChevronUp, ClipboardList } from "lucide-react";
+import { Search, Plus, Minus, Check, Loader2, CircleCheck, TriangleAlert, X, ChevronDown, ChevronUp, ClipboardList, Truck, Gift, Droplets } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
-import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn } from "./mobileUi";
+import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn, WIDE, SectionTitle } from "./mobileUi";
 import { linesText } from "./MobileVehicle";
 import { reasonLabel } from "./MobileWaste";
 
@@ -153,8 +153,8 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
           {query && <button aria-label="ניקוי" onClick={() => setQuery("")}><X size={18} className="text-slate-400" /></button>}
         </div>
         <ErrorBox>{error}</ErrorBox>
-        {loading ? <Loading /> : shown.map((s) => (
-          <button key={s.scent} disabled={!s.openable} onClick={() => pick(s)} className={`flex items-center gap-3 bg-white border-[1.5px] rounded-2xl px-3.5 py-3 min-h-[64px] text-right ${s.openable ? "border-slate-200 active:border-amber-500" : "border-dashed border-slate-300 opacity-60"}`}>
+        {loading ? <Loading /> : <div className={WIDE}>{shown.map((s) => (
+          <button key={s.scent} disabled={!s.openable} onClick={() => pick(s)} className={`flex items-center gap-3 bg-white border-[1.5px] rounded-2xl px-3.5 py-3 min-h-[64px] text-right transition ${s.openable ? "border-slate-200 hover:border-amber-400 hover:shadow-sm active:border-amber-500" : "border-dashed border-slate-300 opacity-60"}`}>
             <div className="flex-1 min-w-0">
               <div className="font-bold text-[17px] truncate">{s.scent}</div>
               <div className="text-xs text-slate-600">
@@ -162,13 +162,14 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
                 {!s.openable && " · אין מה לפתוח"}
               </div>
             </div>
+            {s.openable && <ChevronDown size={18} className="text-slate-400 rotate-90" />}
           </button>
-        ))}
+        ))}</div>}
         {!loading && shown.length === 0 && <div className="text-center text-slate-500 py-6">לא נמצא</div>}
         {!loading && !q && recent.length > 0 && (
           <div className="flex flex-col gap-2 mt-2">
-            <div className="text-[13px] text-slate-600 font-medium">מזיגות אחרונות</div>
-            {recent.map((r) => <RepackRow key={r.id} r={r} />)}
+            <SectionTitle>מזיגות אחרונות</SectionTitle>
+            <div className="grid grid-cols-1 gap-2 lg:group-[.wide]/w:grid-cols-2">{recent.map((r) => <RepackRow key={r.id} r={r} />)}</div>
           </div>
         )}
       </div>
@@ -179,8 +180,9 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
   return (<>
     <Header title={current.scent} subtitle="מה פותחים ומה יצא" onBack={clear} />
     <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
+      <div className={WIDE + " items-start"}>
       <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-3">
-        <div className="font-bold">מה פותחים?</div>
+        <div className="font-bold flex items-center gap-2"><span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center">1</span> מה פותחים?</div>
         {openRows.map((i) => (
           <div key={i.id} className="flex items-center justify-between gap-2">
             <div>
@@ -195,7 +197,7 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
       </div>
 
       <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-3">
-        <div className="font-bold">מה יצא?</div>
+        <div className="font-bold flex items-center gap-2"><span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center">2</span> מה יצא?</div>
         {outRows.map((i) => (
           <div key={i.id} className="flex items-center justify-between gap-2">
             <div className="font-semibold">{UNIT_LABEL[i.unit]}</div>
@@ -203,6 +205,7 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
           </div>
         ))}
         {!openedBarrel && current.sizes['5 ק"ג'] && <div className="text-xs text-slate-500">גלון 5 ק"ג יוצא רק כשפותחים חבית.</div>}
+      </div>
       </div>
 
       {inKg > 0 && (
@@ -234,7 +237,7 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
       </div>
       <ErrorBox>{error}</ErrorBox>
     </div>
-    <BottomBar>
+    <BottomBar hint={inKg === 0 ? "בחר מה פותחים" : outKg === 0 ? "רשום מה יצא מהמזיגה" : outOfRange && !reason.trim() ? "כתוב למה ההפרש מעל 10%" : null}>
       <button disabled={busy || inKg === 0 || outKg === 0} onClick={save} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
         {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} {outOfRange && !isAdmin ? "שליחה לאישור" : "שמירת המזיגה"}
       </button>
@@ -347,7 +350,7 @@ export function WeeklyCount({ userName, onBack }) {
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex justify-between text-sm"><span className="text-slate-600">נספרו</span><span className="font-bold">{filled} מתוך {total}</span></div>
-        <div className="h-2 rounded bg-slate-200 overflow-hidden"><div className="h-full rounded" style={{ width: `${total ? (filled / total) * 100 : 0}%`, background: AMBER }} /></div>
+        <div className="h-2 rounded bg-slate-200 overflow-hidden"><div className="h-full rounded transition-all duration-300" style={{ width: `${total ? (filled / total) * 100 : 0}%`, background: AMBER }} /></div>
       </div>
       <div className="flex items-center gap-2.5 bg-white border-[1.5px] border-slate-300 rounded-2xl px-3.5 h-[50px]">
         <Search size={20} className="text-slate-500" />
@@ -358,10 +361,10 @@ export function WeeklyCount({ userName, onBack }) {
       <button onClick={() => setOnlyMissing(!onlyMissing)} className={`h-11 rounded-xl text-sm font-semibold ${onlyMissing ? "bg-slate-900 text-white" : "bg-white border-[1.5px] border-slate-300"}`}>
         {onlyMissing ? "מוצג: רק מה שעוד לא נספר" : "הצג רק מה שעוד לא נספר"}
       </button>
-      {shown.map((g) => {
+      <div className={WIDE}>{shown.map((g) => {
         const complete = g.rows.every((r) => counts[r.item_id] !== undefined && counts[r.item_id] !== "");
         return (
-          <div key={g.scent} className={`bg-white rounded-2xl p-3.5 flex flex-col gap-2.5 border-[1.5px] ${complete ? "border-green-500" : "border-slate-200"}`}>
+          <div key={g.scent} className={`rounded-2xl p-3.5 flex flex-col gap-2.5 border-[1.5px] transition ${complete ? "bg-green-50/40 border-green-500" : "bg-white border-slate-200"}`}>
             <div className="flex justify-between items-baseline">
               <span className="text-lg font-bold">{g.scent}</span>
               {g.aliases ? <span className="text-xs text-slate-600">נקרא גם: {g.aliases}</span> : complete ? <Check size={18} className="text-green-600" /> : null}
@@ -377,7 +380,7 @@ export function WeeklyCount({ userName, onBack }) {
             ))}
           </div>
         );
-      })}
+      })}</div>
       {shown.length === 0 && <div className="text-center text-slate-500 py-6">{onlyMissing ? "הכול נספר" : "לא נמצא"}</div>}
     </div>
     <BottomBar>
@@ -577,14 +580,16 @@ export function Approvals({ onBack, onOpenCount }) {
   };
 
   const lines = (arr) => (arr || []).map((l) => `${kg(l.qty)} ${UNIT_LABEL[l.unit || names[l.item_id]] || ""}`).join(" + ");
+  const total = (items || []).length + counts.length + moves.length + wastes.length;
+  const Kind = ({ icon: Icon, children, cls }) => <span className={`inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5 ${cls}`}><Icon size={12} /> {children}</span>;
 
   return (<>
-    <Header title="לאישור" subtitle="רכב, פחת, מזיגות חריגות וספירה" onBack={onBack} />
+    <Header title="לאישור" subtitle={items === null ? "רכב, פחת, מזיגות חריגות וספירה" : (total ? `${total} מחכים להחלטה שלך` : "אין ממתינים")} onBack={onBack} />
     <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
       <ErrorBox>{error}</ErrorBox>
-      {items === null ? <Loading /> : (<>
+      {items === null ? <Loading /> : (<div className={WIDE + " items-start"}>
         {counts.map((c) => (
-          <button key={c.id} onClick={onOpenCount} className="bg-white border-[1.5px] border-amber-400 rounded-2xl p-3.5 flex items-center gap-3 text-right">
+          <button key={c.id} onClick={onOpenCount} className="lg:group-[.wide]/w:col-span-2 bg-white border-[1.5px] border-amber-400 rounded-2xl p-3.5 flex items-center gap-3 text-right hover:shadow-sm transition">
             <ClipboardList size={24} className="text-amber-700 shrink-0" />
             <div className="flex-1">
               <div className="font-bold">ספירה שבועית</div>
@@ -595,6 +600,7 @@ export function Approvals({ onBack, onOpenCount }) {
         ))}
         {wastes.map((r) => (
           <div key={r.id} className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
+            <Kind icon={Gift} cls="bg-rose-50 text-rose-700 self-start">פחת / דוגמה</Kind>
             <div className="flex justify-between items-baseline">
               <span className="font-bold text-[17px]">{reasonLabel(r.reason)}{r.customer_name ? ` · ${r.customer_name}` : ""}</span>
               <span className="text-sm font-bold text-amber-800">{fmt(r.value)}</span>
@@ -613,16 +619,17 @@ export function Approvals({ onBack, onOpenCount }) {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 mt-1">
-                <button disabled={busyId === r.id} onClick={() => decide(r, true, "decide_waste")} className="h-12 rounded-xl font-bold flex items-center justify-center gap-1.5" style={{ background: AMBER, color: NAVY }}>
+                <button disabled={busyId === r.id} onClick={() => decide(r, true, "decide_waste")} className="h-12 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-sm transition hover:brightness-105 active:scale-[0.98] disabled:opacity-50" style={{ background: AMBER, color: NAVY }}>
                   {busyId === r.id ? <Loader2 className="animate-spin" size={16} /> : <Check size={18} />} אישור
                 </button>
-                <button disabled={busyId === r.id} onClick={() => { setRejectFor(r.id); setRejectNote(""); setError(""); }} className="h-12 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold">דחייה</button>
+                <button disabled={busyId === r.id} onClick={() => { setRejectFor(r.id); setRejectNote(""); setError(""); }} className="h-12 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold text-rose-700 hover:bg-rose-50 transition">דחייה</button>
               </div>
             )}
           </div>
         ))}
         {moves.map((r) => (
           <div key={r.id} className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
+            <Kind icon={Truck} cls="bg-sky-50 text-sky-700 self-start">רכב</Kind>
             <div className="flex justify-between items-baseline">
               <span className="font-bold text-[17px]">{r.kind === "load" ? "העמסה לרכב" : "החזרה למחסן"}</span>
               <span className="text-xs text-slate-600">{r.tag}</span>
@@ -641,10 +648,10 @@ export function Approvals({ onBack, onOpenCount }) {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 mt-1">
-                <button disabled={busyId === r.id} onClick={() => decide(r, true, "decide_vehicle_move")} className="h-12 rounded-xl font-bold flex items-center justify-center gap-1.5" style={{ background: AMBER, color: NAVY }}>
+                <button disabled={busyId === r.id} onClick={() => decide(r, true, "decide_vehicle_move")} className="h-12 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-sm transition hover:brightness-105 active:scale-[0.98] disabled:opacity-50" style={{ background: AMBER, color: NAVY }}>
                   {busyId === r.id ? <Loader2 className="animate-spin" size={16} /> : <Check size={18} />} {r.kind === "load" ? "אישור – יצא לרכב" : "אישור – חזר למחסן"}
                 </button>
-                <button disabled={busyId === r.id} onClick={() => { setRejectFor(r.id); setRejectNote(""); setError(""); }} className="h-12 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold">דחייה</button>
+                <button disabled={busyId === r.id} onClick={() => { setRejectFor(r.id); setRejectNote(""); setError(""); }} className="h-12 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold text-rose-700 hover:bg-rose-50 transition">דחייה</button>
               </div>
             )}
           </div>
@@ -653,8 +660,9 @@ export function Approvals({ onBack, onOpenCount }) {
           const pct = Math.round((Number(r.out_kg) / Number(r.in_kg) - 1) * 100);
           return (
             <div key={r.id} className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
+              <Kind icon={Droplets} cls="bg-violet-50 text-violet-700 self-start">מזיגה חריגה</Kind>
               <div className="flex justify-between items-baseline">
-                <span className="font-bold text-[17px]">מזיגה · {r.scent}</span>
+                <span className="font-bold text-[17px]">{r.scent}</span>
                 <span className="text-sm font-bold text-amber-800">{pct > 0 ? "+" : ""}{pct}%</span>
               </div>
               <div className="text-[13px] text-slate-600">{r.created_by_name} · {new Date(r.created_at).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
@@ -673,19 +681,19 @@ export function Approvals({ onBack, onOpenCount }) {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 mt-1">
-                  <button disabled={busyId === r.id} onClick={() => decide(r, true)} className="h-12 rounded-xl font-bold flex items-center justify-center gap-1.5" style={{ background: AMBER, color: NAVY }}>
+                  <button disabled={busyId === r.id} onClick={() => decide(r, true)} className="h-12 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-sm transition hover:brightness-105 active:scale-[0.98] disabled:opacity-50" style={{ background: AMBER, color: NAVY }}>
                     {busyId === r.id ? <Loader2 className="animate-spin" size={16} /> : <Check size={18} />} אישור
                   </button>
-                  <button disabled={busyId === r.id} onClick={() => { setRejectFor(r.id); setRejectNote(""); setError(""); }} className="h-12 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold">דחייה</button>
+                  <button disabled={busyId === r.id} onClick={() => { setRejectFor(r.id); setRejectNote(""); setError(""); }} className="h-12 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold text-rose-700 hover:bg-rose-50 transition">דחייה</button>
                 </div>
               )}
             </div>
           );
         })}
-        {items.length === 0 && counts.length === 0 && moves.length === 0 && wastes.length === 0 && (
-          <div className="flex flex-col items-center gap-2 py-14 text-slate-600"><CircleCheck size={36} className="text-green-600" /> אין שום דבר שמחכה לאישור</div>
+        {total === 0 && (
+          <div className="lg:group-[.wide]/w:col-span-2 flex flex-col items-center gap-2 py-14 text-slate-600"><span className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center"><CircleCheck size={34} className="text-green-600" /></span><span className="font-semibold">אין שום דבר שמחכה לאישור</span></div>
         )}
-      </>)}
+      </div>)}
     </div>
   </>);
 }
