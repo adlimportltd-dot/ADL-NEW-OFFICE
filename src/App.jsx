@@ -8,6 +8,7 @@ import {
   Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History, Undo2, Repeat, Eye, EyeOff,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
+import MobileSale from "./MobileSale";
 
 // ==================== API layer (merged inline - single file) ====================
 // ---------- מיפוי snake_case (DB) <-> camelCase (UI) ----------
@@ -7554,6 +7555,7 @@ const FULL_NAV = [
   { key: "dashboard", label: "לוח בקרה", icon: LayoutDashboard },
   { key: "transaction", group: "מלאי", label: "תנועת מלאי", icon: ArrowLeftRight, adminOnly: true },
   { key: "sale", group: "מכירות ולקוחות", label: "מכירה / הזמנה חדשה", icon: ShoppingCart, adminOnly: true },
+  { key: "mobileSale", group: "מכירות ולקוחות", label: "מכירה מהירה (טלפון)", icon: ShoppingCart, adminOnly: true },
   { key: "items", group: "מלאי", label: "פריטים", icon: Package, adminOnly: true },
   { key: "locations", group: "מלאי", label: "מיקומים", icon: Warehouse, adminOnly: true },
   { key: "customers", group: "מכירות ולקוחות", label: "לקוחות", icon: Users },
@@ -7595,9 +7597,20 @@ export default function App() {
   const [poPrefillItemId, setPoPrefillItemId] = useState(null); // מעבר מהיר מהתראת "מתחת לסף" בדשבורד ליצירת PO
   const [mfaPendingFactorId, setMfaPendingFactorId] = useState(null); // אם קיים, יש session אמיתי אבל הוא עדיין ב-aal1 וצריך קוד 2FA
 
+  const sellerOnlyRef = React.useRef(false);
+  const [mobileMode, setMobileMode] = useState(() => { try { return new URLSearchParams(window.location.search).has("m"); } catch (e) { return false; } });
   const loadEverything = useCallback(async (userId) => {
     try {
-      const [prof, all] = await Promise.all([api.fetchMyProfile(userId), api.fetchAllData()]);
+      // מוכר (seller) רואה רק את מסך המכירה בטלפון - לא טוענים לו את נתוני המערכת
+      const prof = await api.fetchMyProfile(userId);
+      if (prof.role === "seller") {
+        sellerOnlyRef.current = true;
+        setProfile(prof);
+        setData({ sellerOnly: true });
+        setDataError("");
+        return;
+      }
+      const all = await api.fetchAllData();
       setProfile(prof);
       setData(all);
       setDataError("");
@@ -7607,6 +7620,7 @@ export default function App() {
   }, []);
 
   const refresh = useCallback(async () => {
+    if (sellerOnlyRef.current) return;
     try {
       const all = await api.fetchAllData();
       setData(all);
@@ -7742,13 +7756,22 @@ export default function App() {
   // isAdmin הוא המקור היחיד שקובע הרשאות בכל המערכת (תפריט + כל בדיקת isAdmin
   // בתוך המסכים). isViewer משמש אך ורק לתווית התצוגה למטה - לא לשום החלטת
   // הרשאה - כדי שלא ייווצר בעתיד גבול הרשאות כפול וסותר.
+  // מכירה מהירה בטלפון: מוכר תמיד, מנהל כשנכנס עם ?m=1 או מהכפתור בתפריט
+  if (profile.role === "seller" || mobileMode) {
+    const exitMobile = profile.role === "admin" ? () => {
+      setMobileMode(false);
+      try { window.history.replaceState(null, "", window.location.pathname); } catch (e) {}
+    } : null;
+    return <MobileSale profile={profile} onSignOut={async () => { try { await api.signOut(); } catch (e) {} }} onExitToSystem={exitMobile} />;
+  }
+
   const isAdmin = profile.role === "admin";
   const isViewer = profile.role === "viewer";
   const roleLabel = isAdmin ? "מנהל" : isViewer ? "צפייה בלבד" : "טכנאי";
   const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
   // בתצוגה החדשה: התפריט מחולק לקבוצות עם כותרת קטנה לכל קבוצה
   const navSections = uiStyle === "classic" ? [{ title: null, items: nav }] : NAV_GROUP_ORDER.map((g) => ({ title: g, items: nav.filter((n) => (n.group || null) === g) })).filter((sec) => sec.items.length > 0);
-  const goTab = (key) => { setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
+  const goTab = (key) => { if (key === "mobileSale") { setMobileMode(true); setMobileMenuOpen(false); return; } setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (
