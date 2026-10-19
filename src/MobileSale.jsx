@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  Search, Plus, Minus, Check, ChevronRight, LogOut, Loader2, CircleCheck,
-  TriangleAlert, Info, Tag, Package, Droplets, X,
+  Search, Plus, Minus, Check, LogOut, Loader2, CircleCheck,
+  TriangleAlert, Info, Tag, Package, Droplets, X, ClipboardList,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
+import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn } from "./mobileUi";
+import { RepackScreen, WeeklyCount, CountReview } from "./MobileWarehouse";
 
 // ============================================================
 // מכירה מהירה בטלפון (אדל)
@@ -12,8 +14,6 @@ import { supabase } from "./lib/supabaseClient";
 // בפונקציה mobile_sale – המסך לא מקבל עלויות ולא מחיר לאייקון בכלל.
 // ============================================================
 
-const NAVY = "#0F172A";
-const AMBER = "#F59E0B";
 const BULK_KG_UNIT = 'ק"ג';
 const SIZES = [
   { key: 'רבע ק"ג', label: "רבע" },
@@ -29,52 +29,13 @@ const PAYMENTS = [
   { key: "bit", label: "ביט" },
   { key: "open", label: "חוב פתוח" },
 ];
-const fmt = (n) => `₪${Number(n || 0).toLocaleString("he-IL", { maximumFractionDigits: 2 })}`;
-const ESSENCE_RE = /^תמצית ריח - (.+) \((.+)\)$/;
-const norm = (s) => (s || "").toString().replace(/[׳']/g, "").toLowerCase();
 
-function parseEssence(name) {
-  const m = (name || "").match(ESSENCE_RE);
-  return m ? { scent: m[1], size: m[2] } : null;
-}
-
-function Header({ title, subtitle, step, onBack, right }) {
-  return (
-    <div style={{ background: NAVY }} className="text-white px-5 pt-4 pb-4 sticky top-0 z-10">
-      <div className="flex items-center gap-2.5">
-        {onBack && (
-          <button onClick={onBack} aria-label="חזרה" className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center shrink-0">
-            <ChevronRight size={20} />
-          </button>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="text-xl font-bold truncate">{title}</div>
-          {subtitle && <div className="text-[13px] text-slate-300 truncate">{subtitle}</div>}
-        </div>
-        {right}
-      </div>
-      {step && (
-        <div className="flex gap-1.5 mt-3">
-          {[1, 2, 3].map((n) => (
-            <div key={n} className="flex-1 h-1 rounded" style={{ background: n <= step ? AMBER : "#334155" }} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BottomBar({ children }) {
-  return <div className="sticky bottom-0 bg-white border-t border-slate-200 px-4 pt-3 pb-5 z-10">{children}</div>;
-}
-
-const bigBtn = "w-full h-14 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2 disabled:opacity-40";
-
-export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
+export default function MobileSale({ profile, onSignOut, onExitToSystem, initialScreen }) {
   const isAdmin = profile?.role === "admin";
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
 
-  const [screen, setScreen] = useState("customer"); // customer | items | summary | done | prices
+  const [screen, setScreen] = useState(initialScreen || "customer"); // customer | items | summary | done | prices | repack | count | review
+  const [pendingCounts, setPendingCounts] = useState(0);
   const [catalog, setCatalog] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [recent, setRecent] = useState([]);
@@ -114,12 +75,16 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
       setCatalog(cat.data || []);
       setCustomers(cust.data || []);
       setRecent(rec.error ? [] : rec.data || []);
+      if (isAdmin) {
+        const pc = await supabase.from("stock_counts").select("id").eq("status", "submitted");
+        setPendingCounts(pc.error ? 0 : (pc.data || []).length);
+      }
     } catch (e) {
       setLoadError(e.message || "שגיאה בטעינה");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -260,7 +225,18 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
         }
       />
       <div className="flex-1 px-4 py-4 flex flex-col gap-3">
-        <label htmlFor="cust" className="font-semibold">למי מוכרים?</label>
+        <div className="grid gap-2" style={{ gridTemplateColumns: isAdmin ? "1fr 1fr" : "1fr" }}>
+          {isAdmin && (
+            <button onClick={() => setScreen("repack")} className="h-12 rounded-xl bg-white border-[1.5px] border-slate-300 font-semibold flex items-center justify-center gap-1.5"><Droplets size={16} /> מזיגה ופירוק</button>
+          )}
+          <button onClick={() => setScreen("count")} className="h-12 rounded-xl bg-white border-[1.5px] border-slate-300 font-semibold flex items-center justify-center gap-1.5"><ClipboardList size={16} /> ספירה שבועית</button>
+        </div>
+        {isAdmin && pendingCounts > 0 && (
+          <button onClick={() => setScreen("review")} className="h-12 rounded-xl font-semibold flex items-center justify-center gap-1.5" style={{ background: AMBER, color: NAVY }}>
+            <TriangleAlert size={16} /> ספירה ממתינה לאישור שלך
+          </button>
+        )}
+        <label htmlFor="cust" className="font-semibold mt-1">למי מוכרים?</label>
         <div className="flex items-center gap-2.5 bg-white border-[1.5px] border-slate-300 rounded-2xl px-3.5 h-14">
           <Search size={20} className="text-slate-500" />
           <input id="cust" value={custQuery} onChange={(e) => setCustQuery(e.target.value)} placeholder="שם לקוח או טלפון" className="flex-1 bg-transparent outline-none text-base" />
@@ -535,6 +511,12 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
       </div>
     </>);
   }
+
+  // ---------- מחסן: מזיגה, ספירה שבועית, אישור ספירה ----------
+  const backHome = () => { setScreen("customer"); load(); };
+  if (screen === "repack" && isAdmin) return shell(<RepackScreen userName={userName} onBack={backHome} />);
+  if (screen === "count") return shell(<WeeklyCount userName={userName} onBack={backHome} />);
+  if (screen === "review" && isAdmin) return shell(<CountReview onBack={backHome} />);
 
   // ---------- מחירון (מנהל בלבד) ----------
   if (screen === "prices" && isAdmin) return shell(<PriceList onBack={() => { setScreen("customer"); load(); }} />);
