@@ -14,7 +14,7 @@ create or replace function public.mobile_sale(
   p_channel text default 'adl',  -- adl | icon_site
   p_end_customer text default null,
   p_order_ref text default null,
-  p_vat_rate numeric default 18, -- מנהל בלבד
+  p_vat_rate numeric default 18, -- 18 או 0 (ללא מע"מ)
   p_note text default null,
   p_approved_by text default null -- מי אישר את המחיר (חובה למוכר)
 ) returns jsonb
@@ -63,7 +63,8 @@ begin
     raise exception 'יש לסמן מי אישר את המחיר (ליאור או אלירן)';
   end if;
 
-  v_vat := case when v_admin and not v_is_icon then coalesce(p_vat_rate, 18) else 18 end;
+  -- מע"מ: 18% או ללא מע"מ (0%) – גם למוכר, בתיאום עם ליאור/אלירן. אייקון תמיד 18%.
+  v_vat := case when v_is_icon then 18 when p_vat_rate = 0 then 0 else 18 end;
 
   select l.id into v_wh from locations l where l.type = 'warehouse' order by l.created_at limit 1;
   if v_wh is null then raise exception 'לא נמצא מחסן מרכזי'; end if;
