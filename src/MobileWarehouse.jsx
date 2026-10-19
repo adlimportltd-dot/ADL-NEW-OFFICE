@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { Search, Plus, Minus, Check, Loader2, CircleCheck, TriangleAlert, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Plus, Minus, Check, Loader2, CircleCheck, TriangleAlert, X, ChevronDown, ChevronUp, ClipboardList } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn } from "./mobileUi";
 
 // ============================================================
 // מסכי מחסן בטלפון:
-// 1) מזיגה ופירוק – ליאור/אלירן. השרת (mobile_repack) בודק מלאי ומאזן ק"ג.
+// 1) מזיגה ופירוק – כולם. השרת (mobile_repack) בודק מלאי ומאזן ק"ג; חריגה של נתי ממתינה לאישור.
 // 2) ספירה שבועית עיוורת – הסופר לא רואה מה רשום (count_sheet / submit_stock_count).
 // 3) אישור ספירה – מנהל שלא ספר (stock_count_review / approve_stock_count).
+// 4) לאישור – מזיגות חריגות של נתי + ספירה שממתינה (decide_repack).
 // ============================================================
 
 const UNIT_LABEL = { '25 ק"ג': "חבית 25", '5 ק"ג': "גלון 5", '1 ק"ג': '1 ק"ג', 'חצי ק"ג': "חצי", 'רבע ק"ג': "רבע" };
@@ -47,7 +48,7 @@ function Stepper({ value, onChange, max, id, label, placeholder = "0" }) {
 // ============================================================
 // 1) מזיגה ופירוק
 // ============================================================
-export function RepackScreen({ userName, onBack }) {
+export function RepackScreen({ userName, isAdmin, onBack }) {
   const [catalog, setCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -59,10 +60,15 @@ export function RepackScreen({ userName, onBack }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(null);
+  const [recent, setRecent] = useState([]);
 
   const load = useCallback(async () => {
-    const { data, error: e } = await supabase.rpc("mobile_catalog");
-    if (e) setError(e.message); else setCatalog(data || []);
+    const [cat, rec] = await Promise.all([
+      supabase.rpc("mobile_catalog"),
+      supabase.from("repack_log").select("id,tag,scent,in_kg,out_kg,status,created_by_name,created_at,decided_by_name,decision_note").order("created_at", { ascending: false }).limit(8),
+    ]);
+    if (cat.error) setError(cat.error.message); else setCatalog(cat.data || []);
+    setRecent(rec.error ? [] : rec.data || []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -120,7 +126,16 @@ export function RepackScreen({ userName, onBack }) {
     return (<>
       <Header title="מזיגה ופירוק" subtitle={`${userName} · מחסן מרכזי`} onBack={onBack} />
       <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
-        {done && (
+        {done && done.status === "pending" && (
+          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-300 rounded-2xl px-3.5 py-3">
+            <TriangleAlert size={22} className="text-amber-700 shrink-0" />
+            <div className="text-sm text-amber-900">
+              <div className="font-bold">נשלח לאישור · {done.tag}</div>
+              <div>{done.scent}: נפתחו {kg(done.in_kg)} ק"ג, יצאו {kg(done.out_kg)} ק"ג. המלאי יתעדכן אחרי שליאור או אלירן יאשרו.</div>
+            </div>
+          </div>
+        )}
+        {done && done.status !== "pending" && (
           <div className="flex items-start gap-2.5 bg-green-50 border border-green-200 rounded-2xl px-3.5 py-3">
             <CircleCheck size={22} className="text-green-700 shrink-0" />
             <div className="text-sm">
@@ -148,6 +163,12 @@ export function RepackScreen({ userName, onBack }) {
           </button>
         ))}
         {!loading && shown.length === 0 && <div className="text-center text-slate-500 py-6">לא נמצא</div>}
+        {!loading && !q && recent.length > 0 && (
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="text-[13px] text-slate-600 font-medium">מזיגות אחרונות</div>
+            {recent.map((r) => <RepackRow key={r.id} r={r} />)}
+          </div>
+        )}
       </div>
     </>);
   }
@@ -186,6 +207,9 @@ export function RepackScreen({ userName, onBack }) {
         <div className={`rounded-2xl p-3.5 flex flex-col gap-1 border-[1.5px] ${outOfRange ? "bg-amber-50 border-amber-400" : "bg-slate-100 border-slate-200"}`}>
           <div className="flex justify-between"><span className="text-slate-600">נפתח</span><span className="font-bold">{kg(inKg)} ק"ג</span></div>
           <div className="flex justify-between"><span className="text-slate-600">יצא</span><span className="font-bold">{kg(outKg)} ק"ג</span></div>
+          {outKg < inKg && (
+            <div className="flex justify-between"><span className="text-slate-600">נשאר לחלק</span><span className="font-bold">{kg(inKg - outKg)} ק"ג</span></div>
+          )}
           {outKg > 0 && (
             <div className="flex justify-between border-t border-slate-300 pt-1 mt-1">
               <span className="text-slate-600">הפרש</span>
@@ -198,6 +222,7 @@ export function RepackScreen({ userName, onBack }) {
       {outOfRange && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="reason" className="text-sm font-semibold text-amber-900">ההפרש מעל 10%. מה הסיבה? (חובה)</label>
+          {!isAdmin && <div className="text-xs text-amber-900">המזיגה תישלח לאישור של ליאור או אלירן, והמלאי יתעדכן אחרי האישור.</div>}
           <input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="למשל: נשפך, בקבוקים מולאו פחות" className="h-12 border-[1.5px] border-amber-400 rounded-xl px-3 bg-white" />
         </div>
       )}
@@ -209,7 +234,7 @@ export function RepackScreen({ userName, onBack }) {
     </div>
     <BottomBar>
       <button disabled={busy || inKg === 0 || outKg === 0} onClick={save} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
-        {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} שמירת המזיגה
+        {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} {outOfRange && !isAdmin ? "שליחה לאישור" : "שמירת המזיגה"}
       </button>
     </BottomBar>
   </>);
@@ -481,5 +506,122 @@ export function CountReview({ onBack }) {
         <button disabled={busy} onClick={cancel} className="h-11 rounded-xl border border-slate-300 text-slate-700">ביטול הספירה</button>
       </div>
     </BottomBar>
+  </>);
+}
+
+// שורה ברשימת מזיגות
+const REPACK_STATUS = {
+  done: { label: "נשמר", cls: "bg-green-100 text-green-800" },
+  approved: { label: "אושר", cls: "bg-green-100 text-green-800" },
+  pending: { label: "ממתין לאישור", cls: "bg-amber-100 text-amber-900" },
+  rejected: { label: "נדחה", cls: "bg-rose-100 text-rose-800" },
+};
+function RepackRow({ r }) {
+  const st = REPACK_STATUS[r.status] || REPACK_STATUS.done;
+  const when = new Date(r.created_at).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-[15px] truncate">{r.scent}</div>
+        <div className="text-xs text-slate-600">{when} · {r.created_by_name} · {kg(r.in_kg)} ← {kg(r.out_kg)} ק"ג</div>
+        {r.status === "rejected" && r.decision_note && <div className="text-xs text-rose-700">נדחה: {r.decision_note}</div>}
+      </div>
+      <span className={`text-xs font-semibold px-2 py-1 rounded-lg shrink-0 ${st.cls}`}>{st.label}</span>
+    </div>
+  );
+}
+
+// ============================================================
+// 4) לאישור – ליאור / אלירן: מזיגות חריגות וספירה שבועית
+// ============================================================
+export function Approvals({ onBack, onOpenCount }) {
+  const [items, setItems] = useState(null);
+  const [counts, setCounts] = useState([]);
+  const [names, setNames] = useState({});
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState(null);
+  const [rejectFor, setRejectFor] = useState(null);
+  const [rejectNote, setRejectNote] = useState("");
+
+  const load = useCallback(async () => {
+    setError("");
+    const [rp, sc, it] = await Promise.all([
+      supabase.from("repack_log").select("*").eq("status", "pending").order("created_at"),
+      supabase.from("stock_counts").select("id,counted_by_name,submitted_at").eq("status", "submitted").order("submitted_at"),
+      supabase.from("items").select("id,unit"),
+    ]);
+    if (rp.error) { setError(rp.error.message); setItems([]); return; }
+    setItems(rp.data || []);
+    setCounts(sc.error ? [] : sc.data || []);
+    setNames(Object.fromEntries((it.data || []).map((i) => [i.id, i.unit])));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const decide = async (r, approve) => {
+    if (!approve && !rejectNote.trim()) { setError("כתוב בקצרה למה המזיגה נדחתה"); return; }
+    setBusyId(r.id); setError("");
+    try {
+      const { error: e } = await supabase.rpc("decide_repack", { p_id: r.id, p_approve: approve, p_note: approve ? null : rejectNote });
+      if (e) throw e;
+      setRejectFor(null); setRejectNote("");
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusyId(null); }
+  };
+
+  const lines = (arr) => (arr || []).map((l) => `${kg(l.qty)} ${UNIT_LABEL[l.unit || names[l.item_id]] || ""}`).join(" + ");
+
+  return (<>
+    <Header title="לאישור" subtitle="מזיגות חריגות וספירה שבועית" onBack={onBack} />
+    <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
+      <ErrorBox>{error}</ErrorBox>
+      {items === null ? <Loading /> : (<>
+        {counts.map((c) => (
+          <button key={c.id} onClick={onOpenCount} className="bg-white border-[1.5px] border-amber-400 rounded-2xl p-3.5 flex items-center gap-3 text-right">
+            <ClipboardList size={24} className="text-amber-700 shrink-0" />
+            <div className="flex-1">
+              <div className="font-bold">ספירה שבועית</div>
+              <div className="text-[13px] text-slate-600">ספר: {c.counted_by_name} · {new Date(c.submitted_at).toLocaleString("he-IL", { weekday: "long", hour: "2-digit", minute: "2-digit" })}</div>
+            </div>
+            <span className="text-sm font-semibold" style={{ color: NAVY }}>לפערים ←</span>
+          </button>
+        ))}
+        {items.map((r) => {
+          const pct = Math.round((Number(r.out_kg) / Number(r.in_kg) - 1) * 100);
+          return (
+            <div key={r.id} className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
+              <div className="flex justify-between items-baseline">
+                <span className="font-bold text-[17px]">מזיגה · {r.scent}</span>
+                <span className="text-sm font-bold text-amber-800">{pct > 0 ? "+" : ""}{pct}%</span>
+              </div>
+              <div className="text-[13px] text-slate-600">{r.created_by_name} · {new Date(r.created_at).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+              <div className="text-sm"><span className="text-slate-600">נפתח: </span>{lines(r.consumed)} ({kg(r.in_kg)} ק"ג)</div>
+              <div className="text-sm"><span className="text-slate-600">יצא: </span>{lines(r.produced)} ({kg(r.out_kg)} ק"ג)</div>
+              {r.reason && <div className="text-sm bg-amber-50 rounded-lg px-2.5 py-1.5"><span className="text-slate-600">סיבה: </span>{r.reason}</div>}
+              {r.note && <div className="text-sm text-slate-700">הערה: {r.note}</div>}
+              {rejectFor === r.id ? (
+                <div className="flex flex-col gap-2">
+                  <label htmlFor={`rj-${r.id}`} className="text-sm text-slate-600">למה נדחה? (נתי יראה את זה)</label>
+                  <input id={`rj-${r.id}`} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} className="h-11 border border-slate-300 rounded-xl px-3" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <button disabled={busyId === r.id} onClick={() => decide(r, false)} className="h-11 rounded-xl bg-rose-600 text-white font-semibold">דחייה</button>
+                    <button onClick={() => { setRejectFor(null); setRejectNote(""); }} className="h-11 rounded-xl border border-slate-300">ביטול</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <button disabled={busyId === r.id} onClick={() => decide(r, true)} className="h-12 rounded-xl font-bold flex items-center justify-center gap-1.5" style={{ background: AMBER, color: NAVY }}>
+                    {busyId === r.id ? <Loader2 className="animate-spin" size={16} /> : <Check size={18} />} אישור
+                  </button>
+                  <button disabled={busyId === r.id} onClick={() => { setRejectFor(r.id); setRejectNote(""); setError(""); }} className="h-12 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold">דחייה</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {items.length === 0 && counts.length === 0 && (
+          <div className="flex flex-col items-center gap-2 py-14 text-slate-600"><CircleCheck size={36} className="text-green-600" /> אין שום דבר שמחכה לאישור</div>
+        )}
+      </>)}
+    </div>
   </>);
 }

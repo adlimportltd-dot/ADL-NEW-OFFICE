@@ -9,7 +9,7 @@ import {
   Droplets, ClipboardList,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
-import MobileSale from "./MobileSale";
+import MobileApp from "./MobileApp";
 
 // ==================== API layer (merged inline - single file) ====================
 // ---------- מיפוי snake_case (DB) <-> camelCase (UI) ----------
@@ -7602,7 +7602,7 @@ export default function App() {
 
   const sellerOnlyRef = React.useRef(false);
   const [mobileMode, setMobileMode] = useState(() => { try { return new URLSearchParams(window.location.search).has("m"); } catch (e) { return false; } });
-  // מסך פתיחה במצב טלפון: ?m=1&s=repack | count | review (או מהתפריט)
+  // מסך פתיחה במצב טלפון: ?m=1 = מסך הבית; ?m=1&s=sale | repack | count | approvals (או מהתפריט)
   const [mobileStart, setMobileStart] = useState(() => { try { return new URLSearchParams(window.location.search).get("s") || null; } catch (e) { return null; } });
   const loadEverything = useCallback(async (userId) => {
     try {
@@ -7761,14 +7761,14 @@ export default function App() {
   // isAdmin הוא המקור היחיד שקובע הרשאות בכל המערכת (תפריט + כל בדיקת isAdmin
   // בתוך המסכים). isViewer משמש אך ורק לתווית התצוגה למטה - לא לשום החלטת
   // הרשאה - כדי שלא ייווצר בעתיד גבול הרשאות כפול וסותר.
-  // מכירה מהירה בטלפון: מוכר תמיד, מנהל כשנכנס עם ?m=1 או מהכפתור בתפריט
+  // מסכי הטלפון (מכירה, מזיגה, ספירה): מוכר תמיד, מנהל כשנכנס עם ?m=1 או מהתפריט
   if (profile.role === "seller" || mobileMode) {
     const exitMobile = profile.role === "admin" ? () => {
       setMobileMode(false);
       setMobileStart(null);
       try { window.history.replaceState(null, "", window.location.pathname); } catch (e) {}
     } : null;
-    return <MobileSale key={mobileStart || "sale"} initialScreen={mobileStart} profile={profile} onSignOut={async () => { try { await api.signOut(); } catch (e) {} }} onExitToSystem={exitMobile} />;
+    return <MobileApp key={mobileStart || "home"} initialScreen={mobileStart} profile={profile} onSignOut={async () => { try { await api.signOut(); } catch (e) {} }} onExitToSystem={exitMobile} />;
   }
 
   const isAdmin = profile.role === "admin";
@@ -7778,7 +7778,7 @@ export default function App() {
   // בתצוגה החדשה: התפריט מחולק לקבוצות עם כותרת קטנה לכל קבוצה
   const navSections = uiStyle === "classic" ? [{ title: null, items: nav }] : NAV_GROUP_ORDER.map((g) => ({ title: g, items: nav.filter((n) => (n.group || null) === g) })).filter((sec) => sec.items.length > 0);
   const goTab = (key) => {
-    const mobileStarts = { mobileSale: null, mobileRepack: "repack", mobileCount: "count" };
+    const mobileStarts = { mobileSale: "sale", mobileRepack: "repack", mobileCount: "count" };
     if (key in mobileStarts) { setMobileStart(mobileStarts[key]); setMobileMode(true); setMobileMenuOpen(false); return; } setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 

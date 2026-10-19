@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  Search, Plus, Minus, Check, LogOut, Loader2, CircleCheck,
-  TriangleAlert, Info, Tag, Package, Droplets, X, ClipboardList,
+  Search, Plus, Minus, Check, Loader2, CircleCheck,
+  TriangleAlert, Info, Package, Droplets, X,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn } from "./mobileUi";
-import { RepackScreen, WeeklyCount, CountReview } from "./MobileWarehouse";
 
 // ============================================================
 // מכירה מהירה בטלפון (אדל)
@@ -30,12 +29,11 @@ const PAYMENTS = [
   { key: "open", label: "חוב פתוח" },
 ];
 
-export default function MobileSale({ profile, onSignOut, onExitToSystem, initialScreen }) {
+export default function MobileSale({ profile, onHome }) {
   const isAdmin = profile?.role === "admin";
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
 
-  const [screen, setScreen] = useState(initialScreen || "customer"); // customer | items | summary | done | prices | repack | count | review
-  const [pendingCounts, setPendingCounts] = useState(0);
+  const [screen, setScreen] = useState("customer"); // customer | items | summary | done
   const [catalog, setCatalog] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [recent, setRecent] = useState([]);
@@ -75,16 +73,12 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem, initial
       setCatalog(cat.data || []);
       setCustomers(cust.data || []);
       setRecent(rec.error ? [] : rec.data || []);
-      if (isAdmin) {
-        const pc = await supabase.from("stock_counts").select("id").eq("status", "submitted");
-        setPendingCounts(pc.error ? 0 : (pc.data || []).length);
-      }
     } catch (e) {
       setLoadError(e.message || "שגיאה בטעינה");
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -202,7 +196,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem, initial
       <div className="font-bold">לא הצלחנו לטעון את מסך המכירה</div>
       <div className="text-sm text-slate-600">{loadError}</div>
       <button onClick={() => { setLoading(true); load(); }} className={bigBtn} style={{ background: AMBER }}>נסה שוב</button>
-      <button onClick={onSignOut} className="text-sm text-slate-600 underline">התנתקות</button>
+      <button onClick={onHome} className="text-sm text-slate-600 underline">חזרה למסך הבית</button>
     </div>
   );
 
@@ -216,27 +210,10 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem, initial
         title="מכירה חדשה"
         subtitle={`שלום ${userName} · מחסן מרכזי`}
         step={1}
-        right={
-          <div className="flex gap-1.5">
-            {isAdmin && <button onClick={() => setScreen("prices")} className="h-10 px-3 rounded-xl bg-slate-800 text-sm flex items-center gap-1"><Tag size={15} /> מחירון</button>}
-            {isAdmin && onExitToSystem && <button onClick={onExitToSystem} className="h-10 px-3 rounded-xl bg-slate-800 text-sm">למערכת</button>}
-            <button onClick={onSignOut} aria-label="התנתקות" className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center"><LogOut size={17} /></button>
-          </div>
-        }
+        onBack={onHome}
       />
       <div className="flex-1 px-4 py-4 flex flex-col gap-3">
-        <div className="grid gap-2" style={{ gridTemplateColumns: isAdmin ? "1fr 1fr" : "1fr" }}>
-          {isAdmin && (
-            <button onClick={() => setScreen("repack")} className="h-12 rounded-xl bg-white border-[1.5px] border-slate-300 font-semibold flex items-center justify-center gap-1.5"><Droplets size={16} /> מזיגה ופירוק</button>
-          )}
-          <button onClick={() => setScreen("count")} className="h-12 rounded-xl bg-white border-[1.5px] border-slate-300 font-semibold flex items-center justify-center gap-1.5"><ClipboardList size={16} /> ספירה שבועית</button>
-        </div>
-        {isAdmin && pendingCounts > 0 && (
-          <button onClick={() => setScreen("review")} className="h-12 rounded-xl font-semibold flex items-center justify-center gap-1.5" style={{ background: AMBER, color: NAVY }}>
-            <TriangleAlert size={16} /> ספירה ממתינה לאישור שלך
-          </button>
-        )}
-        <label htmlFor="cust" className="font-semibold mt-1">למי מוכרים?</label>
+        <label htmlFor="cust" className="font-semibold">למי מוכרים?</label>
         <div className="flex items-center gap-2.5 bg-white border-[1.5px] border-slate-300 rounded-2xl px-3.5 h-14">
           <Search size={20} className="text-slate-500" />
           <input id="cust" value={custQuery} onChange={(e) => setCustQuery(e.target.value)} placeholder="שם לקוח או טלפון" className="flex-1 bg-transparent outline-none text-base" />
@@ -508,18 +485,10 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem, initial
       </div>
       <div className="px-4 pb-6 flex flex-col gap-2.5">
         <button onClick={resetSale} className={bigBtn} style={{ background: AMBER, color: NAVY }}>מכירה חדשה</button>
+        <button onClick={onHome} className="h-12 rounded-2xl border border-slate-300 bg-white font-semibold">למסך הבית</button>
       </div>
     </>);
   }
-
-  // ---------- מחסן: מזיגה, ספירה שבועית, אישור ספירה ----------
-  const backHome = () => { setScreen("customer"); load(); };
-  if (screen === "repack" && isAdmin) return shell(<RepackScreen userName={userName} onBack={backHome} />);
-  if (screen === "count") return shell(<WeeklyCount userName={userName} onBack={backHome} />);
-  if (screen === "review" && isAdmin) return shell(<CountReview onBack={backHome} />);
-
-  // ---------- מחירון (מנהל בלבד) ----------
-  if (screen === "prices" && isAdmin) return shell(<PriceList onBack={() => { setScreen("customer"); load(); }} />);
 
   return shell(<div className="p-6">...</div>);
 }
@@ -527,7 +496,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem, initial
 // ============================================================
 // מחירון – מנהל בלבד. מחיר רגיל ומחיר לאייקון, לפני מע"מ.
 // ============================================================
-function PriceList({ onBack }) {
+export function PriceList({ onBack }) {
   const [items, setItems] = useState([]);
   const [hints, setHints] = useState({}); // itemId -> { last, lastIcon }
   const [edits, setEdits] = useState({});
