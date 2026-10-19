@@ -6,9 +6,10 @@ import {
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
   Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History, Undo2, Repeat, Eye, EyeOff,
+  Droplets, ClipboardList,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
-import MobileSale from "./MobileSale";
+import MobileApp from "./MobileApp";
 
 // ==================== API layer (merged inline - single file) ====================
 // ---------- מיפוי snake_case (DB) <-> camelCase (UI) ----------
@@ -7556,6 +7557,8 @@ const FULL_NAV = [
   { key: "transaction", group: "מלאי", label: "תנועת מלאי", icon: ArrowLeftRight, adminOnly: true },
   { key: "sale", group: "מכירות ולקוחות", label: "מכירה / הזמנה חדשה", icon: ShoppingCart, adminOnly: true },
   { key: "mobileSale", group: "מכירות ולקוחות", label: "מכירה מהירה (טלפון)", icon: ShoppingCart, adminOnly: true },
+  { key: "mobileRepack", group: "מלאי", label: "מזיגה ופירוק (טלפון)", icon: Droplets, adminOnly: true },
+  { key: "mobileCount", group: "מלאי", label: "ספירה שבועית (טלפון)", icon: ClipboardList, adminOnly: true },
   { key: "items", group: "מלאי", label: "פריטים", icon: Package, adminOnly: true },
   { key: "locations", group: "מלאי", label: "מיקומים", icon: Warehouse, adminOnly: true },
   { key: "customers", group: "מכירות ולקוחות", label: "לקוחות", icon: Users },
@@ -7599,6 +7602,8 @@ export default function App() {
 
   const sellerOnlyRef = React.useRef(false);
   const [mobileMode, setMobileMode] = useState(() => { try { return new URLSearchParams(window.location.search).has("m"); } catch (e) { return false; } });
+  // מסך פתיחה במצב טלפון: ?m=1 = מסך הבית; ?m=1&s=sale | repack | count | approvals (או מהתפריט)
+  const [mobileStart, setMobileStart] = useState(() => { try { return new URLSearchParams(window.location.search).get("s") || null; } catch (e) { return null; } });
   const loadEverything = useCallback(async (userId) => {
     try {
       // מוכר (seller) רואה רק את מסך המכירה בטלפון - לא טוענים לו את נתוני המערכת
@@ -7756,13 +7761,14 @@ export default function App() {
   // isAdmin הוא המקור היחיד שקובע הרשאות בכל המערכת (תפריט + כל בדיקת isAdmin
   // בתוך המסכים). isViewer משמש אך ורק לתווית התצוגה למטה - לא לשום החלטת
   // הרשאה - כדי שלא ייווצר בעתיד גבול הרשאות כפול וסותר.
-  // מכירה מהירה בטלפון: מוכר תמיד, מנהל כשנכנס עם ?m=1 או מהכפתור בתפריט
+  // מסכי הטלפון (מכירה, מזיגה, ספירה): מוכר תמיד, מנהל כשנכנס עם ?m=1 או מהתפריט
   if (profile.role === "seller" || mobileMode) {
     const exitMobile = profile.role === "admin" ? () => {
       setMobileMode(false);
+      setMobileStart(null);
       try { window.history.replaceState(null, "", window.location.pathname); } catch (e) {}
     } : null;
-    return <MobileSale profile={profile} onSignOut={async () => { try { await api.signOut(); } catch (e) {} }} onExitToSystem={exitMobile} />;
+    return <MobileApp key={mobileStart || "home"} initialScreen={mobileStart} profile={profile} onSignOut={async () => { try { await api.signOut(); } catch (e) {} }} onExitToSystem={exitMobile} />;
   }
 
   const isAdmin = profile.role === "admin";
@@ -7771,7 +7777,9 @@ export default function App() {
   const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
   // בתצוגה החדשה: התפריט מחולק לקבוצות עם כותרת קטנה לכל קבוצה
   const navSections = uiStyle === "classic" ? [{ title: null, items: nav }] : NAV_GROUP_ORDER.map((g) => ({ title: g, items: nav.filter((n) => (n.group || null) === g) })).filter((sec) => sec.items.length > 0);
-  const goTab = (key) => { if (key === "mobileSale") { setMobileMode(true); setMobileMenuOpen(false); return; } setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
+  const goTab = (key) => {
+    const mobileStarts = { mobileSale: "sale", mobileRepack: "repack", mobileCount: "count" };
+    if (key in mobileStarts) { setMobileStart(mobileStarts[key]); setMobileMode(true); setMobileMenuOpen(false); return; } setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (

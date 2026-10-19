@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  Search, Plus, Minus, Check, ChevronRight, LogOut, Loader2, CircleCheck,
-  TriangleAlert, Info, Tag, Package, Droplets, X,
+  Search, Plus, Minus, Check, Loader2, CircleCheck,
+  TriangleAlert, Info, Package, Droplets, X,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
+import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn } from "./mobileUi";
 
 // ============================================================
 // מכירה מהירה בטלפון (אדל)
@@ -12,8 +13,6 @@ import { supabase } from "./lib/supabaseClient";
 // בפונקציה mobile_sale – המסך לא מקבל עלויות ולא מחיר לאייקון בכלל.
 // ============================================================
 
-const NAVY = "#0F172A";
-const AMBER = "#F59E0B";
 const BULK_KG_UNIT = 'ק"ג';
 const SIZES = [
   { key: 'רבע ק"ג', label: "רבע" },
@@ -29,52 +28,12 @@ const PAYMENTS = [
   { key: "bit", label: "ביט" },
   { key: "open", label: "חוב פתוח" },
 ];
-const fmt = (n) => `₪${Number(n || 0).toLocaleString("he-IL", { maximumFractionDigits: 2 })}`;
-const ESSENCE_RE = /^תמצית ריח - (.+) \((.+)\)$/;
-const norm = (s) => (s || "").toString().replace(/[׳']/g, "").toLowerCase();
 
-function parseEssence(name) {
-  const m = (name || "").match(ESSENCE_RE);
-  return m ? { scent: m[1], size: m[2] } : null;
-}
-
-function Header({ title, subtitle, step, onBack, right }) {
-  return (
-    <div style={{ background: NAVY }} className="text-white px-5 pt-4 pb-4 sticky top-0 z-10">
-      <div className="flex items-center gap-2.5">
-        {onBack && (
-          <button onClick={onBack} aria-label="חזרה" className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center shrink-0">
-            <ChevronRight size={20} />
-          </button>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="text-xl font-bold truncate">{title}</div>
-          {subtitle && <div className="text-[13px] text-slate-300 truncate">{subtitle}</div>}
-        </div>
-        {right}
-      </div>
-      {step && (
-        <div className="flex gap-1.5 mt-3">
-          {[1, 2, 3].map((n) => (
-            <div key={n} className="flex-1 h-1 rounded" style={{ background: n <= step ? AMBER : "#334155" }} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BottomBar({ children }) {
-  return <div className="sticky bottom-0 bg-white border-t border-slate-200 px-4 pt-3 pb-5 z-10">{children}</div>;
-}
-
-const bigBtn = "w-full h-14 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2 disabled:opacity-40";
-
-export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
+export default function MobileSale({ profile, onHome }) {
   const isAdmin = profile?.role === "admin";
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
 
-  const [screen, setScreen] = useState("customer"); // customer | items | summary | done | prices
+  const [screen, setScreen] = useState("customer"); // customer | items | summary | done
   const [catalog, setCatalog] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [recent, setRecent] = useState([]);
@@ -237,7 +196,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
       <div className="font-bold">לא הצלחנו לטעון את מסך המכירה</div>
       <div className="text-sm text-slate-600">{loadError}</div>
       <button onClick={() => { setLoading(true); load(); }} className={bigBtn} style={{ background: AMBER }}>נסה שוב</button>
-      <button onClick={onSignOut} className="text-sm text-slate-600 underline">התנתקות</button>
+      <button onClick={onHome} className="text-sm text-slate-600 underline">חזרה למסך הבית</button>
     </div>
   );
 
@@ -251,13 +210,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
         title="מכירה חדשה"
         subtitle={`שלום ${userName} · מחסן מרכזי`}
         step={1}
-        right={
-          <div className="flex gap-1.5">
-            {isAdmin && <button onClick={() => setScreen("prices")} className="h-10 px-3 rounded-xl bg-slate-800 text-sm flex items-center gap-1"><Tag size={15} /> מחירון</button>}
-            {isAdmin && onExitToSystem && <button onClick={onExitToSystem} className="h-10 px-3 rounded-xl bg-slate-800 text-sm">למערכת</button>}
-            <button onClick={onSignOut} aria-label="התנתקות" className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center"><LogOut size={17} /></button>
-          </div>
-        }
+        onBack={onHome}
       />
       <div className="flex-1 px-4 py-4 flex flex-col gap-3">
         <label htmlFor="cust" className="font-semibold">למי מוכרים?</label>
@@ -532,12 +485,10 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
       </div>
       <div className="px-4 pb-6 flex flex-col gap-2.5">
         <button onClick={resetSale} className={bigBtn} style={{ background: AMBER, color: NAVY }}>מכירה חדשה</button>
+        <button onClick={onHome} className="h-12 rounded-2xl border border-slate-300 bg-white font-semibold">למסך הבית</button>
       </div>
     </>);
   }
-
-  // ---------- מחירון (מנהל בלבד) ----------
-  if (screen === "prices" && isAdmin) return shell(<PriceList onBack={() => { setScreen("customer"); load(); }} />);
 
   return shell(<div className="p-6">...</div>);
 }
@@ -545,7 +496,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
 // ============================================================
 // מחירון – מנהל בלבד. מחיר רגיל ומחיר לאייקון, לפני מע"מ.
 // ============================================================
-function PriceList({ onBack }) {
+export function PriceList({ onBack }) {
   const [items, setItems] = useState([]);
   const [hints, setHints] = useState({}); // itemId -> { last, lastIcon }
   const [edits, setEdits] = useState({});
