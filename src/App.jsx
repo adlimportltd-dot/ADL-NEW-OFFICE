@@ -7559,6 +7559,7 @@ const FULL_NAV = [
   { key: "mobileSale", group: "מכירות ולקוחות", label: "מכירה מהירה (טלפון)", icon: ShoppingCart, adminOnly: true },
   { key: "mobileRepack", group: "מלאי", label: "מזיגה ופירוק (טלפון)", icon: Droplets, adminOnly: true },
   { key: "mobileCount", group: "מלאי", label: "ספירה שבועית (טלפון)", icon: ClipboardList, adminOnly: true },
+  { key: "mobileReport", group: "מלאי", label: "דוח יומי (טלפון)", icon: ClipboardList, adminOnly: true },
   { key: "items", group: "מלאי", label: "פריטים", icon: Package, adminOnly: true },
   { key: "locations", group: "מלאי", label: "מיקומים", icon: Warehouse, adminOnly: true },
   { key: "customers", group: "מכירות ולקוחות", label: "לקוחות", icon: Users },
@@ -7778,7 +7779,7 @@ export default function App() {
   // בתצוגה החדשה: התפריט מחולק לקבוצות עם כותרת קטנה לכל קבוצה
   const navSections = uiStyle === "classic" ? [{ title: null, items: nav }] : NAV_GROUP_ORDER.map((g) => ({ title: g, items: nav.filter((n) => (n.group || null) === g) })).filter((sec) => sec.items.length > 0);
   const goTab = (key) => {
-    const mobileStarts = { mobileSale: "sale", mobileRepack: "repack", mobileCount: "count" };
+    const mobileStarts = { mobileSale: "sale", mobileRepack: "repack", mobileCount: "count", mobileReport: "report" };
     if (key in mobileStarts) { setMobileStart(mobileStarts[key]); setMobileMode(true); setMobileMenuOpen(false); return; } setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
