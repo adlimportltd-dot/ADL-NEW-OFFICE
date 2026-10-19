@@ -88,7 +88,8 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
   const [tab, setTab] = useState("consumable");
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState({}); // itemId -> qty
-  const [priceEdits, setPriceEdits] = useState({}); // itemId -> price (מנהל בלבד)
+  const [priceEdits, setPriceEdits] = useState({}); // itemId -> price (מחיר פתוח, נקבע בתיאום עם ליאור/אלירן)
+  const [approvedBy, setApprovedBy] = useState("");
 
   const [payment, setPayment] = useState("");
   const [iconSite, setIconSite] = useState(false);
@@ -159,7 +160,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
 
   const viaIcon = payment === "bit" || iconSite;
   const unitPriceOf = (item) => {
-    if (isAdmin && priceEdits[item.id] !== undefined && priceEdits[item.id] !== "") return Number(priceEdits[item.id]);
+    if (priceEdits[item.id] !== undefined && priceEdits[item.id] !== "") return Number(priceEdits[item.id]);
     return item.sale_price != null ? Number(item.sale_price) : null;
   };
   const missingPrice = !viaIcon && cartLines.some((l) => unitPriceOf(l.item) == null);
@@ -167,7 +168,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
   const vat = subtotal * (Number(vatRate) || 0) / 100;
 
   const resetSale = () => {
-    setCustomer(null); setCustQuery(""); setCart({}); setPriceEdits({}); setPayment("");
+    setCustomer(null); setCustQuery(""); setCart({}); setPriceEdits({}); setApprovedBy(""); setPayment("");
     setIconSite(false); setEndCustomer(""); setOrderRef(""); setVatRate(18); setNote("");
     setError(""); setResult(null); setQuery(""); setTab("consumable"); setScreen("customer");
   };
@@ -191,12 +192,13 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
     setError("");
     if (!payment) { setError("יש לבחור איך הלקוח משלם"); return; }
     if (cartLines.length === 0) { setError("הסל ריק"); return; }
-    if (missingPrice) { setError("יש פריט בלי מחיר במחירון – רק ליאור או אלירן יכולים להשלים מחיר"); return; }
+    if (missingPrice) { setError("יש להקליד מחיר לכל פריט (אחרי תיאום עם ליאור או אלירן)"); return; }
+    if (!isAdmin && !viaIcon && !approvedBy) { setError("יש לסמן מי אישר את המחיר – ליאור או אלירן"); return; }
     setBusy(true);
     try {
       const lines = cartLines.map((l) => {
         const line = { item_id: l.item.id, qty: l.qty };
-        if (isAdmin && !viaIcon && priceEdits[l.item.id] !== undefined && priceEdits[l.item.id] !== "") line.unit_price = Number(priceEdits[l.item.id]);
+        if (!viaIcon) line.unit_price = unitPriceOf(l.item);
         return line;
       });
       const { data, error: e } = await supabase.rpc("mobile_sale", {
@@ -208,6 +210,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
         p_order_ref: iconSite ? orderRef : null,
         p_vat_rate: Number(vatRate),
         p_note: note || null,
+        p_approved_by: isAdmin ? (approvedBy || null) : approvedBy,
       });
       if (e) throw e;
       setResult(data);
@@ -396,7 +399,13 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
             <div className="text-xs text-slate-600">בסל</div>
             <div className="font-bold">{cartLines.length} שורות · {cartCount} פריטים</div>
           </div>
-          <button disabled={cartLines.length === 0} onClick={() => { setError(""); setScreen("summary"); }} className="h-[54px] px-6 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: NAVY }}>לסיכום</button>
+          <button disabled={cartLines.length === 0} onClick={() => {
+            setError("");
+            const pre = { ...priceEdits };
+            cartLines.forEach((l) => { if (pre[l.item.id] === undefined && l.item.sale_price != null) pre[l.item.id] = String(l.item.sale_price); });
+            setPriceEdits(pre);
+            setScreen("summary");
+          }} className="h-[54px] px-6 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: NAVY }}>לסיכום</button>
         </div>
       </BottomBar>
     </>);
@@ -419,12 +428,12 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
                     {l.qty} יח'
                     {!viaIcon && (p != null ? ` × ${fmt(p)}` : "")}
                   </div>
-                  {!viaIcon && p == null && <div className="text-xs text-rose-700 mt-0.5">אין מחיר במחירון</div>}
-                  {isAdmin && !viaIcon && (
+                  {!viaIcon && p == null && <div className="text-xs text-rose-700 mt-0.5">יש להקליד מחיר</div>}
+                  {!viaIcon && (
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <label className="text-xs text-slate-600" htmlFor={`pr-${l.item.id}`}>מחיר ליחידה (לפני מע"מ)</label>
                       <input id={`pr-${l.item.id}`} inputMode="decimal" className="w-24 h-9 border border-slate-300 rounded-lg px-2 text-sm"
-                        placeholder={l.item.sale_price != null ? String(l.item.sale_price) : "מחיר"}
+                        placeholder="מחיר"
                         value={priceEdits[l.item.id] ?? ""} onChange={(e) => setPriceEdits({ ...priceEdits, [l.item.id]: e.target.value })} />
                     </div>
                   )}
@@ -434,7 +443,17 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
             );
           })}
         </div>
-        {!isAdmin && !viaIcon && <div className="text-xs text-slate-600 px-1">המחירים נלקחים מהמחירון. רק ליאור ואלירן יכולים לשנות מחיר.</div>}
+        {!viaIcon && <div className="text-xs text-slate-600 px-1">המחיר מתמלא מהמחירון. כל מחיר נקבע בתיאום עם ליאור או אלירן.</div>}
+        {!isAdmin && !viaIcon && (
+          <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
+            <div className="font-semibold text-[15px]">מי אישר את המחיר?</div>
+            <div className="grid grid-cols-2 gap-2">
+              {["ליאור", "אלירן"].map((n) => (
+                <button key={n} onClick={() => setApprovedBy(n)} className={`h-12 rounded-xl text-[15px] ${approvedBy === n ? "bg-slate-900 text-white font-semibold" : "bg-white border-[1.5px] border-slate-300"}`}>{n}</button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="font-semibold mt-1">איך הוא משלם?</div>
         <div className="grid grid-cols-3 gap-2">
@@ -488,7 +507,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
         {error && <div className="bg-rose-100 text-rose-800 rounded-xl px-3 py-2.5 text-sm flex gap-2"><TriangleAlert size={18} className="shrink-0" />{error}</div>}
       </div>
       <BottomBar>
-        <button disabled={busy || !payment || missingPrice} onClick={submit} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
+        <button disabled={busy || !payment || missingPrice || (!isAdmin && !viaIcon && !approvedBy)} onClick={submit} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
           {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} {busy ? "שומר..." : "אשר מכירה"}
         </button>
       </BottomBar>
