@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ShoppingCart, Droplets, ClipboardList, CircleCheck, Tag, LogOut, Monitor, Truck } from "lucide-react";
+import { ShoppingCart, Droplets, ClipboardList, CircleCheck, Tag, LogOut, Monitor, Truck, BarChart3 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER } from "./mobileUi";
 import MobileSale, { PriceList } from "./MobileSale";
 import { RepackScreen, WeeklyCount, CountReview, Approvals } from "./MobileWarehouse";
 import { VehicleScreen } from "./MobileVehicle";
+import { DailyReport } from "./MobileReport";
 
 // ============================================================
 // מסך הבית בטלפון: כל העבודה היומית במחסן ממקום אחד.
@@ -40,6 +41,7 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
   if (screen === "count") return shell(<WeeklyCount userName={userName} onBack={home} />);
   if (screen === "approvals" && isAdmin) return shell(<Approvals onBack={home} onOpenCount={() => setScreen("review")} />);
   if (screen === "review" && isAdmin) return shell(<CountReview onBack={() => setScreen("approvals")} />);
+  if (screen === "report" && isAdmin) return shell(<DailyReport onBack={home} />);
   if (screen === "prices" && isAdmin) return shell(<PriceList onBack={home} />);
 
   const waiting = Number(pending.repacks || 0) + Number(pending.counts || 0) + Number(pending.vehicle || 0);
@@ -89,6 +91,7 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
         <Tile icon={Droplets} title="מזיגה ופירוק" sub="פתיחת חבית או גלון" onClick={() => setScreen("repack")} />
         <Tile icon={ClipboardList} title="ספירה שבועית" sub={isCountDay ? "היום יום ספירה – 14:00" : "כל חמישי ב-14:00"} onClick={() => setScreen("count")} />
         {isAdmin && <Tile icon={CircleCheck} title="לאישור" sub={waiting ? "יש ממתינים" : "אין ממתינים"} onClick={() => setScreen("approvals")} badge={waiting} />}
+        {isAdmin && <Tile icon={BarChart3} title="דוח יומי" sub="מכירות, מזיגות, חריגות" onClick={() => setScreen("report")} />}
         {isAdmin && <Tile icon={Tag} title="מחירון" sub="מחיר רגיל ולאייקון" onClick={() => setScreen("prices")} />}
       </div>
     </div>
