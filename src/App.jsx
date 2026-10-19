@@ -172,6 +172,20 @@ async function fetchMyProfile(userId) {
 }
 
 // ---------- Fetch everything needed for the app ----------
+// תקלה זמנית (שעון שרת / רשת / טוקן שמתחדש) – לא מציגים אותה כשגיאה אלא מנסים שוב
+const isTransientError = (e) => /JWT|token|fetch|network|Failed to|timeout|ECONN|502|503|504/i.test(`${e?.message || e || ""}`);
+const friendlyError = (e) => (isTransientError(e)
+  ? "החיבור לשרת נקטע לרגע – הנתונים יתעדכנו אוטומטית"
+  : `שגיאה בטעינת נתונים: ${e?.message || e}`);
+async function withRetry(fn) {
+  try { return await fn(); } catch (e) {
+    if (!isTransientError(e)) throw e;
+    await new Promise((r) => setTimeout(r, 1500));
+    if (/JWT|token/i.test(`${e?.message || ""}`)) { try { await supabase.auth.refreshSession(); } catch (_) {} }
+    return await fn();
+  }
+}
+
 async function fetchAllData() {
   const [itemsRes, locationsRes, customersRes, stockRes, txRes, suppliersRes, shipmentsRes, rateCardsRes, posRes, paymentsRes, leadsRes, quotesRes, expensesRes, expensePaymentsRes, invoicesRes, invoicePaymentsRes, settingsRes] = await Promise.all([
     supabase.from("items").select("*").order("category").order("name"),
@@ -7621,7 +7635,7 @@ export default function App() {
   const loadEverything = useCallback(async (userId) => {
     try {
       // מוכר (seller) רואה רק את מסך המכירה בטלפון - לא טוענים לו את נתוני המערכת
-      const prof = await api.fetchMyProfile(userId);
+      const prof = await withRetry(() => api.fetchMyProfile(userId));
       if (prof.role === "seller") {
         sellerOnlyRef.current = true;
         setProfile(prof);
@@ -7629,22 +7643,23 @@ export default function App() {
         setDataError("");
         return;
       }
-      const all = await api.fetchAllData();
+      const all = await withRetry(() => api.fetchAllData());
       setProfile(prof);
       setData(all);
       setDataError("");
     } catch (e) {
-      setDataError(e.message || "שגיאה בטעינת נתונים");
+      setDataError(friendlyError(e));
     }
   }, []);
 
   const refresh = useCallback(async () => {
     if (sellerOnlyRef.current) return;
     try {
-      const all = await api.fetchAllData();
+      const all = await withRetry(() => api.fetchAllData());
       setData(all);
+      setDataError(""); // הצליח – מורידים הודעת שגיאה ישנה אם הייתה
     } catch (e) {
-      setDataError(e.message || "שגיאה בטעינת נתונים");
+      setDataError(friendlyError(e));
     }
   }, []);
 
