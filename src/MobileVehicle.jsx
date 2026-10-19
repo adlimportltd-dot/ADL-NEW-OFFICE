@@ -32,7 +32,7 @@ function ErrorBox({ children }) {
   return <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl px-3 py-2.5 text-sm"><TriangleAlert size={16} className="shrink-0 mt-0.5" /> <span>{children}</span></div>;
 }
 
-function Stepper({ value, onChange, max, label }) {
+export function Stepper({ value, onChange, max, label }) {
   const n = toInt(value);
   const atMax = max != null && n >= max;
   return (
@@ -47,7 +47,7 @@ function Stepper({ value, onChange, max, label }) {
 }
 
 // קיבוץ פריטים: תמציות לפי ריח (עם גדלים), מכשירים כשורה אחת
-function groupItems(items) {
+export function groupItems(items) {
   const map = {};
   items.forEach((i) => {
     const p = parseEssence(i.name);

@@ -6,7 +6,7 @@ import {
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
   Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History, Undo2, Repeat, Eye, EyeOff,
-  Droplets, ClipboardList,
+  Droplets, ClipboardList, Gift, CheckCheck,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import MobileApp from "./MobileApp";
@@ -7557,10 +7557,12 @@ const FULL_NAV = [
   { key: "dashboard", label: "לוח בקרה", icon: LayoutDashboard },
   { key: "transaction", group: "מלאי", label: "תנועת מלאי", icon: ArrowLeftRight, adminOnly: true },
   { key: "sale", group: "מכירות ולקוחות", label: "מכירה / הזמנה חדשה", icon: ShoppingCart, adminOnly: true },
-  { key: "mobileSale", group: "מכירות ולקוחות", label: "מכירה מהירה (טלפון)", icon: ShoppingCart, adminOnly: true },
-  { key: "mobileRepack", group: "מלאי", label: "מזיגה ופירוק (טלפון)", icon: Droplets, adminOnly: true },
-  { key: "mobileCount", group: "מלאי", label: "ספירה שבועית (טלפון)", icon: ClipboardList, adminOnly: true },
-  { key: "mobileReport", group: "מלאי", label: "דוח יומי (טלפון)", icon: ClipboardList, adminOnly: true },
+  { key: "mobileSale", group: "עבודה יומית", label: "מכירה מהירה", icon: ShoppingCart, adminOnly: true },
+  { key: "mobileApprovals", group: "עבודה יומית", label: "לאישור", icon: CheckCheck, adminOnly: true },
+  { key: "mobileRepack", group: "עבודה יומית", label: "מזיגה ופירוק", icon: Droplets, adminOnly: true },
+  { key: "mobileWaste", group: "עבודה יומית", label: "דוגמה / פחת", icon: Gift, adminOnly: true },
+  { key: "mobileCount", group: "עבודה יומית", label: "ספירה שבועית", icon: ClipboardList, adminOnly: true },
+  { key: "mobileReport", group: "עבודה יומית", label: "דוח יומי", icon: BarChart3, adminOnly: true },
   { key: "items", group: "מלאי", label: "פריטים", icon: Package, adminOnly: true },
   { key: "locations", group: "מלאי", label: "מיקומים", icon: Warehouse, adminOnly: true },
   { key: "customers", group: "מכירות ולקוחות", label: "לקוחות", icon: Users },
@@ -7579,7 +7581,9 @@ const FULL_NAV = [
 ];
 const MOBILE_NAV = ["dashboard", "transaction", "customers", "log"];
 // סדר הקבוצות בתפריט בתצוגה החדשה (בתצוגה הקלאסית התפריט נשאר רשימה אחת כמו קודם)
-const NAV_GROUP_ORDER = [null, "מלאי", "מכירות ולקוחות", "רכש ויבוא", "כספים", "מערכת"];
+const NAV_GROUP_ORDER = [null, "עבודה יומית", "מלאי", "מכירות ולקוחות", "רכש ויבוא", "כספים", "מערכת"];
+// מסכי העבודה היומית (אותם מסכים של הטלפון) – במחשב נפתחים בתוך המערכת, ליד התפריט
+const EMBED_SCREENS = { mobileSale: "sale", mobileApprovals: "approvals", mobileRepack: "repack", mobileWaste: "waste", mobileCount: "count", mobileReport: "report" };
 
 // ==================== App ====================
 export default function App() {
@@ -7603,6 +7607,14 @@ export default function App() {
   const [mfaPendingFactorId, setMfaPendingFactorId] = useState(null); // אם קיים, יש session אמיתי אבל הוא עדיין ב-aal1 וצריך קוד 2FA
 
   const sellerOnlyRef = React.useRef(false);
+  // כמה דברים מחכים לאישור (מזיגות חריגות, ספירה, רכב, פחת) – מספר ליד "לאישור" בתפריט
+  const [pendingCount, setPendingCount] = useState(0);
+  const refreshPending = useCallback(async () => {
+    try {
+      const { data: p, error } = await supabase.rpc("mobile_pending");
+      if (!error && p) setPendingCount(Number(p.repacks || 0) + Number(p.counts || 0) + Number(p.vehicle || 0) + Number(p.waste || 0));
+    } catch (e) {}
+  }, []);
   const [mobileMode, setMobileMode] = useState(() => { try { return new URLSearchParams(window.location.search).has("m"); } catch (e) { return false; } });
   // מסך פתיחה במצב טלפון: ?m=1 = מסך הבית; ?m=1&s=sale | repack | count | approvals (או מהתפריט)
   const [mobileStart, setMobileStart] = useState(() => { try { return new URLSearchParams(window.location.search).get("s") || null; } catch (e) { return null; } });
@@ -7705,6 +7717,14 @@ export default function App() {
     return unsubscribe;
   }, [session, mfaPendingFactorId, refresh]);
 
+  // מספר הממתינים לאישור – מתעדכן כל דקה ובכל מעבר מסך (מנהל בלבד)
+  useEffect(() => {
+    if (!session || mfaPendingFactorId || profile?.role !== "admin") return;
+    refreshPending();
+    const t = setInterval(refreshPending, 60000);
+    return () => clearInterval(t);
+  }, [session, mfaPendingFactorId, profile?.role, tab, refreshPending]);
+
   const runQuickAction = (type) => {
     setCustomerFileId(null); setLocationFileId(null); setTab("transaction"); setQuickTx({ type, nonce: Math.random().toString(36).slice(2) });
   };
@@ -7779,9 +7799,7 @@ export default function App() {
   const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
   // בתצוגה החדשה: התפריט מחולק לקבוצות עם כותרת קטנה לכל קבוצה
   const navSections = uiStyle === "classic" ? [{ title: null, items: nav }] : NAV_GROUP_ORDER.map((g) => ({ title: g, items: nav.filter((n) => (n.group || null) === g) })).filter((sec) => sec.items.length > 0);
-  const goTab = (key) => {
-    const mobileStarts = { mobileSale: "sale", mobileRepack: "repack", mobileCount: "count", mobileReport: "report" };
-    if (key in mobileStarts) { setMobileStart(mobileStarts[key]); setMobileMode(true); setMobileMenuOpen(false); return; } setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
+  const goTab = (key) => { setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (
@@ -7817,6 +7835,7 @@ export default function App() {
                 {sec.items.map(({ key, label, icon: Icon }) => (
                   <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14.5px] font-semibold tracking-tight transition shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-500 text-slate-900" : "text-slate-300 hover:bg-slate-800"}`}>
                     <Icon size={18} /> {label}
+                    {key === "mobileApprovals" && pendingCount > 0 && <span className="mr-auto min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-600 text-white text-xs font-bold flex items-center justify-center">{pendingCount}</span>}
                   </button>
                 ))}
               </React.Fragment>
@@ -7852,6 +7871,7 @@ export default function App() {
                       {sec.items.map(({ key, label, icon: Icon }) => (
                         <button key={key} onClick={() => goTab(key)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-semibold tracking-tight shrink-0 ${tab === key && !customerFileId && !locationFileId ? "bg-amber-100 text-amber-800" : "text-slate-600"}`}>
                           <Icon size={18} /> {label}
+                    {key === "mobileApprovals" && pendingCount > 0 && <span className="mr-auto min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-600 text-white text-xs font-bold flex items-center justify-center">{pendingCount}</span>}
                         </button>
                       ))}
                     </React.Fragment>
@@ -7889,6 +7909,7 @@ export default function App() {
             ) : (
               <>
                 {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} onQuickPO={(itemId) => { setPoPrefillItemId(itemId); setTab("po"); }} uiStyle={uiStyle} onUiStyleChange={setUiStyle} onNavigate={goTab} userName={profile.fullName} />}
+                {EMBED_SCREENS[tab] && isAdmin && <MobileApp key={tab} embedded initialScreen={EMBED_SCREENS[tab]} profile={profile} onExit={() => { setTab("dashboard"); refreshPending(); }} onChanged={refreshPending} />}
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setLocationFileId} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}

@@ -1,22 +1,23 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ShoppingCart, Droplets, ClipboardList, CircleCheck, Tag, LogOut, Monitor, Truck, BarChart3 } from "lucide-react";
+import { ShoppingCart, Droplets, ClipboardList, CircleCheck, Tag, LogOut, Monitor, Truck, BarChart3, Gift } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER } from "./mobileUi";
 import MobileSale, { PriceList } from "./MobileSale";
 import { RepackScreen, WeeklyCount, CountReview, Approvals } from "./MobileWarehouse";
 import { VehicleScreen } from "./MobileVehicle";
 import { DailyReport } from "./MobileReport";
+import { WasteScreen } from "./MobileWaste";
 
 // ============================================================
 // מסך הבית בטלפון: כל העבודה היומית במחסן ממקום אחד.
 // נתי: מכירה, מזיגה ופירוק, ספירה שבועית.
 // ליאור / אלירן: גם "לאישור" (עם מספר ממתינים), מחירון, ומעבר למערכת המלאה.
 // ============================================================
-export default function MobileApp({ profile, onSignOut, onExitToSystem, initialScreen }) {
+export default function MobileApp({ profile, onSignOut, onExitToSystem, initialScreen, embedded = false, onExit }) {
   const isAdmin = profile?.role === "admin";
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
   const [screen, setScreen] = useState(initialScreen || "home"); // home | sale | repack | count | approvals | review | prices
-  const [pending, setPending] = useState({ repacks: 0, counts: 0, vehicle: 0 });
+  const [pending, setPending] = useState({ repacks: 0, counts: 0, vehicle: 0, waste: 0 });
   const [vehicle, setVehicle] = useState(null);
 
   const loadPending = useCallback(async () => {
@@ -28,15 +29,22 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
   }, [isAdmin]);
   useEffect(() => { if (screen === "home") loadPending(); }, [screen, loadPending]);
 
-  const home = () => setScreen("home");
-  const shell = (children) => (
+  // בתוך המערכת במחשב: "חזרה" מחזירה ללוח הבקרה של המערכת (אין שם מסך בית של הטלפון)
+  const home = () => (embedded && onExit ? onExit() : setScreen("home"));
+  // במחשב (בתוך המערכת, ליד התפריט) – רוחב מלא יותר; בטלפון – מסך צר לכל הגובה
+  const shell = (children) => (embedded ? (
+    <div dir="rtl" lang="he" className="w-full max-w-3xl mx-auto">
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col text-slate-900 min-h-[calc(100vh-7rem)] [&>div:first-child]:rounded-t-2xl">{children}</div>
+    </div>
+  ) : (
     <div dir="rtl" lang="he" className="min-h-screen bg-slate-100 flex justify-center" style={{ fontFamily: "'Rubik','Assistant',sans-serif" }}>
       <div className="w-full max-w-md min-h-screen bg-slate-50 flex flex-col text-slate-900">{children}</div>
     </div>
-  );
+  ));
 
-  if (screen === "sale") return <MobileSale profile={profile} onHome={home} />;
+  if (screen === "sale") return <MobileSale profile={profile} onHome={home} embedded={embedded} />;
   if (screen === "vehicle") return shell(<VehicleScreen userName={userName} onBack={home} />);
+  if (screen === "waste") return shell(<WasteScreen userName={userName} onBack={home} />);
   if (screen === "repack") return shell(<RepackScreen userName={userName} isAdmin={isAdmin} onBack={home} />);
   if (screen === "count") return shell(<WeeklyCount userName={userName} onBack={home} />);
   if (screen === "approvals" && isAdmin) return shell(<Approvals onBack={home} onOpenCount={() => setScreen("review")} />);
@@ -44,10 +52,11 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
   if (screen === "report" && isAdmin) return shell(<DailyReport onBack={home} />);
   if (screen === "prices" && isAdmin) return shell(<PriceList onBack={home} />);
 
-  const waiting = Number(pending.repacks || 0) + Number(pending.counts || 0) + Number(pending.vehicle || 0);
+  const waiting = Number(pending.repacks || 0) + Number(pending.counts || 0) + Number(pending.vehicle || 0) + Number(pending.waste || 0);
   const waitingText = [
     pending.vehicle > 0 && `${pending.vehicle} בקשות רכב`,
     pending.repacks > 0 && `${pending.repacks} מזיגות`,
+    pending.waste > 0 && `${pending.waste} פחת/דוגמאות`,
     pending.counts > 0 && "ספירה שבועית",
   ].filter(Boolean).join(" · ");
   const day = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "numeric" });
@@ -89,6 +98,7 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
       <div className="grid grid-cols-2 gap-3">
         {vehicle && <Tile icon={Truck} title="הרכב שלי" sub={vehicle.items ? `${vehicle.items} סוגי פריטים ברכב` : "הרכב ריק – בקשת העמסה"} onClick={() => setScreen("vehicle")} />}
         <Tile icon={Droplets} title="מזיגה ופירוק" sub="פתיחת חבית או גלון" onClick={() => setScreen("repack")} />
+        <Tile icon={Gift} title="דוגמה / פחת" sub="יצא בלי מכירה" onClick={() => setScreen("waste")} />
         <Tile icon={ClipboardList} title="ספירה שבועית" sub={isCountDay ? "היום יום ספירה – 14:00" : "כל חמישי ב-14:00"} onClick={() => setScreen("count")} />
         {isAdmin && <Tile icon={CircleCheck} title="לאישור" sub={waiting ? "יש ממתינים" : "אין ממתינים"} onClick={() => setScreen("approvals")} badge={waiting} />}
         {isAdmin && <Tile icon={BarChart3} title="דוח יומי" sub="מכירות, מזיגות, חריגות" onClick={() => setScreen("report")} />}
