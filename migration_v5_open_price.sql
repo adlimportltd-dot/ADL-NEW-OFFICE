@@ -1,7 +1,7 @@
 -- ============================================================
 -- migration_v5_open_price.sql
 -- מחיר פתוח במכירה מהטלפון: המוכר מקליד מחיר בכל מכירה, אחרי תיאום
--- עם ליאור או אלירן, ומסמן מי אישר. אי אפשר למכור מתחת לעלות.
+-- עם ליאור או אלירן, ומסמן מי אישר. אי אפשר למכור מתחת לעלות (על כל המכירה יחד).
 -- להריץ פעם אחת ב-Supabase SQL Editor של אדל (אחרי migration_v4).
 -- ============================================================
 
@@ -40,6 +40,8 @@ declare
   v_paid boolean;
   v_today date := (now() at time zone 'Asia/Jerusalem')::date;
   v_changed boolean := false;
+  v_rev numeric := 0;        -- סכום המכירה לפני מע"מ
+  v_cost_total numeric := 0; -- עלות הסחורה במכירה
 begin
   if not is_seller() then raise exception 'אין הרשאה למכירה'; end if;
   if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) = 0 then
@@ -110,15 +112,19 @@ begin
       end if;
       if v_price is null then raise exception 'חסר מחיר לפריט %', v_item.name; end if;
       if v_item.sale_price is null or v_price <> v_item.sale_price then v_changed := true; end if;
-      -- מוכר לא יכול למכור מתחת לעלות (בלי לחשוף את העלות)
-      if not v_admin and v_item.unit_cost is not null and v_price < v_item.unit_cost then
-        raise exception 'המחיר של % נמוך מדי – צריך לבדוק עם ליאור או אלירן', v_item.name;
-      end if;
+      v_rev := v_rev + v_price * v_qty;
+      v_cost_total := v_cost_total + coalesce(v_item.unit_cost, 0) * v_qty;
     end if;
     if v_price < 0 then raise exception 'מחיר לא תקין'; end if;
 
     insert into _mobile_lines values (v_item.id, v_qty, round(v_price * (1 + v_vat / 100), 2));
   end loop;
+
+  -- מוכר לא יכול למכור מתחת לעלות - בדיקה על כל המכירה יחד (כך שחבילה כמו
+  -- מכשיר + חצי ק"ג ריח במחיר אחד עוברת), בלי לחשוף את העלות
+  if not v_admin and not v_is_icon and v_rev < v_cost_total then
+    raise exception 'המחיר נמוך מדי – צריך לבדוק עם ליאור או אלירן';
+  end if;
 
   -- הורדה מהמלאי (הטריגר הקיים מעדכן את stock_levels)
   insert into transactions (type, item_id, qty, from_location_id, customer_id, unit_price, note)
