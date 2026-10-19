@@ -487,11 +487,10 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
           </div>
         )}
 
-        {isAdmin && !viaIcon && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-700">מע"מ:</span>
+        {!viaIcon && (
+          <div className="grid grid-cols-2 gap-2">
             {[18, 0].map((r) => (
-              <button key={r} onClick={() => { const old = 1 + (Number(vatRate) || 0) / 100; const nw = 1 + r / 100; setPriceEdits(Object.fromEntries(Object.entries(priceEdits).map(([k, v]) => [k, v === "" ? v : String(Math.round((Number(v) / old) * nw * 100) / 100)]))); setVatRate(r); }} className={`h-10 px-4 rounded-xl text-sm ${vatRate === r ? "bg-slate-900 text-white" : "bg-white border border-slate-300"}`}>{r}%</button>
+              <button key={r} onClick={() => setVatRate(r)} className={`h-12 rounded-xl text-[15px] ${vatRate === r ? "bg-slate-900 text-white font-semibold" : "bg-white border-[1.5px] border-slate-300"}`}>{r ? 'עם מע"מ 18%' : 'ללא מע"מ'}</button>
             ))}
           </div>
         )}
