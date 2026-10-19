@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { ChevronRight, ChevronLeft, Loader2, TriangleAlert, CircleCheck } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER, fmt, parseEssence, Header } from "./mobileUi";
+import { reasonLabel } from "./MobileWaste";
 
 // ============================================================
 // דוח יומי – ליאור / אלירן בלבד. כל הנתונים מ-daily_report (קריאה בלבד).
@@ -52,7 +53,7 @@ export function DailyReport({ onBack }) {
     (r.counts || []).filter((x) => Number(x.diff_ils) !== 0).forEach((x) => exceptions.push(`פער בספירה של ${x.by}: ${fmt(x.diff_ils)}`));
   }
   const pend = r?.pending || {};
-  const pendingTotal = Number(pend.repacks || 0) + Number(pend.counts || 0) + Number(pend.vehicle || 0);
+  const pendingTotal = Number(pend.repacks || 0) + Number(pend.counts || 0) + Number(pend.vehicle || 0) + Number(pend.waste || 0);
 
   return (<>
     <Header title="דוח יומי" subtitle={dayTitle} onBack={onBack} />
@@ -76,7 +77,7 @@ export function DailyReport({ onBack }) {
 
         {pendingTotal > 0 && (
           <div className="rounded-2xl px-4 py-3 font-semibold" style={{ background: AMBER, color: NAVY }}>
-            מחכים לאישור: {[pend.vehicle > 0 && `${pend.vehicle} בקשות רכב`, pend.repacks > 0 && `${pend.repacks} מזיגות`, pend.counts > 0 && "ספירה שבועית"].filter(Boolean).join(" · ")}
+            מחכים לאישור: {[pend.vehicle > 0 && `${pend.vehicle} בקשות רכב`, pend.repacks > 0 && `${pend.repacks} מזיגות`, pend.waste > 0 && `${pend.waste} פחת/דוגמאות`, pend.counts > 0 && "ספירה שבועית"].filter(Boolean).join(" · ")}
           </div>
         )}
 
@@ -118,7 +119,13 @@ export function DailyReport({ onBack }) {
           ))}
         </Section>
 
-        <Section title="גריעות מהמלאי (פחת, דוגמאות, ספירה)" empty={(r.writeoffs || []).length ? null : "לא היו גריעות"}>
+        <Section title="דוגמאות ופחת" empty={(r.waste || []).length ? null : "לא היו"}>
+          {(r.waste || []).map((x) => (
+            <Row key={x.tag} a={`${reasonLabel(x.reason)}${x.customer ? `: ${x.customer}` : ""} · ${x.by}${x.status === "pending" ? " · ממתין" : x.status === "rejected" ? " · נדחה" : ""} – ${(x.lines || []).map((l) => `${q(l.qty)} ${short(l.name)}`).join(", ")}`} b={fmt(x.value)} />
+          ))}
+        </Section>
+
+        <Section title="כל הגריעות מהמלאי (פחת, דוגמאות, ספירה)" empty={(r.writeoffs || []).length ? null : "לא היו גריעות"}>
           {(r.writeoffs || []).map((x, i) => (
             <Row key={i} a={`${q(x.qty)} ${short(x.item)}${x.note ? ` – ${x.note}` : ""}`} b={fmt(x.value)} />
           ))}
