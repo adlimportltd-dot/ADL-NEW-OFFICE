@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ShoppingCart, Droplets, ClipboardList, CircleCheck, Tag, LogOut, Monitor } from "lucide-react";
+import { ShoppingCart, Droplets, ClipboardList, CircleCheck, Tag, LogOut, Monitor, Truck } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER } from "./mobileUi";
 import MobileSale, { PriceList } from "./MobileSale";
 import { RepackScreen, WeeklyCount, CountReview, Approvals } from "./MobileWarehouse";
+import { VehicleScreen } from "./MobileVehicle";
 
 // ============================================================
 // מסך הבית בטלפון: כל העבודה היומית במחסן ממקום אחד.
@@ -14,9 +15,12 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
   const isAdmin = profile?.role === "admin";
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
   const [screen, setScreen] = useState(initialScreen || "home"); // home | sale | repack | count | approvals | review | prices
-  const [pending, setPending] = useState({ repacks: 0, counts: 0 });
+  const [pending, setPending] = useState({ repacks: 0, counts: 0, vehicle: 0 });
+  const [vehicle, setVehicle] = useState(null);
 
   const loadPending = useCallback(async () => {
+    const v = await supabase.rpc("my_vehicle");
+    setVehicle(!v.error && v.data?.vehicle ? { ...v.data.vehicle, items: (v.data.stock || []).length } : null);
     if (!isAdmin) return;
     const { data, error } = await supabase.rpc("mobile_pending");
     if (!error && data) setPending(data);
@@ -31,13 +35,19 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
   );
 
   if (screen === "sale") return <MobileSale profile={profile} onHome={home} />;
+  if (screen === "vehicle") return shell(<VehicleScreen userName={userName} onBack={home} />);
   if (screen === "repack") return shell(<RepackScreen userName={userName} isAdmin={isAdmin} onBack={home} />);
   if (screen === "count") return shell(<WeeklyCount userName={userName} onBack={home} />);
   if (screen === "approvals" && isAdmin) return shell(<Approvals onBack={home} onOpenCount={() => setScreen("review")} />);
   if (screen === "review" && isAdmin) return shell(<CountReview onBack={() => setScreen("approvals")} />);
   if (screen === "prices" && isAdmin) return shell(<PriceList onBack={home} />);
 
-  const waiting = Number(pending.repacks || 0) + Number(pending.counts || 0);
+  const waiting = Number(pending.repacks || 0) + Number(pending.counts || 0) + Number(pending.vehicle || 0);
+  const waitingText = [
+    pending.vehicle > 0 && `${pending.vehicle} בקשות רכב`,
+    pending.repacks > 0 && `${pending.repacks} מזיגות`,
+    pending.counts > 0 && "ספירה שבועית",
+  ].filter(Boolean).join(" · ");
   const day = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "numeric" });
   const isCountDay = new Date().getDay() === 4; // חמישי
 
@@ -69,12 +79,13 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
       {isAdmin && waiting > 0 && (
         <button onClick={() => setScreen("approvals")} className="rounded-2xl px-4 py-3.5 flex items-center gap-3 text-right font-semibold" style={{ background: AMBER, color: NAVY }}>
           <CircleCheck size={22} />
-          <span className="flex-1">מחכים לאישור שלך: {pending.repacks > 0 ? `${pending.repacks} מזיגות` : ""}{pending.repacks > 0 && pending.counts > 0 ? " · " : ""}{pending.counts > 0 ? "ספירה שבועית" : ""}</span>
+          <span className="flex-1">מחכים לאישור שלך: {waitingText}</span>
           <span>←</span>
         </button>
       )}
       <Tile icon={ShoppingCart} title="מכירה" sub="לקוח, פריטים, תשלום" onClick={() => setScreen("sale")} accent />
       <div className="grid grid-cols-2 gap-3">
+        {vehicle && <Tile icon={Truck} title="הרכב שלי" sub={vehicle.items ? `${vehicle.items} סוגי פריטים ברכב` : "הרכב ריק – בקשת העמסה"} onClick={() => setScreen("vehicle")} />}
         <Tile icon={Droplets} title="מזיגה ופירוק" sub="פתיחת חבית או גלון" onClick={() => setScreen("repack")} />
         <Tile icon={ClipboardList} title="ספירה שבועית" sub={isCountDay ? "היום יום ספירה – 14:00" : "כל חמישי ב-14:00"} onClick={() => setScreen("count")} />
         {isAdmin && <Tile icon={CircleCheck} title="לאישור" sub={waiting ? "יש ממתינים" : "אין ממתינים"} onClick={() => setScreen("approvals")} badge={waiting} />}

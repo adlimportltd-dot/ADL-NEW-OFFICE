@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { Search, Plus, Minus, Check, Loader2, CircleCheck, TriangleAlert, X, ChevronDown, ChevronUp, ClipboardList } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn } from "./mobileUi";
+import { linesText } from "./MobileVehicle";
 
 // ============================================================
 // מסכי מחסן בטלפון:
@@ -537,6 +538,7 @@ function RepackRow({ r }) {
 export function Approvals({ onBack, onOpenCount }) {
   const [items, setItems] = useState(null);
   const [counts, setCounts] = useState([]);
+  const [moves, setMoves] = useState([]);
   const [names, setNames] = useState({});
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
@@ -545,23 +547,25 @@ export function Approvals({ onBack, onOpenCount }) {
 
   const load = useCallback(async () => {
     setError("");
-    const [rp, sc, it] = await Promise.all([
+    const [rp, sc, it, vr] = await Promise.all([
       supabase.from("repack_log").select("*").eq("status", "pending").order("created_at"),
       supabase.from("stock_counts").select("id,counted_by_name,submitted_at").eq("status", "submitted").order("submitted_at"),
       supabase.from("items").select("id,unit"),
+      supabase.from("vehicle_requests").select("*").eq("status", "pending").order("created_at"),
     ]);
     if (rp.error) { setError(rp.error.message); setItems([]); return; }
     setItems(rp.data || []);
     setCounts(sc.error ? [] : sc.data || []);
+    setMoves(vr.error ? [] : vr.data || []);
     setNames(Object.fromEntries((it.data || []).map((i) => [i.id, i.unit])));
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const decide = async (r, approve) => {
-    if (!approve && !rejectNote.trim()) { setError("כתוב בקצרה למה המזיגה נדחתה"); return; }
+  const decide = async (r, approve, fn = "decide_repack") => {
+    if (!approve && !rejectNote.trim()) { setError("כתוב בקצרה למה נדחה"); return; }
     setBusyId(r.id); setError("");
     try {
-      const { error: e } = await supabase.rpc("decide_repack", { p_id: r.id, p_approve: approve, p_note: approve ? null : rejectNote });
+      const { error: e } = await supabase.rpc(fn, { p_id: r.id, p_approve: approve, p_note: approve ? null : rejectNote });
       if (e) throw e;
       setRejectFor(null); setRejectNote("");
       await load();
@@ -571,7 +575,7 @@ export function Approvals({ onBack, onOpenCount }) {
   const lines = (arr) => (arr || []).map((l) => `${kg(l.qty)} ${UNIT_LABEL[l.unit || names[l.item_id]] || ""}`).join(" + ");
 
   return (<>
-    <Header title="לאישור" subtitle="מזיגות חריגות וספירה שבועית" onBack={onBack} />
+    <Header title="לאישור" subtitle="רכב, מזיגות חריגות וספירה שבועית" onBack={onBack} />
     <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
       <ErrorBox>{error}</ErrorBox>
       {items === null ? <Loading /> : (<>
@@ -584,6 +588,34 @@ export function Approvals({ onBack, onOpenCount }) {
             </div>
             <span className="text-sm font-semibold" style={{ color: NAVY }}>לפערים ←</span>
           </button>
+        ))}
+        {moves.map((r) => (
+          <div key={r.id} className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
+            <div className="flex justify-between items-baseline">
+              <span className="font-bold text-[17px]">{r.kind === "load" ? "העמסה לרכב" : "החזרה למחסן"}</span>
+              <span className="text-xs text-slate-600">{r.tag}</span>
+            </div>
+            <div className="text-[13px] text-slate-600">{r.created_by_name} · {new Date(r.created_at).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+            <div className="text-sm">{linesText(r.lines)}</div>
+            {r.note && <div className="text-sm text-slate-700">הערה: {r.note}</div>}
+            {rejectFor === r.id ? (
+              <div className="flex flex-col gap-2">
+                <label htmlFor={`rjv-${r.id}`} className="text-sm text-slate-600">למה נדחה? (נתי יראה את זה)</label>
+                <input id={`rjv-${r.id}`} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} className="h-11 border border-slate-300 rounded-xl px-3" />
+                <div className="grid grid-cols-2 gap-2">
+                  <button disabled={busyId === r.id} onClick={() => decide(r, false, "decide_vehicle_move")} className="h-11 rounded-xl bg-rose-600 text-white font-semibold">דחייה</button>
+                  <button onClick={() => { setRejectFor(null); setRejectNote(""); }} className="h-11 rounded-xl border border-slate-300">ביטול</button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button disabled={busyId === r.id} onClick={() => decide(r, true, "decide_vehicle_move")} className="h-12 rounded-xl font-bold flex items-center justify-center gap-1.5" style={{ background: AMBER, color: NAVY }}>
+                  {busyId === r.id ? <Loader2 className="animate-spin" size={16} /> : <Check size={18} />} {r.kind === "load" ? "אישור – יצא לרכב" : "אישור – חזר למחסן"}
+                </button>
+                <button disabled={busyId === r.id} onClick={() => { setRejectFor(r.id); setRejectNote(""); setError(""); }} className="h-12 rounded-xl border-[1.5px] border-slate-300 bg-white font-semibold">דחייה</button>
+              </div>
+            )}
+          </div>
         ))}
         {items.map((r) => {
           const pct = Math.round((Number(r.out_kg) / Number(r.in_kg) - 1) * 100);
@@ -618,7 +650,7 @@ export function Approvals({ onBack, onOpenCount }) {
             </div>
           );
         })}
-        {items.length === 0 && counts.length === 0 && (
+        {items.length === 0 && counts.length === 0 && moves.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-14 text-slate-600"><CircleCheck size={36} className="text-green-600" /> אין שום דבר שמחכה לאישור</div>
         )}
       </>)}
