@@ -160,8 +160,10 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
 
   const viaIcon = payment === "bit" || iconSite;
   const unitPriceOf = (item) => {
-    if (priceEdits[item.id] !== undefined && priceEdits[item.id] !== "") return Number(priceEdits[item.id]);
-    return item.sale_price != null ? Number(item.sale_price) : null;
+    // המחיר מוקלד כולל מע"מ (מה שהלקוח משלם בפועל) ומומר כאן ללפני מע"מ
+    const v = priceEdits[item.id];
+    if (v === undefined || v === "" || isNaN(Number(v))) return null;
+    return Number(v) / (1 + (Number(vatRate) || 0) / 100);
   };
   const missingPrice = !viaIcon && cartLines.some((l) => unitPriceOf(l.item) == null);
   const subtotal = cartLines.reduce((s, l) => s + l.qty * (unitPriceOf(l.item) || 0), 0);
@@ -198,7 +200,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
     try {
       const lines = cartLines.map((l) => {
         const line = { item_id: l.item.id, qty: l.qty };
-        if (!viaIcon) line.unit_price = unitPriceOf(l.item);
+        if (!viaIcon) line.unit_price = Math.round(unitPriceOf(l.item) * 10000) / 10000;
         return line;
       });
       const { data, error: e } = await supabase.rpc("mobile_sale", {
@@ -402,7 +404,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
           <button disabled={cartLines.length === 0} onClick={() => {
             setError("");
             const pre = { ...priceEdits };
-            cartLines.forEach((l) => { if (pre[l.item.id] === undefined && l.item.sale_price != null) pre[l.item.id] = String(l.item.sale_price); });
+            cartLines.forEach((l) => { if (pre[l.item.id] === undefined && l.item.sale_price != null) pre[l.item.id] = String(Math.round(Number(l.item.sale_price) * (1 + (Number(vatRate) || 0) / 100))); });
             setPriceEdits(pre);
             setScreen("summary");
           }} className="h-[54px] px-6 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: NAVY }}>לסיכום</button>
@@ -426,24 +428,24 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
                   <div className="font-semibold">{label}</div>
                   <div className="text-[13px] text-slate-600">
                     {l.qty} יח'
-                    {!viaIcon && (p != null ? ` × ${fmt(p)}` : "")}
+                    {!viaIcon && (p != null ? ` × ${fmt(Number(priceEdits[l.item.id]))}` : "")}
                   </div>
                   {!viaIcon && p == null && <div className="text-xs text-rose-700 mt-0.5">יש להקליד מחיר</div>}
                   {!viaIcon && (
                     <div className="flex items-center gap-1.5 mt-1.5">
-                      <label className="text-xs text-slate-600" htmlFor={`pr-${l.item.id}`}>מחיר ליחידה (לפני מע"מ)</label>
+                      <label className="text-xs text-slate-600" htmlFor={`pr-${l.item.id}`}>מחיר ליחידה ללקוח (כולל מע"מ)</label>
                       <input id={`pr-${l.item.id}`} inputMode="decimal" className="w-24 h-9 border border-slate-300 rounded-lg px-2 text-sm"
                         placeholder="מחיר"
                         value={priceEdits[l.item.id] ?? ""} onChange={(e) => setPriceEdits({ ...priceEdits, [l.item.id]: e.target.value })} />
                     </div>
                   )}
                 </div>
-                {!viaIcon && <span className="font-bold">{p != null ? fmt(p * l.qty) : "—"}</span>}
+                {!viaIcon && <span className="font-bold">{p != null ? fmt(Number(priceEdits[l.item.id]) * l.qty) : "—"}</span>}
               </div>
             );
           })}
         </div>
-        {!viaIcon && <div className="text-xs text-slate-600 px-1">המחיר מתמלא מהמחירון. כל מחיר נקבע בתיאום עם ליאור או אלירן.</div>}
+        {!viaIcon && <div className="text-xs text-slate-600 px-1">המחירים כוללים מע"מ ומתמלאים מהמחירון. כל מחיר נקבע בתיאום עם ליאור או אלירן. בחבילה (למשל מכשיר + ריח) אפשר לשים את כל המחיר על המכשיר ו-0 על הריח.</div>}
         {!isAdmin && !viaIcon && (
           <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
             <div className="font-semibold text-[15px]">מי אישר את המחיר?</div>
@@ -489,7 +491,7 @@ export default function MobileSale({ profile, onSignOut, onExitToSystem }) {
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-700">מע"מ:</span>
             {[18, 0].map((r) => (
-              <button key={r} onClick={() => setVatRate(r)} className={`h-10 px-4 rounded-xl text-sm ${vatRate === r ? "bg-slate-900 text-white" : "bg-white border border-slate-300"}`}>{r}%</button>
+              <button key={r} onClick={() => { const old = 1 + (Number(vatRate) || 0) / 100; const nw = 1 + r / 100; setPriceEdits(Object.fromEntries(Object.entries(priceEdits).map(([k, v]) => [k, v === "" ? v : String(Math.round((Number(v) / old) * nw * 100) / 100)]))); setVatRate(r); }} className={`h-10 px-4 rounded-xl text-sm ${vatRate === r ? "bg-slate-900 text-white" : "bg-white border border-slate-300"}`}>{r}%</button>
             ))}
           </div>
         )}
