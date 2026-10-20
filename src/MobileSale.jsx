@@ -58,6 +58,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
   const [endCustomer, setEndCustomer] = useState("");
   const [orderRef, setOrderRef] = useState("");
   const [vatRate, setVatRate] = useState(18);
+  const [priceMode, setPriceMode] = useState("incl"); // המחיר שמקלידים: incl = כולל מע"מ, excl = לפני מע"מ
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -136,10 +137,25 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
 
   const viaIcon = payment === "bit" || iconSite;
   const unitPriceOf = (item) => {
-    // המחיר מוקלד כולל מע"מ (מה שהלקוח משלם בפועל) ומומר כאן ללפני מע"מ
+    // המחיר מוקלד כולל מע"מ או לפני מע"מ (לפי הבחירה), ונשמר תמיד לפני מע"מ
     const v = priceEdits[item.id];
     if (v === undefined || v === "" || isNaN(Number(v))) return null;
-    return Number(v) / (1 + (Number(vatRate) || 0) / 100);
+    return priceMode === "excl" ? Number(v) : Number(v) / (1 + (Number(vatRate) || 0) / 100);
+  };
+  const vatOn = Number(vatRate) > 0;
+  const inclLabel = !vatOn ? 'ללא מע"מ' : priceMode === "excl" ? 'לפני מע"מ' : 'כולל מע"מ';
+  // מעבר בין "כולל" ל"לפני" מע"מ – ממיר את המחירים שכבר מוקלדים, כך שהסכום לא משתנה
+  const switchPriceMode = (mode) => {
+    if (mode === priceMode) return;
+    const f = 1 + (Number(vatRate) || 0) / 100;
+    const conv = {};
+    Object.entries(priceEdits).forEach(([id, v]) => {
+      if (v === "" || v === undefined || isNaN(Number(v))) { conv[id] = v; return; }
+      const n = mode === "excl" ? Number(v) / f : Number(v) * f;
+      conv[id] = String(Math.round(n * 100) / 100);
+    });
+    setPriceEdits(conv);
+    setPriceMode(mode);
   };
   const missingPrice = !viaIcon && cartLines.some((l) => unitPriceOf(l.item) == null);
   const subtotal = cartLines.reduce((s, l) => s + l.qty * (unitPriceOf(l.item) || 0), 0);
@@ -147,7 +163,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
 
   const resetSale = () => {
     setCustomer(null); setCustQuery(""); setCart({}); setPriceEdits({}); setApprovedBy(""); setPayment("");
-    setIconSite(false); setEndCustomer(""); setOrderRef(""); setVatRate(18); setNote("");
+    setIconSite(false); setEndCustomer(""); setOrderRef(""); setVatRate(18); setPriceMode("incl"); setNote("");
     setError(""); setResult(null); setQuery(""); setTab("consumable"); setScreen("customer");
   };
 
@@ -384,7 +400,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
           <button disabled={cartLines.length === 0} onClick={() => {
             setError("");
             const pre = { ...priceEdits };
-            cartLines.forEach((l) => { if (pre[l.item.id] === undefined && l.item.sale_price != null) pre[l.item.id] = String(Math.round(Number(l.item.sale_price) * (1 + (Number(vatRate) || 0) / 100))); });
+            cartLines.forEach((l) => { if (pre[l.item.id] === undefined && l.item.sale_price != null) pre[l.item.id] = priceMode === "excl" ? String(Number(l.item.sale_price)) : String(Math.round(Number(l.item.sale_price) * (1 + (Number(vatRate) || 0) / 100))); });
             setPriceEdits(pre);
             setScreen("summary");
           }} className="h-[54px] px-6 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: NAVY }}>לסיכום</button>
@@ -398,6 +414,16 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
     return shell(<>
       <Header title="בודקים ומאשרים" subtitle={`לקוח: ${customer?.name}`} step={3} onBack={() => setScreen("items")} />
       <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
+        {!viaIcon && vatOn && (
+          <div className="flex flex-col gap-1.5">
+            <div className="text-[13px] font-semibold text-slate-500">המחיר שמקלידים הוא:</div>
+            <div className="grid grid-cols-2 gap-2">
+              {[["incl", 'כולל מע"מ'], ["excl", 'לפני מע"מ']].map(([k, l]) => (
+                <button key={k} onClick={() => switchPriceMode(k)} className={`h-11 rounded-xl text-[15px] ${priceMode === k ? "bg-slate-900 text-white font-semibold" : "bg-white border-[1.5px] border-slate-300"}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl px-3.5 py-1">
           {cartLines.map((l, idx) => {
             const p = unitPriceOf(l.item);
@@ -413,7 +439,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
                   {!viaIcon && p == null && <div className="text-xs text-rose-700 mt-0.5">יש להקליד מחיר</div>}
                   {!viaIcon && (
                     <div className="flex items-center gap-1.5 mt-1.5">
-                      <label className="text-xs text-slate-600" htmlFor={`pr-${l.item.id}`}>מחיר ליחידה ללקוח (כולל מע"מ)</label>
+                      <label className="text-xs text-slate-600" htmlFor={`pr-${l.item.id}`}>מחיר ליחידה ({inclLabel})</label>
                       <input id={`pr-${l.item.id}`} inputMode="decimal" className="w-24 h-9 border border-slate-300 rounded-lg px-2 text-sm"
                         placeholder="מחיר"
                         value={priceEdits[l.item.id] ?? ""} onChange={(e) => setPriceEdits({ ...priceEdits, [l.item.id]: e.target.value })} />
@@ -425,7 +451,7 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
             );
           })}
         </div>
-        {!viaIcon && <div className="text-xs text-slate-600 px-1">המחירים כוללים מע"מ ומתמלאים מהמחירון. כל מחיר נקבע בתיאום עם ליאור או אלירן. בחבילה (למשל מכשיר + ריח) אפשר לשים את כל המחיר על המכשיר ו-0 על הריח.</div>}
+        {!viaIcon && <div className="text-xs text-slate-600 px-1">המחירים ({inclLabel}) מתמלאים מהמחירון. כל מחיר נקבע בתיאום עם ליאור או אלירן. בחבילה (למשל מכשיר + ריח) אפשר לשים את כל המחיר על המכשיר ו-0 על הריח.</div>}
         {!isAdmin && !viaIcon && (
           <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
             <div className="font-semibold text-[15px]">מי אישר את המחיר?</div>
