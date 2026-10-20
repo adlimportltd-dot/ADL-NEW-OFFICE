@@ -160,6 +160,21 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
   const missingPrice = !viaIcon && cartLines.some((l) => unitPriceOf(l.item) == null);
   const subtotal = cartLines.reduce((s, l) => s + l.qty * (unitPriceOf(l.item) || 0), 0);
   const vat = subtotal * (Number(vatRate) || 0) / 100;
+  // עיגול לשקלים: כל מחיר ליחידה (כולל מע"מ) מעוגל לשקל שלם – כך גם הסכום לתשלום יוצא בלי אגורות
+  const grand = subtotal + vat;
+  const hasAgorot = !viaIcon && !missingPrice && cartLines.length > 0 && Math.abs(grand - Math.round(grand)) > 0.005;
+  const roundToShekel = () => {
+    const f = 1 + (Number(vatRate) || 0) / 100;
+    const next = { ...priceEdits };
+    cartLines.forEach((l) => {
+      const v = priceEdits[l.item.id];
+      if (v === undefined || v === "" || isNaN(Number(v))) return;
+      const incl = priceMode === "excl" ? Number(v) * f : Number(v);
+      next[l.item.id] = String(Math.round(incl));
+    });
+    setPriceEdits(next);
+    setPriceMode("incl");
+  };
 
   const resetSale = () => {
     setCustomer(null); setCustQuery(""); setCart({}); setPriceEdits({}); setApprovedBy(""); setPayment("");
@@ -509,6 +524,11 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
             <div className="flex justify-between text-sm text-slate-700"><span>לפני מע"מ</span><span>{fmt(subtotal)}</span></div>
             <div className="flex justify-between text-sm text-slate-700"><span>מע"מ {vatRate}%</span><span>{fmt(vat)}</span></div>
             <div className="flex justify-between text-lg font-bold"><span>לתשלום</span><span>{fmt(subtotal + vat)}</span></div>
+            {hasAgorot && (
+              <button onClick={roundToShekel} className="mt-1 h-11 rounded-xl border-[1.5px] border-amber-400 bg-amber-50 text-amber-900 font-semibold text-[15px]">
+                עיגול לשקלים שלמים (בלי אגורות)
+              </button>
+            )}
           </div>
         )}
         {error && <div className="bg-rose-100 text-rose-800 rounded-xl px-3 py-2.5 text-sm flex gap-2"><TriangleAlert size={18} className="shrink-0" />{error}</div>}
