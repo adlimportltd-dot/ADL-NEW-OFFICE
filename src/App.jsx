@@ -116,8 +116,17 @@ async function signOut() {
   await supabase.auth.signOut({ scope: "local" });
 }
 function onAuthChange(callback) {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
+  const { data } = supabase.auth.onAuthStateChange((event, session) => callback(session, event));
   return () => data.subscription.unsubscribe();
+}
+// שכחתי סיסמה: שולח מייל עם קישור שמחזיר לאתר הזה ופותח מסך "סיסמה חדשה"
+async function sendPasswordReset(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  if (error) throw error;
+}
+async function setNewPassword(password) {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
 }
 async function getSession() {
   const { data } = await supabase.auth.getSession();
@@ -834,7 +843,7 @@ async function changePassword(currentEmail, currentPassword, newPassword) {
   if (error) throw error;
 }
 
-const api = { signIn, signUp, signOut, onAuthChange, getSession, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, receiveShipment, finalizeShipmentCosts, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, moveInvoicePayment, correctInvoiceLine, processCustomerReturn, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
+const api = { signIn, signUp, signOut, onAuthChange, getSession, sendPasswordReset, setNewPassword, mfaGetAssuranceLevel, mfaListFactors, mfaEnroll, mfaChallengeAndVerify, mfaUnenroll, fetchMyProfile, fetchAllData, addItem, updateItem, deleteItem, addLocation, updateLocation, addCustomer, updateCustomer, insertTransaction, performRepackaging, subscribeToChanges, updateItemUnitCost, updateItemsUnitCosts, createPurchaseOrder, updatePurchaseOrder, updatePOStatus, updatePOShipment, addPOPayment, deletePOPayment, addSupplier, updateSupplier, deleteSupplier, addShipment, updateShipment, deleteShipment, receiveShipment, finalizeShipmentCosts, addRateCard, updateRateCard, deleteRateCard, addRateLine, deleteRateLine, addLead, updateLead, deleteLead, createQuote, updateQuoteStatus, deleteQuote, addExpense, updateExpense, deleteExpense, addExpensePayment, deleteExpensePayment, createCustomerInvoice, voidInvoice, updateInvoiceNotes, addInvoicePayment, deleteInvoicePayment, moveInvoicePayment, correctInvoiceLine, processCustomerReturn, analyzeInvoiceImage, updateLogoUrl, fetchPublicLogo, updateCompanySettings, updateAccountEmail, changePassword };
 
 
 const fmtDate = (iso) =>
@@ -1320,6 +1329,18 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(initialError || "");
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false); // מצב "שכחתי סיסמה"
+  const [resetSent, setResetSent] = useState(false);
+
+  const sendReset = async () => {
+    setError(""); setBusy(true);
+    try {
+      await api.sendPasswordReset(email.trim());
+      setResetSent(true);
+    } catch (e) {
+      setError(/rate|seconds|limit/i.test(e.message || "") ? "נשלחו יותר מדי בקשות. נסו שוב בעוד כמה דקות." : (e.message || "שגיאה בשליחה"));
+    } finally { setBusy(false); }
+  };
 
   const submit = async () => {
     setError(""); setBusy(true);
@@ -1349,6 +1370,25 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
           </div>
         </div>
 
+        {forgot ? (resetSent ? (
+          <div className="flex flex-col gap-3">
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-3 py-3">
+              אם הכתובת <b dir="ltr">{email.trim()}</b> רשומה במערכת, נשלח אליה מייל עם קישור לבחירת סיסמה חדשה. הקישור בתוקף לשעה. כדאי לבדוק גם בתיקיית הספאם.
+            </div>
+            <button onClick={() => { setForgot(false); setResetSent(false); setError(""); }} className={btnPrimary + " w-full"}>חזרה להתחברות</button>
+          </div>
+        ) : (<>
+          <div className="text-sm text-slate-600 mb-3">נשלח לכם מייל עם קישור לבחירת סיסמה חדשה.</div>
+          <Field label='דוא"ל'>
+            <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && email.trim()) sendReset(); }} autoFocus />
+          </Field>
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2.5 mb-3">{error}</div>}
+          <button onClick={sendReset} disabled={busy || !email.trim()} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
+            {busy && <Loader2 size={16} className="animate-spin" />}
+            שליחת קישור לאיפוס
+          </button>
+          <button onClick={() => { setForgot(false); setError(""); }} className="w-full text-sm text-slate-500 hover:text-slate-700 mt-3">חזרה להתחברות</button>
+        </>)) : (<>
         <Field label='דוא"ל'>
           <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} autoFocus />
         </Field>
@@ -1362,7 +1402,58 @@ function LoginScreen({ onSuccess, logoUrl, initialError }) {
           {busy && <Loader2 size={16} className="animate-spin" />}
           התחברות
         </button>
+        <button onClick={() => { setForgot(true); setError(""); }} className="w-full text-sm text-amber-700 hover:underline mt-3">שכחתי סיסמה</button>
+        </>)}
         <p className="text-xs text-slate-400 mt-4 text-center">גישה מוגבלת לצוות אדל אימפורט המורשה בלבד · אין אפשרות הרשמה עצמאית</p>
+      </div>
+    </div>
+  );
+}
+
+// מסך "בחירת סיסמה חדשה" – נפתח אחרי לחיצה על הקישור מהמייל (ואחרי קוד 2FA, אם מופעל)
+function NewPasswordScreen({ logoUrl, onDone }) {
+  const [p1, setP1] = useState("");
+  const [p2, setP2] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const save = async () => {
+    setError("");
+    if (p1.length < 8) { setError("הסיסמה צריכה להיות לפחות 8 תווים"); return; }
+    if (p1 !== p2) { setError("הסיסמאות לא זהות"); return; }
+    setBusy(true);
+    try { await api.setNewPassword(p1); setDone(true); }
+    catch (e) { setError(/same|different/i.test(e.message || "") ? "זו הסיסמה הקודמת – בחרו סיסמה אחרת" : (e.message || "שגיאה בשמירה")); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div dir="rtl" lang="he" className="min-h-screen bg-slate-900 flex items-center justify-center p-4" style={{ fontFamily: "'Inter','Rubik','Assistant',sans-serif" }}>
+      <div className={cardCls + " w-full max-w-sm p-6"}>
+        <div className="flex items-center gap-2 mb-6">
+          <LogoBadge logoUrl={logoUrl} size={40} />
+          <div>
+            <div className="font-bold text-slate-900 leading-tight">סיסמה חדשה</div>
+            <div className="text-xs text-slate-500">אדל אימפורט</div>
+          </div>
+        </div>
+        {done ? (
+          <div className="flex flex-col gap-3">
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-3 py-3">הסיסמה עודכנה. מעכשיו נכנסים איתה.</div>
+            <button onClick={onDone} className={btnPrimary + " w-full"}>כניסה למערכת</button>
+          </div>
+        ) : (<>
+          <Field label="סיסמה חדשה (לפחות 8 תווים)">
+            <input type="password" className={inputCls} value={p1} onChange={(e) => setP1(e.target.value)} autoFocus autoComplete="new-password" />
+          </Field>
+          <Field label="שוב, לאימות">
+            <input type="password" className={inputCls} value={p2} onChange={(e) => setP2(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") save(); }} autoComplete="new-password" />
+          </Field>
+          {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2.5 mb-3">{error}</div>}
+          <button onClick={save} disabled={busy || !p1 || !p2} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>
+            {busy && <Loader2 size={16} className="animate-spin" />}
+            שמירת הסיסמה
+          </button>
+        </>)}
       </div>
     </div>
   );
@@ -7602,6 +7693,8 @@ const EMBED_SCREENS = { mobileSale: "sale", mobileApprovals: "approvals", mobile
 // ==================== App ====================
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = loading, null = not logged in yet
+  // הגעה מקישור "איפוס סיסמה" במייל: מציגים מסך סיסמה חדשה לפני הכניסה למערכת
+  const [recovery, setRecovery] = useState(() => { try { return /type=recovery/.test(window.location.hash); } catch (e) { return false; } });
   const [publicLogoUrl, setPublicLogoUrl] = useState(null);
   const [profile, setProfile] = useState(null);
   const [data, setData] = useState(null);
@@ -7700,7 +7793,7 @@ export default function App() {
       const existing = await api.getSession();
       await resolveSession(existing);
     })();
-    const unsubscribe = api.onAuthChange((s) => { resolveSession(s); });
+    const unsubscribe = api.onAuthChange((s, event) => { if (event === "PASSWORD_RECOVERY") setRecovery(true); resolveSession(s); });
     return unsubscribe;
   }, [resolveSession]);
 
@@ -7785,6 +7878,9 @@ export default function App() {
         </div>
       </div>
     );
+  }
+  if (recovery) {
+    return <NewPasswordScreen logoUrl={publicLogoUrl} onDone={() => { setRecovery(false); try { window.history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {} }} />;
   }
   if (!data || !profile) {
     return (
