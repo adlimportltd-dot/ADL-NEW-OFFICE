@@ -7976,6 +7976,7 @@ export default function App() {
   const [saleInitialCustomerId, setSaleInitialCustomerId] = useState(null);
   const [saleInitialLines, setSaleInitialLines] = useState(null);
   const [saleLeadId, setSaleLeadId] = useState(null);
+  const [quickSalePrefill, setQuickSalePrefill] = useState(null); // פנייה מהירה → "מכירה מהירה" עם לקוח ומוצרים
   const [printQuoteId, setPrintQuoteId] = useState(null);
   const [poPrefillItemId, setPoPrefillItemId] = useState(null); // מעבר מהיר מהתראת "מתחת לסף" בדשבורד ליצירת PO
   const [mfaPendingFactorId, setMfaPendingFactorId] = useState(null); // אם קיים, יש session אמיתי אבל הוא עדיין ב-aal1 וצריך קוד 2FA
@@ -8177,7 +8178,7 @@ export default function App() {
   const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
   // בתצוגה החדשה: התפריט מחולק לקבוצות עם כותרת קטנה לכל קבוצה
   const navSections = uiStyle === "classic" ? [{ title: null, items: nav }] : NAV_GROUP_ORDER.map((g) => ({ title: g, items: nav.filter((n) => (n.group || null) === g) })).filter((sec) => sec.items.length > 0);
-  const goTab = (key) => { setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); setSaleInitialLines(null); setSaleLeadId(null); };
+  const goTab = (key) => { setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); setSaleInitialLines(null); setSaleLeadId(null); setQuickSalePrefill(null); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (
@@ -8287,11 +8288,11 @@ export default function App() {
             ) : (
               <>
                 {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} onQuickPO={(itemId) => { setPoPrefillItemId(itemId); setTab("po"); }} uiStyle={uiStyle} onUiStyleChange={setUiStyle} onNavigate={goTab} userName={profile.fullName} />}
-                {EMBED_SCREENS[tab] && isAdmin && <MobileApp key={tab} embedded initialScreen={EMBED_SCREENS[tab]} profile={profile} onExit={() => { setTab("dashboard"); refreshPending(); }} onChanged={refreshPending} />}
+                {EMBED_SCREENS[tab] && isAdmin && <MobileApp key={tab + (tab === "mobileSale" && quickSalePrefill ? `-${quickSalePrefill.leadId}` : "")} embedded initialScreen={EMBED_SCREENS[tab]} profile={profile} salePrefill={tab === "mobileSale" ? quickSalePrefill : null} onExit={() => { setTab("dashboard"); setQuickSalePrefill(null); refreshPending(); }} onChanged={refreshPending} />}
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setLocationFileId} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
-                {tab === "leads" && <LeadsScreen data={data} refresh={refresh} onCreateQuote={openQuoteBuilder} onStartSale={(custId, lines, leadId) => { setSaleInitialCustomerId(custId); setSaleInitialLines(lines); setSaleLeadId(leadId); setCustomerFileId(null); setTab("sale"); }} />}
+                {tab === "leads" && <LeadsScreen data={data} refresh={refresh} onCreateQuote={openQuoteBuilder} onStartSale={(custId, lines, leadId) => { const lead = data.leads.find((l) => l.id === leadId); setQuickSalePrefill({ customerId: custId, items: lines, leadId, name: lead?.name || "", phone: lead?.phone || "" }); setCustomerFileId(null); setTab("mobileSale"); }} />}
                 {tab === "quotes" && <QuotesScreen data={data} refresh={refresh} onPrint={setPrintQuoteId} />}
                 {tab === "suppliers" && isAdmin && <SuppliersScreen data={data} refresh={refresh} />}
                 {tab === "shipments" && isAdmin && <ShipmentsScreen data={data} refresh={refresh} />}
