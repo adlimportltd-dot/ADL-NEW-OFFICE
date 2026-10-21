@@ -29,7 +29,8 @@ const PAYMENTS = [
   { key: "open", label: "חוב פתוח" },
 ];
 
-export default function MobileSale({ profile, onHome, embedded = false }) {
+// prefill (לא חובה): פנייה מהירה מ"פניות ולידים" – { customerId, name, phone, items: [{ itemId, qty }], leadId }
+export default function MobileSale({ profile, onHome, embedded = false, prefill = null }) {
   const isAdmin = profile?.role === "admin";
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
 
@@ -90,6 +91,20 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // מילוי מראש מפנייה מהירה: הלקוח והמוצרים כבר בעגלה (פעם אחת, אחרי שהקטלוג והלקוחות נטענו)
+  const [prefillDone, setPrefillDone] = useState(false);
+  useEffect(() => {
+    if (!prefill || prefillDone || loading || rawCatalog.length === 0) return;
+    setPrefillDone(true);
+    const nextCart = {};
+    (prefill.items || []).forEach((r) => { if (r.itemId) nextCart[r.itemId] = (nextCart[r.itemId] || 0) + (Number(r.qty) || 1); });
+    setCart(nextCart);
+    const c = prefill.customerId ? customers.find((x) => x.id === prefill.customerId) : null;
+    if (c) { setCustomer(c); setEndCustomer(c.name); setScreen("items"); }
+    else if (prefill.name || prefill.phone) setNewCust({ name: prefill.name && prefill.name !== "לקוח חדש" ? prefill.name : "", phone: prefill.phone || "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill, prefillDone, loading, rawCatalog, customers]);
 
   // המלאי שמוצג ונבדק תלוי במקור: הרכב של המוכר או המחסן
   const catalog = useMemo(
@@ -224,6 +239,10 @@ export default function MobileSale({ profile, onHome, embedded = false }) {
       });
       if (e) throw e;
       setResult(data);
+      // מכירה שנפתחה מפנייה מהירה – הפנייה עוברת ל"טופל – נמכר"
+      if (prefill?.leadId) {
+        try { await supabase.from("leads").update({ status: "closed_won", customer_id: customer.id }).eq("id", prefill.leadId); } catch (e2) { /* המכירה נשמרה; עדכון הפנייה לא קריטי */ }
+      }
       setScreen("done");
       load();
     } catch (e) {
