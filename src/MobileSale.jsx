@@ -64,6 +64,8 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [bitAmount, setBitAmount] = useState(""); // ביט: כמה הלקוח שילם בפועל (כולל מע"מ) – לחשבונית מאייקון
+  const [bitSaveError, setBitSaveError] = useState("");
 
   const load = useCallback(async () => {
     setLoadError("");
@@ -192,6 +194,7 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
   };
 
   const resetSale = () => {
+    setBitAmount(""); setBitSaveError("");
     setCustomer(null); setCustQuery(""); setCart({}); setPriceEdits({}); setApprovedBy(""); setPayment("");
     setIconSite(false); setEndCustomer(""); setOrderRef(""); setVatRate(18); setPriceMode("incl"); setNote("");
     setError(""); setResult(null); setQuery(""); setTab("consumable"); setScreen("customer");
@@ -215,6 +218,7 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
   const submit = async () => {
     setError("");
     if (!payment) { setError("יש לבחור איך הלקוח משלם"); return; }
+    if (payment === "bit" && !(Number(bitAmount) > 0)) { setError("יש להזין כמה הלקוח שילם בביט"); return; }
     if (cartLines.length === 0) { setError("הסל ריק"); return; }
     if (missingPrice) { setError("יש להקליד מחיר לכל פריט (אחרי תיאום עם ליאור או אלירן)"); return; }
     if (!isAdmin && !viaIcon && !approvedBy) { setError("יש לסמן מי אישר את המחיר – ליאור או אלירן"); return; }
@@ -239,6 +243,12 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
       });
       if (e) throw e;
       setResult(data);
+      // ביט: רושמים את הסכום ששולם ואת הלקוח הסופי – נכנס לרשימת "חשבוניות לאייקון להפקה"
+      setBitSaveError("");
+      if (payment === "bit" && data?.invoice_id) {
+        const { error: be } = await supabase.rpc("record_bit_payment", { p_invoice_id: data.invoice_id, p_amount: Number(bitAmount), p_end_customer: endCustomer || null });
+        if (be) setBitSaveError("המכירה נשמרה, אבל סכום הביט לא נרשם – לעדכן את ליאור או אלירן");
+      }
       // מכירה שנפתחה מפנייה מהירה – הפנייה עוברת ל"טופל – נמכר"
       if (prefill?.leadId) {
         try { await supabase.from("leads").update({ status: "closed_won", customer_id: customer.id }).eq("id", prefill.leadId); } catch (e2) { /* המכירה נשמרה; עדכון הפנייה לא קריטי */ }
@@ -520,6 +530,11 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
             </div>
             <label className="text-sm" htmlFor="endc">שם הלקוח הסופי</label>
             <input id="endc" value={endCustomer} onChange={(e) => setEndCustomer(e.target.value)} className="h-12 border border-blue-200 rounded-xl px-3 text-base bg-white" />
+            {payment === "bit" && <>
+              <label className="text-sm font-semibold" htmlFor="bitamt">כמה הלקוח שילם בביט (כולל מע"מ)</label>
+              <input id="bitamt" inputMode="decimal" value={bitAmount} onChange={(e) => setBitAmount(e.target.value)} placeholder="₪" className="h-12 border border-blue-300 rounded-xl px-3 text-base bg-white" />
+              <span className="text-xs text-blue-800">ליאור ואלירן יקבלו התראה להפיק חשבונית מאייקון על הסכום הזה.</span>
+            </>}
             {iconSite && <>
               <label className="text-sm" htmlFor="oref">מספר הזמנה באתר</label>
               <input id="oref" inputMode="numeric" value={orderRef} onChange={(e) => setOrderRef(e.target.value)} className="h-12 border border-blue-200 rounded-xl px-3 text-base bg-white" />
@@ -567,11 +582,14 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
         <div className="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center"><CircleCheck size={52} className="text-green-700" /></div>
         <div className="text-[26px] font-bold">המכירה נשמרה</div>
         <div className="text-[15px] text-slate-700">הסחורה ירדה מהמלאי {result.source === "vehicle" ? "של הרכב" : "במחסן"}{result.icon ? " ונרשמה לאייקון אייר" : ""}</div>
+        {payment === "bit" && !bitSaveError && <div className="text-sm text-blue-800">נוספה משימה: להפיק חשבונית מאייקון ל{endCustomer || "לקוח"}</div>}
+        {bitSaveError && <div className="text-sm text-rose-700 font-semibold">{bitSaveError}</div>}
         <div className="w-full bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2 text-sm">
           <div className="flex justify-between"><span className="text-slate-600">לקוח</span><span className="font-semibold">{result.icon ? `אייקון אייר (${endCustomer || customer?.name})` : customer?.name}</span></div>
           <div className="flex justify-between"><span className="text-slate-600">פריטים</span><span className="font-semibold">{cartCount}</span></div>
           <div className="flex justify-between"><span className="text-slate-600">תשלום</span><span className="font-semibold">{PAYMENTS.find((p) => p.key === payment)?.label}</span></div>
           {!result.icon && <div className="flex justify-between"><span className="text-slate-600">סכום</span><span className="font-semibold">{fmt(result.total)}</span></div>}
+          {payment === "bit" && <div className="flex justify-between"><span className="text-slate-600">שולם בביט</span><span className="font-semibold">{fmt(Number(bitAmount))}</span></div>}
           <div className="flex justify-between"><span className="text-slate-600">מספר</span><span className="font-semibold">{result.order_tag}</span></div>
         </div>
       </div>
