@@ -95,6 +95,19 @@ export function DailyReport({ onBack }) {
             sub={pendingTotal > 0 ? [pend.vehicle > 0 && `${pend.vehicle} רכב`, pend.repacks > 0 && `${pend.repacks} מזיגה`, pend.waste > 0 && `${pend.waste} פחת`, pend.counts > 0 && "ספירה"].filter(Boolean).join(" · ") : "אין ממתינים"} />
         </div>
 
+        {(r.icon_invoices || []).length > 0 && (
+          <section className="bg-blue-50 border-[1.5px] border-blue-300 rounded-2xl p-3.5 flex flex-col gap-1.5">
+            <h2 className="font-bold text-[16px] flex items-center gap-2 text-blue-950"><Wallet size={18} className="text-blue-700" /> חשבוניות לאייקון להפקה <span className="text-xs font-semibold bg-blue-200 rounded-full px-2 py-0.5">{r.icon_invoices.length}</span></h2>
+            <div className="text-xs text-blue-900">מכירות בביט – להפיק חשבונית מאייקון בריווחית ולסמן "הופקה" בלוח הבקרה</div>
+            {r.icon_invoices.map((x) => (
+              <div key={x.id || x.num} className="flex justify-between gap-2 text-sm text-blue-950 border-b border-blue-100 last:border-0 pb-1">
+                <span className="min-w-0 truncate">{String(x.end_customer || "לקוח").trim()} · {x.date ? new Date(x.date + "T12:00:00").toLocaleDateString("he-IL") : ""}</span>
+                <span className="font-semibold shrink-0">{x.amount != null ? fmt(x.amount) : "סכום לא הוזן"}</span>
+              </div>
+            ))}
+          </section>
+        )}
+
         {exceptions.length > 0 && (
           <section className="bg-amber-50 border-[1.5px] border-amber-300 rounded-2xl p-3.5 flex flex-col gap-1.5">
             <h2 className="font-bold text-[16px] flex items-center gap-2 text-amber-950"><TriangleAlert size={18} className="text-amber-600" /> חריגות לבדיקה <span className="text-xs font-semibold bg-amber-200 rounded-full px-2 py-0.5">{exceptions.length}</span></h2>
