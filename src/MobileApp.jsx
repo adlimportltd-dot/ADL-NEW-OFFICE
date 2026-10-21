@@ -13,7 +13,7 @@ import { WasteScreen } from "./MobileWaste";
 // נתי: מכירה, מזיגה ופירוק, ספירה שבועית.
 // ליאור / אלירן: גם "לאישור" (עם מספר ממתינים), מחירון, ומעבר למערכת המלאה.
 // ============================================================
-export default function MobileApp({ profile, onSignOut, onExitToSystem, initialScreen, embedded = false, onExit }) {
+export default function MobileApp({ profile, onSignOut, onExitToSystem, initialScreen, embedded = false, onExit, salePrefill = null }) {
   const isAdmin = profile?.role === "admin";
   const userName = profile?.fullName || (isAdmin ? "מנהל" : "מוכר");
   const [screen, setScreen] = useState(initialScreen || "home"); // home | sale | repack | count | approvals | review | prices
@@ -34,7 +34,7 @@ export default function MobileApp({ profile, onSignOut, onExitToSystem, initialS
   // במחשב (בתוך המערכת, ליד התפריט) – רוחב מלא יותר; בטלפון – מסך צר לכל הגובה
   const shell = (children) => <Shell embedded={embedded}>{children}</Shell>;
 
-  if (screen === "sale") return <MobileSale profile={profile} onHome={home} embedded={embedded} />;
+  if (screen === "sale") return <MobileSale profile={profile} onHome={home} embedded={embedded} prefill={salePrefill} />;
   if (screen === "vehicle") return shell(<VehicleScreen userName={userName} onBack={home} />);
   if (screen === "waste") return shell(<WasteScreen userName={userName} onBack={home} />);
   if (screen === "repack") return shell(<RepackScreen userName={userName} isAdmin={isAdmin} onBack={home} />);
