@@ -85,6 +85,8 @@ const mapInvoice = (r) => ({
   issueDate: r.issue_date, dueDate: r.due_date, totalAmount: Number(r.total_amount),
   status: r.status, notes: r.notes || "",
   lines: (r.customer_invoice_lines || []).map((l) => ({ id: l.id, itemId: l.item_id, description: l.description || "", qty: Number(l.qty), unitPrice: Number(l.unit_price) })),
+  endCustomer: r.end_customer || "", bitAmount: r.bit_amount != null ? Number(r.bit_amount) : null,
+  iconInvoiceNumber: r.icon_invoice_number || "", iconInvoicedAt: r.icon_invoiced_at || null,
 });
 const mapInvoicePayment = (r) => ({ id: r.id, invoiceId: r.invoice_id, amount: Number(r.amount), paidDate: r.paid_date, method: r.method || "", note: r.note || "", kind: r.kind || "payment" });
 const mapCustomerReturn = (r) => ({
@@ -1468,6 +1470,50 @@ const negativeStockRows = (data) => Object.entries(data.stock || {}).filter(([, 
   return { key, qty: q, item: data.items.find((i) => i.id === itemId), location: data.locations.find((l) => l.id === locationId) };
 }).filter((r) => r.item);
 
+// ביט → חשבונית מאייקון: מכירות בביט (נרשמו מאדל לאייקון) שעוד לא הופקה להן חשבונית ללקוח הסופי
+const ICON_INVOICES_FROM = "2026-10-21";
+const pendingIconInvoices = (data) => (data.customerInvoices || []).filter((i) =>
+  (i.notes || "").includes("תשלום בביט") && !i.iconInvoiceNumber && i.status !== "void" && String(i.issueDate || "") >= ICON_INVOICES_FROM)
+  .sort((a, b) => String(a.issueDate).localeCompare(String(b.issueDate)));
+const endCustomerOf = (inv) => inv.endCustomer || ((inv.notes || "").match(/לקוח סופי: ([^-]+)/)?.[1] || "לקוח").trim();
+
+function IconInvoicesCard({ data, refresh }) {
+  const list = pendingIconInvoices(data);
+  const [nums, setNums] = useState({});
+  const [busyId, setBusyId] = useState(null);
+  const [err, setErr] = useState("");
+  if (list.length === 0) return null;
+  const done = async (inv) => {
+    const n = (nums[inv.id] || "").trim();
+    if (!n) { setErr("יש להזין את מספר החשבונית מריווחית"); return; }
+    setErr(""); setBusyId(inv.id);
+    try {
+      const { error } = await supabase.rpc("mark_icon_invoiced", { p_invoice_id: inv.id, p_number: n });
+      if (error) throw error;
+      if (refresh) await refresh();
+    } catch (e) { setErr(e.message); } finally { setBusyId(null); }
+  };
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-2 px-5 pt-4 pb-1 text-blue-900 font-semibold"><Receipt size={18} /> חשבוניות לאייקון להפקה ({list.length})</div>
+      <div className="px-5 pb-2 text-xs text-blue-900/80">מכירות בביט: הסחורה נמכרה מאדל לאייקון. יש להפיק חשבונית מאייקון ללקוח בריווחית ולסמן "הופקה".</div>
+      {err && <div className="mx-5 mb-2 bg-rose-100 text-rose-700 text-xs rounded-lg px-3 py-1.5">{err}</div>}
+      {list.map((inv) => (
+        <div key={inv.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-5 py-3 border-t border-blue-100 text-sm">
+          <div className="min-w-0">
+            <div className="font-semibold text-slate-800">{endCustomerOf(inv)} · <span className="tabular-nums">{inv.bitAmount != null ? `₪${inv.bitAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "סכום לא הוזן"}</span></div>
+            <div className="text-xs text-slate-600">{inv.issueDate ? new Date(inv.issueDate + "T12:00:00").toLocaleDateString("he-IL") : ""} · {inv.lines.map((l) => `${data.items.find((i) => i.id === l.itemId)?.name || l.description || "פריט"} ×${l.qty}`).join(", ")}</div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <input className="w-32 rounded-lg border border-blue-200 px-2 py-1.5 text-sm bg-white" placeholder="מס' חשבונית" value={nums[inv.id] || ""} onChange={(e) => setNums({ ...nums, [inv.id]: e.target.value })} />
+            <button disabled={busyId === inv.id} onClick={() => done(inv)} className="text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 rounded-lg px-3 py-1.5 disabled:opacity-50">הופקה</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NegativeStockCard({ data }) {
   const neg = negativeStockRows(data);
   if (neg.length === 0) return null;
@@ -1492,21 +1538,22 @@ const PRIVACY_KEY = "adl_privacy";
 const readPref = (key, fallback) => { try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; } };
 const writePref = (key, value) => { try { localStorage.setItem(key, value); } catch (e) {} };
 
-function Dashboard({ data, onExport, isAdmin, onQuickPO, uiStyle, onUiStyleChange, onNavigate, userName }) {
+function Dashboard({ data, onExport, isAdmin, onQuickPO, uiStyle, onUiStyleChange, onNavigate, userName, refresh }) {
   if (uiStyle === "classic") {
     return (
       <div className="space-y-3">
         <div className="flex justify-end">
           <button onClick={() => onUiStyleChange("modern")} className="text-xs font-semibold text-amber-700 hover:underline">מעבר לתצוגה החדשה</button>
         </div>
+        {isAdmin && <IconInvoicesCard data={data} refresh={refresh} />}
         <DashboardClassic data={data} onExport={onExport} isAdmin={isAdmin} onQuickPO={onQuickPO} />
       </div>
     );
   }
-  return <DashboardModern data={data} onExport={onExport} isAdmin={isAdmin} onQuickPO={onQuickPO} onSwitchClassic={() => onUiStyleChange("classic")} onNavigate={onNavigate} userName={userName} />;
+  return <DashboardModern data={data} onExport={onExport} isAdmin={isAdmin} onQuickPO={onQuickPO} onSwitchClassic={() => onUiStyleChange("classic")} onNavigate={onNavigate} userName={userName} refresh={refresh} />;
 }
 
-function DashboardModern({ data, onExport, isAdmin, onQuickPO, onSwitchClassic, onNavigate, userName }) {
+function DashboardModern({ data, onExport, isAdmin, onQuickPO, onSwitchClassic, onNavigate, userName, refresh }) {
   const [privacy, setPrivacyState] = useState(() => readPref(PRIVACY_KEY, "on") === "on");
   const setPrivacy = (on) => { setPrivacyState(on); writePref(PRIVACY_KEY, on ? "on" : "off"); };
   const [showAllLow, setShowAllLow] = useState(false);
@@ -1603,6 +1650,7 @@ function DashboardModern({ data, onExport, isAdmin, onQuickPO, onSwitchClassic, 
       </div>
 
       <NegativeStockCard data={data} />
+      {isAdmin && <IconInvoicesCard data={data} refresh={refresh} />}
 
       <div className={`grid grid-cols-2 gap-3.5 sm:gap-4 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         {kpis.map((k, i) => {
@@ -8287,7 +8335,7 @@ export default function App() {
               />
             ) : (
               <>
-                {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} onQuickPO={(itemId) => { setPoPrefillItemId(itemId); setTab("po"); }} uiStyle={uiStyle} onUiStyleChange={setUiStyle} onNavigate={goTab} userName={profile.fullName} />}
+                {tab === "dashboard" && <Dashboard data={data} onExport={exportCSV} isAdmin={isAdmin} onQuickPO={(itemId) => { setPoPrefillItemId(itemId); setTab("po"); }} uiStyle={uiStyle} onUiStyleChange={setUiStyle} onNavigate={goTab} userName={profile.fullName} refresh={refresh} />}
                 {EMBED_SCREENS[tab] && isAdmin && <MobileApp key={tab + (tab === "mobileSale" && quickSalePrefill ? `-${quickSalePrefill.leadId}` : "")} embedded initialScreen={EMBED_SCREENS[tab]} profile={profile} salePrefill={tab === "mobileSale" ? quickSalePrefill : null} onExit={() => { setTab("dashboard"); setQuickSalePrefill(null); refreshPending(); }} onChanged={refreshPending} />}
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setLocationFileId} />}
