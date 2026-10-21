@@ -28,6 +28,7 @@ const mapLead = (r) => ({
   id: r.id, name: r.name, phone: r.phone || "", email: r.email || "", customerId: r.customer_id,
   status: r.status, source: r.source || "", estimatedValue: r.estimated_value !== null && r.estimated_value !== undefined ? Number(r.estimated_value) : null,
   notes: r.notes || "", followUpDate: r.follow_up_date || "", date: r.created_at,
+  requestedItems: Array.isArray(r.requested_items) ? r.requested_items : [],
 });
 const mapQuote = (r) => ({
   id: r.id, quoteNumber: r.quote_number, customerId: r.customer_id, leadId: r.lead_id,
@@ -332,6 +333,7 @@ async function addLead(lead) {
     status: lead.status || "new", source: lead.source || null,
     estimated_value: lead.estimatedValue !== "" && lead.estimatedValue != null ? Number(lead.estimatedValue) : null,
     notes: lead.notes || null, follow_up_date: lead.followUpDate || null,
+    ...(lead.requestedItems ? { requested_items: lead.requestedItems } : {}),
   });
   if (error) throw error;
 }
@@ -346,6 +348,7 @@ async function updateLead(id, patch) {
   if (patch.estimatedValue !== undefined) payload.estimated_value = patch.estimatedValue !== "" && patch.estimatedValue != null ? Number(patch.estimatedValue) : null;
   if (patch.notes !== undefined) payload.notes = patch.notes;
   if (patch.followUpDate !== undefined) payload.follow_up_date = patch.followUpDate || null;
+  if (patch.requestedItems !== undefined) payload.requested_items = patch.requestedItems;
   const { error } = await supabase.from("leads").update(payload).eq("id", id);
   if (error) throw error;
 }
@@ -1585,6 +1588,7 @@ function DashboardModern({ data, onExport, isAdmin, onQuickPO, onSwitchClassic, 
           <div className="text-xs text-slate-500 mb-1">{todayLabel}</div>
           <h1 className="text-2xl sm:text-[27px] font-light text-slate-800">שלום{firstName ? <>, <b className="font-semibold">{firstName}</b></> : ""}</h1>
           {isAdmin && privacy && <div className="text-xs text-amber-700 mt-1">מצב פרטיות פעיל – סכומים ושמות ספקים מוסתרים</div>}
+          {isAdmin && (() => { const n = (data.leads || []).filter((l) => isQuickLead(l) && isOpenLead(l)).length; return n > 0 ? <button onClick={() => onNavigate("leads")} className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-full px-3 py-1"><span className="bg-amber-500 text-white rounded-full px-1.5">{n}</span> פניות פתוחות – לחזור ללקוחות ←</button> : null; })()}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {isAdmin && (
@@ -2607,7 +2611,7 @@ function LocationFile({ data, locationId, onBack, isAdmin, onQuickAction }) {
 }
 
 // ==================== מכירה חדשה / הזמנה (Sale) ====================
-function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
+function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId, initialLines, leadId }) {
   const [customerId, setCustomerId] = useState(initialCustomerId || "");
   const [newCustomerMode, setNewCustomerMode] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState({ name: "", phone: "", address: "", clientType: "private" });
@@ -2665,6 +2669,21 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
     }
     setLine(id, { itemId, unitPrice, lastPriceInclVat });
   };
+
+  // מילוי מראש מפנייה מהירה ("להפוך למכירה"): הלקוח והמוצרים כבר בטופס, עם המחיר האחרון ללקוח
+  useEffect(() => {
+    if (!initialLines || initialLines.length === 0) return;
+    const vatPctNow = Number(vatRate) || 0;
+    setLines(initialLines.map((l) => {
+      const it = data.items.find((i) => i.id === l.itemId);
+      const last = lastPriceFor(initialCustomerId, l.itemId);
+      const unitPrice = last != null
+        ? String(Math.round((priceMode === "incl" ? last : last / (1 + vatPctNow / 100)) * 100) / 100)
+        : (it?.unitCost ? String(Math.round(it.unitCost * 1.4 * 100) / 100) : "");
+      return { id: Math.random().toString(36).slice(2), itemId: l.itemId, qty: String(l.qty || 1), unitPrice, lastPriceInclVat: last };
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stockOf = (itemId) => (sourceLocationId ? data.stock[`${itemId}|${sourceLocationId}`] || 0 : 0);
   const linesSubtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
@@ -2758,6 +2777,10 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId }) {
       });
       if (paidNow) {
         await api.addInvoicePayment(invoiceId, effectiveTotal, today, "immediate", "שולם במלואו בעת המכירה");
+      }
+      // מכירה שנפתחה מפנייה מהירה - הפנייה עוברת ל"טופל – נמכר"
+      if (leadId) {
+        try { await api.updateLead(leadId, { status: "closed_won", customerId }); } catch (e) { /* המכירה נשמרה; עדכון הפנייה לא קריטי */ }
       }
       await refresh();
       setSuccess({ customerId, total: effectiveTotal });
@@ -5545,7 +5568,223 @@ function ShippingRatesScreen({ data, refresh }) {
 }
 
 // ==================== לידים ומשפך מכירות (Leads / CRM) ====================
-function LeadsScreen({ data, refresh, onCreateQuote }) {
+// ==================== פניות מהירות (לקוח מתקשר / שולח הודעה) ====================
+// פנייה מהירה = ליד עם source "פנייה מהירה". מה הלקוח רוצה נשמר ב-requested_items:
+// [{ itemId, qty }] או [{ unknown: "scent" | "device", qty, dirs: [...], place }]
+const QUICK_SOURCE = "פנייה מהירה";
+const QUICK_SCENT_DIRS = ["פרחוני", "מתוק / וניל", "רענן / נקי", "עצי / מסקי", "בהשראת בושם מוכר"];
+const QUICK_PLACES = ["חדר / משרד קטן", "סלון / בית", "עסק / לובי", "רכב"];
+const phoneDigits = (p) => String(p || "").replace(/\D/g, "").replace(/^972/, "0").slice(-9);
+const isQuickLead = (l) => l.source === QUICK_SOURCE;
+const isOpenLead = (l) => l.status !== "closed_won" && l.status !== "closed_lost";
+const dateAfterDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+
+const requestedLabel = (data, r) => {
+  if (r.unknown === "scent") return `ריח – עוד לא בחר${r.dirs?.length ? ` (כיוון: ${r.dirs.join(", ")})` : ""}`;
+  if (r.unknown === "device") return `מכשיר – עוד לא בחר${r.place ? ` (איפה: ${r.place})` : ""}`;
+  return data.items.find((i) => i.id === r.itemId)?.name || "פריט";
+};
+
+// היסטוריית קנייה של לקוח מתוך החשבוניות (לא מבוטלות)
+const customerHistory = (data, customerId) => {
+  const invs = data.customerInvoices.filter((i) => i.customerId === customerId && i.status !== "void")
+    .sort((a, b) => String(b.issueDate || "").localeCompare(String(a.issueDate || "")));
+  const last = invs[0];
+  return {
+    count: invs.length,
+    last: last ? {
+      date: last.issueDate,
+      total: last.totalAmount,
+      items: last.lines.map((l) => `${data.items.find((i) => i.id === l.itemId)?.name || l.description || "פריט"} ×${l.qty}`).join(", "),
+    } : null,
+  };
+};
+
+function QuickRequestModal({ data, refresh, onClose }) {
+  const [phone, setPhone] = useState("");
+  const [newName, setNewName] = useState("");
+  const [lines, setLines] = useState([{ key: 1, itemId: "", unknown: "", qty: "1" }]);
+  const [dirs, setDirs] = useState([]);
+  const [place, setPlace] = useState("");
+  const [when, setWhen] = useState("today");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const digits = phoneDigits(phone);
+  const customer = digits.length >= 9 ? data.customers.find((c) => phoneDigits(c.phone) === digits) : null;
+  const history = customer ? customerHistory(data, customer.id) : null;
+
+  const sellable = data.items.filter((it) => !isEmptyBulkKg(it, data.stock)).sort((a, b) => a.name.localeCompare(b.name, "he"));
+  // 4 המוצרים הנמכרים ביותר (לפי שורות חשבוניות) ככפתורי בחירה מהירה
+  const popular = (() => {
+    const cnt = {};
+    data.customerInvoices.slice(-300).forEach((inv) => inv.lines.forEach((l) => { if (l.itemId) cnt[l.itemId] = (cnt[l.itemId] || 0) + 1; }));
+    return Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([id]) => sellable.find((i) => i.id === id)).filter(Boolean).slice(0, 4);
+  })();
+
+  const setLine = (key, patch) => setLines(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const pick = (patch) => {
+    const empty = lines.find((l) => !l.itemId && !l.unknown);
+    if (empty) setLine(empty.key, patch);
+    else setLines([...lines, { key: Date.now(), qty: "1", itemId: "", unknown: "", ...patch }]);
+  };
+  const hasScent = lines.some((l) => l.unknown === "scent");
+  const hasDevice = lines.some((l) => l.unknown === "device");
+  const chip = (on) => `px-3 py-1.5 rounded-full text-[13px] border transition ${on ? "bg-slate-900 text-white border-slate-900" : "bg-white border-gray-300 text-slate-700 hover:border-amber-400"}`;
+
+  const save = async () => {
+    setError("");
+    if (digits.length < 9) { setError("צריך מספר טלפון"); return; }
+    const items = lines.filter((l) => l.itemId || l.unknown).map((l) => (l.unknown
+      ? { unknown: l.unknown, qty: Number(l.qty) || 1, ...(l.unknown === "scent" ? { dirs } : { place }) }
+      : { itemId: l.itemId, qty: Number(l.qty) || 1 }));
+    if (items.length === 0) { setError("בחר לפחות מוצר אחד (או \"לא יודע\")"); return; }
+    setBusy(true);
+    try {
+      let customerId = customer?.id || null;
+      let name = customer?.name || newName.trim();
+      if (!customerId && newName.trim()) customerId = await api.addCustomer({ name: newName.trim(), phone: phone.trim(), clientType: "private" });
+      if (!name) name = "לקוח חדש";
+      await api.addLead({
+        name, phone: phone.trim(), customerId, status: "new", source: QUICK_SOURCE,
+        followUpDate: when === "none" ? "" : dateAfterDays(when === "tomorrow" ? 1 : when === "week" ? 7 : 0),
+        notes: note.trim(), requestedItems: items,
+      });
+      await refresh();
+      onClose();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title="פנייה מהירה" onClose={onClose}>
+      <Field label="טלפון הלקוח">
+        <input autoFocus inputMode="tel" dir="ltr" className={inputCls + " text-center text-xl tracking-wider"} placeholder="05X-XXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </Field>
+      {customer && (
+        <div className="-mt-1 mb-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm">
+          <div className="font-semibold text-emerald-700">✓ לקוח קיים: {customer.name} {history.count > 0 && <span className="font-normal text-slate-600">· {history.count} רכישות</span>}</div>
+          {history.last && <div className="text-slate-600 mt-1">רכישה אחרונה: {history.last.date ? new Date(history.last.date).toLocaleDateString("he-IL") : ""} · {history.last.items} · ₪{Math.round(history.last.total).toLocaleString()}</div>}
+        </div>
+      )}
+      {!customer && digits.length >= 9 && (
+        <div className="-mt-1 mb-3 bg-amber-50 border border-dashed border-amber-300 rounded-xl p-3 text-sm text-amber-800">
+          לקוח חדש – יישמר ברשימת הלקוחות
+          <input className={inputCls + " mt-2"} placeholder="שם הלקוח" value={newName} onChange={(e) => setNewName(e.target.value)} />
+        </div>
+      )}
+
+      <div className="text-sm font-semibold text-slate-700 mb-1.5">מה הוא רוצה?</div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        <button type="button" onClick={() => pick({ unknown: "scent", itemId: "" })} className="px-3 py-1.5 rounded-full text-[13px] border border-dashed border-amber-500 text-amber-700 bg-white">לא יודע איזה ריח</button>
+        <button type="button" onClick={() => pick({ unknown: "device", itemId: "" })} className="px-3 py-1.5 rounded-full text-[13px] border border-dashed border-amber-500 text-amber-700 bg-white">לא יודע איזה מכשיר</button>
+        {popular.map((it) => <button type="button" key={it.id} onClick={() => pick({ itemId: it.id, unknown: "" })} className={chip(false)}>{it.name}</button>)}
+      </div>
+      <div className="space-y-2">
+        {lines.map((l) => (
+          <div key={l.key} className="grid grid-cols-[1fr_72px_36px] gap-2">
+            <select className={inputCls + " !py-2"} value={l.unknown ? `unknown:${l.unknown}` : l.itemId}
+              onChange={(e) => { const v = e.target.value; setLine(l.key, v.startsWith("unknown:") ? { unknown: v.slice(8), itemId: "" } : { itemId: v, unknown: "" }); }}>
+              <option value="">בחר מוצר...</option>
+              <option value="unknown:scent">ריח – עוד לא בחר</option>
+              <option value="unknown:device">מכשיר – עוד לא בחר</option>
+              {sellable.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+            </select>
+            <input type="number" min="1" className={inputCls + " !py-2 text-center"} value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} />
+            <button type="button" onClick={() => setLines(lines.length > 1 ? lines.filter((x) => x.key !== l.key) : [{ key: Date.now(), itemId: "", unknown: "", qty: "1" }])} className="rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><X size={16} className="mx-auto" /></button>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={() => setLines([...lines, { key: Date.now(), itemId: "", unknown: "", qty: "1" }])} className="text-amber-700 text-sm font-semibold mt-2 mb-1">+ עוד מוצר</button>
+
+      {hasDevice && (
+        <div className="bg-slate-50 border rounded-xl p-3 mt-2">
+          <div className="text-xs font-semibold text-slate-600 mb-1.5">איפה ישתמש במכשיר?</div>
+          <div className="flex flex-wrap gap-1.5">{QUICK_PLACES.map((p) => <button type="button" key={p} onClick={() => setPlace(place === p ? "" : p)} className={chip(place === p)}>{p}</button>)}</div>
+        </div>
+      )}
+      {hasScent && (
+        <div className="bg-slate-50 border rounded-xl p-3 mt-2">
+          <div className="text-xs font-semibold text-slate-600 mb-1.5">איזה כיוון ריח הוא אוהב? (אפשר כמה)</div>
+          <div className="flex flex-wrap gap-1.5">{QUICK_SCENT_DIRS.map((d) => <button type="button" key={d} onClick={() => setDirs(dirs.includes(d) ? dirs.filter((x) => x !== d) : [...dirs, d])} className={chip(dirs.includes(d))}>{d}</button>)}</div>
+        </div>
+      )}
+
+      <div className="text-sm font-semibold text-slate-700 mt-3 mb-1.5">מתי לחזור אליו?</div>
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {[["today", "היום"], ["tomorrow", "מחר"], ["week", "השבוע"], ["none", "בלי תזכורת"]].map(([k, v]) => <button type="button" key={k} onClick={() => setWhen(k)} className={chip(when === k)}>{v}</button>)}
+      </div>
+      <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder="למשל: רוצה איסוף עצמי מחר" /></Field>
+      {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
+      <button onClick={save} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}שמירת פנייה</button>
+    </Modal>
+  );
+}
+
+function QuickRequestsView({ data, refresh, onStartSale }) {
+  const [filter, setFilter] = useState("open");
+  const [busyId, setBusyId] = useState(null);
+  const today = new Date().toISOString().slice(0, 10);
+  const all = data.leads.filter(isQuickLead).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const openCount = all.filter(isOpenLead).length;
+  const shown = all.filter((l) => filter === "all" || (filter === "open" ? isOpenLead(l) : l.status === "closed_won"));
+
+  const markLost = async (l) => {
+    if (!confirm(`לסמן את הפנייה של ${l.name} כלא רלוונטית?`)) return;
+    setBusyId(l.id);
+    try { await api.updateLead(l.id, { status: "closed_lost" }); await refresh(); } catch (e) { alert(e.message); } finally { setBusyId(null); }
+  };
+  const tabCls = (on) => `px-3.5 py-2 rounded-xl text-sm font-semibold border transition ${on ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-gray-200 hover:border-amber-400"}`;
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        <button onClick={() => setFilter("open")} className={tabCls(filter === "open")}>{openCount > 0 && <span className="bg-amber-500 text-white rounded-full px-1.5 text-[11px] ml-1">{openCount}</span>}פתוחות</button>
+        <button onClick={() => setFilter("done")} className={tabCls(filter === "done")}>טופלו</button>
+        <button onClick={() => setFilter("all")} className={tabCls(filter === "all")}>הכל</button>
+      </div>
+      <div className="bg-white rounded-2xl border overflow-hidden">
+        {shown.length === 0 && <div className="py-10 text-center text-sm text-slate-500">{filter === "open" ? "אין פניות פתוחות" : "אין פניות כאן"}</div>}
+        {shown.map((l, idx) => {
+          const items = Array.isArray(l.requestedItems) ? l.requestedItems : [];
+          const needsAdvice = items.some((r) => r.unknown);
+          const late = isOpenLead(l) && l.followUpDate && l.followUpDate < today;
+          const customer = l.customerId ? data.customers.find((c) => c.id === l.customerId) : null;
+          const hist = customer ? customerHistory(data, customer.id) : null;
+          return (
+            <div key={l.id} className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3.5 ${idx ? "border-t border-slate-100" : ""}`}>
+              <div className="flex items-start gap-3 min-w-0">
+                <span className="w-9 h-9 rounded-full grid place-items-center font-bold text-sm shrink-0 bg-amber-50 text-amber-700">{(l.name || "?").trim().charAt(0)}</span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-semibold text-slate-800">{l.name}</span>
+                    {needsAdvice && <span className="text-[11px] font-bold rounded-full px-2 py-0.5 bg-violet-50 text-violet-700">צריך ייעוץ</span>}
+                    {l.status === "closed_won" && <span className="text-[11px] font-bold rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700">טופל – נמכר</span>}
+                    {l.status === "closed_lost" && <span className="text-[11px] font-bold rounded-full px-2 py-0.5 bg-slate-100 text-slate-500">לא רלוונטי</span>}
+                    {isOpenLead(l) && l.followUpDate && <span className={`text-[11px] font-bold rounded-full px-2 py-0.5 ${late ? "bg-rose-50 text-rose-600" : "bg-blue-50 text-blue-600"}`}>{late ? `באיחור – ${new Date(l.followUpDate).toLocaleDateString("he-IL")}` : l.followUpDate === today ? "לחזור היום" : `לחזור ${new Date(l.followUpDate).toLocaleDateString("he-IL")}`}</span>}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5" dir="rtl">{l.phone}{customer ? ` · לקוח קיים${hist?.count ? ` · ${hist.count} רכישות` : ""}` : " · לקוח חדש"} · {new Date(l.date).toLocaleDateString("he-IL")}</div>
+                  <div className="text-sm text-slate-700 mt-1">רוצה: {items.length ? items.map((r) => `${requestedLabel(data, r)} ×${r.qty}`).join(", ") : "—"}{l.notes && <span className="text-slate-500"> · {l.notes}</span>}</div>
+                </div>
+              </div>
+              {isOpenLead(l) && (
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  {l.phone && <a href={`tel:${l.phone}`} className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-500 hover:text-white rounded-lg px-3 py-1.5 transition">להתקשר</a>}
+                  <button onClick={() => onStartSale(l.customerId || null, items.filter((r) => r.itemId).map((r) => ({ itemId: r.itemId, qty: r.qty })), l.id)} className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-500 hover:text-white rounded-lg px-3 py-1.5 transition">להפוך למכירה</button>
+                  <button disabled={busyId === l.id} onClick={() => markLost(l)} className="text-xs font-semibold text-slate-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-1.5 transition">לא רלוונטי</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LeadsScreen({ data, refresh, onCreateQuote, onStartSale }) {
+  const [view, setView] = useState("quick"); // quick = פניות מהירות, pipeline = משפך לידים (הישן)
+  const [quickOpen, setQuickOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", email: "", customerId: "", status: "new", source: "", estimatedValue: "", notes: "", followUpDate: "" });
   const [error, setError] = useState("");
@@ -5589,10 +5828,23 @@ function LeadsScreen({ data, refresh, onCreateQuote }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl text-slate-800">לידים ומשפך מכירות (CRM)</h2>
-        <button onClick={openNew} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> ליד חדש</button>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div>
+          <h2 className="font-bold text-xl text-slate-800">פניות ולידים</h2>
+          <p className="text-slate-500 text-sm">לקוח מתקשר או שולח הודעה – רושמים כאן במקום בפתקים</p>
+        </div>
+        <div className="flex gap-2">
+          {view === "pipeline" && <button onClick={openNew} className={btnGhost + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> ליד חדש</button>}
+          <button onClick={() => setQuickOpen(true)} className={btnPrimary + " flex items-center gap-1.5 !py-2"}><Plus size={18} /> פנייה מהירה</button>
+        </div>
       </div>
+      <div className="flex gap-4 border-b mb-4 text-sm">
+        <button onClick={() => setView("quick")} className={`pb-2 -mb-px border-b-2 font-semibold ${view === "quick" ? "border-amber-500 text-slate-800" : "border-transparent text-slate-500"}`}>פניות מהירות</button>
+        <button onClick={() => setView("pipeline")} className={`pb-2 -mb-px border-b-2 font-semibold ${view === "pipeline" ? "border-amber-500 text-slate-800" : "border-transparent text-slate-500"}`}>משפך לידים</button>
+      </div>
+      {quickOpen && <QuickRequestModal data={data} refresh={refresh} onClose={() => setQuickOpen(false)} />}
+      {view === "quick" && <QuickRequestsView data={data} refresh={refresh} onStartSale={onStartSale} />}
+      {view === "pipeline" && (
       <div className="overflow-x-auto pb-2">
         <div className="flex gap-3 min-w-max">
           {LEAD_STATUS_ORDER.map((statusKey) => {
@@ -5653,6 +5905,7 @@ function LeadsScreen({ data, refresh, onCreateQuote }) {
           })}
         </div>
       </div>
+      )}
 
       {open && (
         <Modal title="ליד חדש" onClose={() => setOpen(false)}>
@@ -7709,6 +7962,8 @@ export default function App() {
   const [printPOId, setPrintPOId] = useState(null);
   const [quoteBuilderFor, setQuoteBuilderFor] = useState(null); // { customerId, leadId }
   const [saleInitialCustomerId, setSaleInitialCustomerId] = useState(null);
+  const [saleInitialLines, setSaleInitialLines] = useState(null);
+  const [saleLeadId, setSaleLeadId] = useState(null);
   const [printQuoteId, setPrintQuoteId] = useState(null);
   const [poPrefillItemId, setPoPrefillItemId] = useState(null); // מעבר מהיר מהתראת "מתחת לסף" בדשבורד ליצירת PO
   const [mfaPendingFactorId, setMfaPendingFactorId] = useState(null); // אם קיים, יש session אמיתי אבל הוא עדיין ב-aal1 וצריך קוד 2FA
@@ -7910,7 +8165,7 @@ export default function App() {
   const nav = FULL_NAV.filter((n) => !n.adminOnly || isAdmin);
   // בתצוגה החדשה: התפריט מחולק לקבוצות עם כותרת קטנה לכל קבוצה
   const navSections = uiStyle === "classic" ? [{ title: null, items: nav }] : NAV_GROUP_ORDER.map((g) => ({ title: g, items: nav.filter((n) => (n.group || null) === g) })).filter((sec) => sec.items.length > 0);
-  const goTab = (key) => { setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); };
+  const goTab = (key) => { setTab(key); setCustomerFileId(null); setLocationFileId(null); setMobileMenuOpen(false); setSaleInitialLines(null); setSaleLeadId(null); };
   const handleSignOut = async () => { try { await api.signOut(); } catch (e) {} };
 
   return (
@@ -8024,13 +8279,13 @@ export default function App() {
                 {tab === "items" && isAdmin && <ItemsScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "locations" && isAdmin && <LocationsScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setLocationFileId} />}
                 {tab === "customers" && <CustomersScreen data={data} refresh={refresh} isAdmin={isAdmin} onOpenFile={setCustomerFileId} />}
-                {tab === "leads" && <LeadsScreen data={data} refresh={refresh} onCreateQuote={openQuoteBuilder} />}
+                {tab === "leads" && <LeadsScreen data={data} refresh={refresh} onCreateQuote={openQuoteBuilder} onStartSale={(custId, lines, leadId) => { setSaleInitialCustomerId(custId); setSaleInitialLines(lines); setSaleLeadId(leadId); setCustomerFileId(null); setTab("sale"); }} />}
                 {tab === "quotes" && <QuotesScreen data={data} refresh={refresh} onPrint={setPrintQuoteId} />}
                 {tab === "suppliers" && isAdmin && <SuppliersScreen data={data} refresh={refresh} />}
                 {tab === "shipments" && isAdmin && <ShipmentsScreen data={data} refresh={refresh} />}
                 {tab === "shippingRates" && isAdmin && <ShippingRatesScreen data={data} refresh={refresh} />}
                 {tab === "transaction" && <TransactionScreen data={data} refresh={refresh} quickTx={quickTx} />}
-                {tab === "sale" && <SaleScreen data={data} refresh={refresh} initialCustomerId={saleInitialCustomerId} onOpenCustomer={(id) => { setCustomerFileId(id); setTab("customers"); }} />}
+                {tab === "sale" && <SaleScreen key={saleLeadId || "sale"} data={data} refresh={refresh} initialCustomerId={saleInitialCustomerId} initialLines={saleInitialLines} leadId={saleLeadId} onOpenCustomer={(id) => { setCustomerFileId(id); setTab("customers"); }} />}
                 {tab === "landedCost" && isAdmin && <LandedCostScreen data={data} refresh={refresh} />}
                 {tab === "reports" && <ReportsScreen data={data} />}
                 {tab === "po" && isAdmin && <POsScreen data={data} refresh={refresh} onPrint={setPrintPOId} prefillItemId={poPrefillItemId} onPrefillConsumed={() => setPoPrefillItemId(null)} />}
