@@ -6977,6 +6977,7 @@ function ReceivablesScreen({ data, refresh }) {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [expandedCustomerId, setExpandedCustomerId] = useState(null);
   const [view, setView] = useState("open"); // open = חובות פתוחים, history = היסטוריית תשלומים
+  const [debtSearch, setDebtSearch] = useState(""); // חיפוש בחובות פתוחים: שם לקוח / טלפון / מספר חשבונית
 
   const openInvoices = data.customerInvoices.filter((inv) => isOpenInvoice(data, inv));
 
@@ -6996,6 +6997,15 @@ function ReceivablesScreen({ data, refresh }) {
   const customerRows = Object.values(byCustomer)
     .map((c) => ({ ...c, customer: data.customers.find((cu) => cu.id === c.customerId) }))
     .sort((a, b) => b.total - a.total);
+
+  // חיפוש: לפי שם לקוח, טלפון או מספר חשבונית. חיפוש לפי חשבונית פותח את הלקוח אוטומטית
+  const dq = normalizeText(debtSearch).toLowerCase();
+  const dqDigits = debtSearch.replace(/\D/g, "");
+  const invoiceHit = (inv) => !!dq && String(inv.invoiceNumber || "").toLowerCase().includes(dq);
+  const shownRows = !dq ? customerRows : customerRows.filter((c) =>
+    normalizeText(c.customer?.name || "").toLowerCase().includes(dq)
+    || (dqDigits.length >= 3 && String(c.customer?.phone || "").replace(/\D/g, "").includes(dqDigits))
+    || c.invoices.some(invoiceHit));
 
   const grandTotal = customerRows.reduce((s, c) => s + c.total, 0);
   const bucketTotals = AGING_BUCKETS.map((b) => ({ ...b, total: customerRows.reduce((s, c) => s + (c.buckets[b.key] || 0), 0) }));
@@ -7029,6 +7039,12 @@ function ReceivablesScreen({ data, refresh }) {
         ))}
       </div>
 
+      <div className="relative mb-3">
+        <Search size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input className={inputCls + " !pr-10"} placeholder="חיפוש לפי שם לקוח, טלפון או מספר חשבונית" value={debtSearch} onChange={(e) => setDebtSearch(e.target.value)} />
+        {debtSearch && <button onClick={() => setDebtSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-slate-600"><X size={16} /></button>}
+      </div>
+
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -7038,9 +7054,10 @@ function ReceivablesScreen({ data, refresh }) {
             </tr>
           </thead>
           <tbody>
-            {customerRows.map((c) => {
+            {dq && shownRows.length === 0 && <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-500">לא נמצא חוב פתוח שמתאים לחיפוש</td></tr>}
+            {shownRows.map((c) => {
               const worstBucket = AGING_BUCKETS.slice().reverse().find((b) => c.buckets[b.key] > 0) || AGING_BUCKETS[0];
-              const isOpen = expandedCustomerId === c.customerId;
+              const isOpen = expandedCustomerId === c.customerId || c.invoices.some(invoiceHit);
               return (
                 <React.Fragment key={c.customerId}>
                   <tr className="border-t cursor-pointer hover:bg-gray-50" onClick={() => setExpandedCustomerId(isOpen ? null : c.customerId)}>
@@ -7063,7 +7080,7 @@ function ReceivablesScreen({ data, refresh }) {
                           </thead>
                           <tbody>
                             {c.invoices.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map((inv) => (
-                              <tr key={inv.id} className="border-t border-gray-200">
+                              <tr key={inv.id} className={`border-t border-gray-200 ${invoiceHit(inv) ? "bg-amber-50" : ""}`}>
                                 <td className="py-2">{inv.invoiceNumber}</td>
                                 <td className="py-2 text-slate-500">{new Date(inv.issueDate).toLocaleDateString("he-IL")}</td>
                                 <td className="py-2 text-slate-500">{new Date(inv.dueDate).toLocaleDateString("he-IL")}</td>
