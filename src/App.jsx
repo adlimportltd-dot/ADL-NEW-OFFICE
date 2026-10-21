@@ -1477,7 +1477,7 @@ const pendingIconInvoices = (data) => (data.customerInvoices || []).filter((i) =
   .sort((a, b) => String(a.issueDate).localeCompare(String(b.issueDate)));
 const endCustomerOf = (inv) => inv.endCustomer || ((inv.notes || "").match(/לקוח סופי: ([^-]+)/)?.[1] || "לקוח").trim();
 
-function IconInvoicesCard({ data, refresh }) {
+function IconInvoicesCard({ data, refresh, privacy = false }) {
   const list = pendingIconInvoices(data);
   const [nums, setNums] = useState({});
   const [busyId, setBusyId] = useState(null);
@@ -1501,7 +1501,7 @@ function IconInvoicesCard({ data, refresh }) {
       {list.map((inv) => (
         <div key={inv.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-5 py-3 border-t border-blue-100 text-sm">
           <div className="min-w-0">
-            <div className="font-semibold text-slate-800">{endCustomerOf(inv)} · <span className="tabular-nums">{inv.bitAmount != null ? `₪${inv.bitAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "סכום לא הוזן"}</span></div>
+            <div className="font-semibold text-slate-800">{endCustomerOf(inv)} · <span className={`tabular-nums ${privacy ? "text-slate-400 tracking-widest" : ""}`}>{inv.bitAmount == null ? "סכום לא הוזן" : privacy ? "₪•••••" : `₪${inv.bitAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}</span></div>
             <div className="text-xs text-slate-600">{inv.issueDate ? new Date(inv.issueDate + "T12:00:00").toLocaleDateString("he-IL") : ""} · {inv.lines.map((l) => `${data.items.find((i) => i.id === l.itemId)?.name || l.description || "פריט"} ×${l.qty}`).join(", ")}</div>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -1650,7 +1650,7 @@ function DashboardModern({ data, onExport, isAdmin, onQuickPO, onSwitchClassic, 
       </div>
 
       <NegativeStockCard data={data} />
-      {isAdmin && <IconInvoicesCard data={data} refresh={refresh} />}
+      {isAdmin && <IconInvoicesCard data={data} refresh={refresh} privacy={privacy} />}
 
       <div className={`grid grid-cols-2 gap-3.5 sm:gap-4 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         {kpis.map((k, i) => {
