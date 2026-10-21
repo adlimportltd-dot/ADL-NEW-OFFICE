@@ -15,7 +15,7 @@ import { reasonLabel } from "./MobileWaste";
 
 const UNIT_LABEL = { '25 ק"ג': "חבית 25", '5 ק"ג': "גלון 5", '1 ק"ג': '1 ק"ג', 'חצי ק"ג': "חצי", 'רבע ק"ג': "רבע" };
 const UNIT_KG = { '25 ק"ג': 25, '5 ק"ג': 5, '1 ק"ג': 1, 'חצי ק"ג': 0.5, 'רבע ק"ג': 0.25 };
-const OPEN_UNITS = ['25 ק"ג', '5 ק"ג'];
+const OPEN_UNITS = ['25 ק"ג', '5 ק"ג', '1 ק"ג', 'חצי ק"ג']; // אפשר לפתוח גם בקבוק 1 ק"ג או חצי
 const OUT_UNITS = ['5 ק"ג', '1 ק"ג', 'חצי ק"ג', 'רבע ק"ג'];
 const TX_LABEL = { receive: "קבלה", install: "מכירה", repack: "מזיגה", writeoff: "גריעה", transfer: "העברה", return: "החזרה" };
 const kg = (n) => Number(n || 0).toLocaleString("he-IL", { maximumFractionDigits: 2 });
@@ -92,9 +92,10 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
   }, [catalog]);
 
   const current = scent ? scents.find((s) => s.scent === scent) : null;
-  const openedBarrel = current && toInt(openQ[current.sizes['25 ק"ג']?.id]) > 0;
   const openRows = current ? OPEN_UNITS.filter((u) => current.sizes[u]).map((u) => current.sizes[u]) : [];
-  const outRows = current ? OUT_UNITS.filter((u) => current.sizes[u] && (u !== '5 ק"ג' || openedBarrel)).map((u) => current.sizes[u]) : [];
+  // מה שיוצא חייב להיות קטן ממה שנפתח (לפני שבוחרים – כמו גלון: 1 ק"ג / חצי / רבע)
+  const maxOpenKg = openRows.reduce((m, i) => (toInt(openQ[i.id]) > 0 ? Math.max(m, UNIT_KG[i.unit]) : m), 0);
+  const outRows = current ? OUT_UNITS.filter((u) => current.sizes[u] && UNIT_KG[u] < (maxOpenKg || 5) && !(toInt(openQ[current.sizes[u].id]) > 0)).map((u) => current.sizes[u]) : [];
   const inKg = openRows.reduce((s, i) => s + toInt(openQ[i.id]) * UNIT_KG[i.unit], 0);
   const outKg = outRows.reduce((s, i) => s + toInt(outQ[i.id]) * UNIT_KG[i.unit], 0);
   const pct = inKg > 0 ? Math.round((outKg / inKg - 1) * 100) : 0;
@@ -158,8 +159,7 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
             <div className="flex-1 min-w-0">
               <div className="font-bold text-[17px] truncate">{s.scent}</div>
               <div className="text-xs text-slate-600">
-                {OPEN_UNITS.filter((u) => s.sizes[u]).map((u) => `${UNIT_LABEL[u]}: ${kg(s.sizes[u].stock)}`).join(" · ")}
-                {!s.openable && " · אין מה לפתוח"}
+                {s.openable ? OPEN_UNITS.filter((u) => Number(s.sizes[u]?.stock || 0) > 0).map((u) => `${UNIT_LABEL[u]}: ${kg(s.sizes[u].stock)}`).join(" · ") : "אין מה לפתוח"}
               </div>
             </div>
             {s.openable && <ChevronDown size={18} className="text-slate-400 rotate-90" />}
@@ -204,7 +204,7 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
             <Stepper id={`p-${i.id}`} label={UNIT_LABEL[i.unit]} value={outQ[i.id]} onChange={(v) => setOutQ({ ...outQ, [i.id]: v })} />
           </div>
         ))}
-        {!openedBarrel && current.sizes['5 ק"ג'] && <div className="text-xs text-slate-500">גלון 5 ק"ג יוצא רק כשפותחים חבית.</div>}
+        <div className="text-xs text-slate-500">יוצא רק מה שקטן ממה שנפתח: מחבית – גם גלון, מבקבוק 1 ק"ג – חצי ורבע, מחצי – רבע.</div>
       </div>
       </div>
 
