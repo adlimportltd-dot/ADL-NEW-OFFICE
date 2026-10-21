@@ -2621,6 +2621,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId, initialL
   const [priceMode, setPriceMode] = useState("excl"); // excl = prices before VAT, incl = prices include VAT
   const [vatRate, setVatRate] = useState(String(data.companySettings.vatRate ?? 18));
   const [paidNow, setPaidNow] = useState(true); // false = מכירה בחשבון פתוח (חוב), נכנס לדוח חובות וגבייה
+  const [payMethod, setPayMethod] = useState(""); // איך שולם (כשמסומן "שולם עכשיו") - חובה לבחור
   const [paymentTermsDays, setPaymentTermsDays] = useState("14");
   const [finalPriceOverride, setFinalPriceOverride] = useState(""); // ריק = בלי עיגול/התאמה, משתמשים בסכום המחושב
   const [error, setError] = useState("");
@@ -2728,6 +2729,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId, initialL
     if (!sourceLocationId) { setError("יש לבחור מיקום מקור"); return; }
     const validLines = lines.filter((l) => l.itemId && Number(l.qty) > 0 && Number(l.unitPrice) >= 0);
     if (validLines.length === 0) { setError("יש להוסיף לפחות שורת מוצר אחת"); return; }
+    if (paidNow && !payMethod) { setError("יש לבחור איך שולם (מזומן / העברה / אשראי / שק)"); return; }
     // סכימה לפי פריט (אם אותו פריט מופיע בכמה שורות)
     const qtyByItem = {};
     validLines.forEach((l) => { qtyByItem[l.itemId] = (qtyByItem[l.itemId] || 0) + Number(l.qty); });
@@ -2746,7 +2748,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId, initialL
     setBusy(true);
     try {
       const batchTag = `הזמנה #${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-      const vatNote = priceMode === "excl" ? `מחיר לפני מע"מ (${vatPct}%)` : `מחיר כולל מע"מ (${vatPct}%)`;
+      const vatNote = vatPct === 0 ? 'ללא מע"מ' : priceMode === "excl" ? `מחיר לפני מע"מ (${vatPct}%)` : `מחיר כולל מע"מ (${vatPct}%)`;
       const invoiceLines = [];
       for (const l of validLines) {
         const roundedUnitPrice = Math.round(finalUnitPrice(l.unitPrice) * 100) / 100;
@@ -2776,7 +2778,7 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId, initialL
         totalAmountOverride: effectiveTotal,
       });
       if (paidNow) {
-        await api.addInvoicePayment(invoiceId, effectiveTotal, today, "immediate", "שולם במלואו בעת המכירה");
+        await api.addInvoicePayment(invoiceId, effectiveTotal, today, payMethod || "immediate", "שולם במלואו בעת המכירה");
       }
       // מכירה שנפתחה מפנייה מהירה - הפנייה עוברת ל"טופל – נמכר"
       if (leadId) {
@@ -2849,12 +2851,16 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId, initialL
       <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
         <span className="text-sm font-bold text-slate-700 block mb-2">מע"מ</span>
         <div className="flex gap-2 mb-3">
+          <button type="button" onClick={() => setVatRate(String(data.companySettings.vatRate ?? 18))} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${vatRate !== "0" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-gray-300 text-slate-600"}`}>עם מע"מ</button>
+          <button type="button" onClick={() => setVatRate("0")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${vatRate === "0" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-gray-300 text-slate-600"}`}>ללא מע"מ</button>
+        </div>
+        {vatRate !== "0" && <div className="flex gap-2 mb-3">
           <button type="button" onClick={() => setPriceMode("excl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "excl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למטה לפני מע"מ (ברירת מחדל)</button>
           <button type="button" onClick={() => setPriceMode("incl")} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${priceMode === "incl" ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>המחירים למטה כוללים מע"מ</button>
-        </div>
-        <Field label={'אחוז מע"מ נוכחי'}>
+        </div>}
+        {vatRate !== "0" && <Field label={'אחוז מע"מ נוכחי'}>
           <input type="number" min="0" step="0.1" className={inputCls + " w-28"} value={vatRate} onChange={(e) => setVatRate(e.target.value)} />
-        </Field>
+        </Field>}
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
@@ -2933,6 +2939,12 @@ function SaleScreen({ data, refresh, onOpenCustomer, initialCustomerId, initialL
           <button type="button" onClick={() => setPaidNow(true)} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${paidNow ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>שולם עכשיו במלואו</button>
           <button type="button" onClick={() => setPaidNow(false)} className={`flex-1 rounded-xl py-2 border text-sm font-medium ${!paidNow ? "bg-amber-500 text-white border-amber-500" : "bg-white border-gray-300 text-slate-600"}`}>מכירה בחשבון פתוח (חוב)</button>
         </div>
+        {paidNow && (
+          <div className="mb-1">
+            <span className="text-xs font-semibold text-slate-600 block mb-1.5">איך שולם?</span>
+            <PaymentMethodPicker value={payMethod} onChange={setPayMethod} />
+          </div>
+        )}
         {!paidNow && (
           <Field label="תנאי תשלום - מספר ימים עד למועד הפירעון">
             <select className={inputCls} value={paymentTermsDays} onChange={(e) => setPaymentTermsDays(e.target.value)}>
