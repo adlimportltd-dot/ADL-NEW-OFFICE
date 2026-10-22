@@ -7013,6 +7013,106 @@ function MovePaymentModal({ data, payment, refresh, onClose }) {
   );
 }
 
+// ---------- דוח מזומן: יומי / שבועי / חודשי ----------
+// תשלומים במזומן בלבד, לפי תאריך התשלום. מפריד בין מכירות "ללא מע"מ" (0%) לבין מכירות
+// עם מע"מ – שמוצגות לפני מע"מ. מכירות ישנות בלי סימון נחשבות כולל מע"מ (כמו בדוח רווח והפסד).
+function CashReportScreen({ data }) {
+  const [period, setPeriod] = useState("day"); // day | week | month
+  const defaultVat = Number(data.companySettings?.vatRate ?? 18);
+  const invById = {};
+  (data.customerInvoices || []).forEach((inv) => { invById[inv.id] = inv; });
+  const pad = (n) => String(n).padStart(2, "0");
+  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = (s) => { const [y, m, d] = String(s).slice(0, 10).split("-").map(Number); return new Date(y, m - 1, d); };
+  const weekStart = (d) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return x; }; // שבוע מתחיל ביום ראשון
+  const keyOf = (d, p) => (p === "day" ? ymd(d) : p === "week" ? ymd(weekStart(d)) : `${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+  const dm = (d) => `${d.getDate()}.${d.getMonth() + 1}`;
+  const labelOf = (key, p) => {
+    if (p === "month") { const [y, m] = key.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleDateString("he-IL", { month: "long", year: "numeric" }); }
+    const d = parse(key);
+    if (p === "week") { const e = new Date(d); e.setDate(e.getDate() + 6); return `${dm(d)} – ${dm(e)}.${e.getFullYear()}`; }
+    return d.toLocaleDateString("he-IL", { weekday: "short", day: "numeric", month: "numeric", year: "numeric" });
+  };
+
+  const rows = [];
+  (data.invoicePayments || []).forEach((p) => {
+    if (p.method !== "cash" || !p.paidDate) return;
+    const inv = invById[p.invoiceId];
+    if (!inv || inv.status === "void") return;
+    const m = (inv.notes || "").match(/\((\d+(?:\.\d+)?)%\)/);
+    const rate = m ? Number(m[1]) : defaultVat;
+    const noVat = rate === 0;
+    rows.push({ date: parse(p.paidDate), noVat, net: noVat ? p.amount : p.amount / (1 + rate / 100) });
+  });
+
+  const build = (p) => {
+    const map = {};
+    rows.forEach((r) => {
+      const k = keyOf(r.date, p);
+      if (!map[k]) map[k] = { key: k, noVat: 0, withVat: 0, count: 0 };
+      if (r.noVat) map[k].noVat += r.net; else map[k].withVat += r.net;
+      map[k].count += 1;
+    });
+    return Object.values(map).sort((a, b) => b.key.localeCompare(a.key));
+  };
+  const list = build(period);
+  const today = new Date();
+  const pick = (p) => build(p).find((x) => x.key === keyOf(today, p)) || { noVat: 0, withVat: 0, count: 0 };
+  const cards = [["היום", pick("day")], ["השבוע", pick("week")], ["החודש", pick("month")]];
+  const ils = (n) => `₪${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const PERIODS = [["day", "יומי"], ["week", "שבועי"], ["month", "חודשי"]];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h2 className="text-xl font-bold text-slate-800">דוח מזומן</h2>
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {PERIODS.map(([k, l]) => (
+            <button key={k} onClick={() => setPeriod(k)} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${period === k ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <p className="text-sm text-slate-500 mb-4">תשלומים שהתקבלו במזומן, לפי תאריך התשלום. כל הסכומים לפני מע"מ.</p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        {cards.map(([title, c]) => (
+          <div key={title} className="bg-white rounded-2xl border shadow-sm p-4">
+            <div className="text-slate-500 text-sm mb-2">{title}</div>
+            <div className="flex justify-between text-sm"><span className="text-slate-600">מזומן ללא מע"מ</span><span className="font-bold text-slate-800">{ils(c.noVat)}</span></div>
+            <div className="flex justify-between text-sm mt-1"><span className="text-slate-600">מזומן עם מע"מ</span><span className="font-bold text-slate-800">{ils(c.withVat)}</span></div>
+            <div className="flex justify-between text-sm mt-2 pt-2 border-t"><span className="text-slate-600">סה"כ</span><span className="font-bold text-emerald-700">{ils(c.noVat + c.withVat)}</span></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border shadow-sm overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="bg-gray-50 text-slate-500 text-right">
+            <th className="px-5 py-3 font-medium">{period === "day" ? "יום" : period === "week" ? "שבוע" : "חודש"}</th>
+            <th className="px-5 py-3 font-medium">מזומן ללא מע"מ</th>
+            <th className="px-5 py-3 font-medium">מזומן עם מע"מ <span className="font-normal">(לפני מע"מ)</span></th>
+            <th className="px-5 py-3 font-medium">סה"כ מזומן</th>
+            <th className="px-5 py-3 font-medium">תשלומים</th>
+          </tr></thead>
+          <tbody>
+            {list.length === 0 && <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">אין עדיין תשלומים במזומן</td></tr>}
+            {list.map((r) => (
+              <tr key={r.key} className="border-t">
+                <td className="px-5 py-3 font-semibold text-slate-800">{labelOf(r.key, period)}</td>
+                <td className="px-5 py-3">{ils(r.noVat)}</td>
+                <td className="px-5 py-3">{ils(r.withVat)}</td>
+                <td className="px-5 py-3 font-bold text-emerald-700">{ils(r.noVat + r.withVat)}</td>
+                <td className="px-5 py-3 text-slate-500">{r.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-400 mt-3">מכירות מלפני 20.10.2026 לא סומנו עם/בלי מע"מ, ולכן נספרות כ"עם מע"מ" (כמו בדוח רווח והפסד).</p>
+    </div>
+  );
+}
+
 function ReceivablesScreen({ data, refresh }) {
   const [openNewInvoice, setOpenNewInvoice] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
@@ -8052,6 +8152,7 @@ const FULL_NAV = [
   { key: "po", group: "רכש ויבוא", label: "הזמנות רכש PO", icon: FileText, adminOnly: true },
   { key: "expenses", group: "כספים", label: "הוצאות וחשבוניות", icon: Calculator },
   { key: "receivables", group: "כספים", label: "חובות וגבייה", icon: Wallet, adminOnly: true },
+  { key: "cashReport", group: "כספים", label: "דוח מזומן", icon: Banknote, adminOnly: true },
   { key: "log", group: "מערכת", label: "יומן אירועים", icon: ScrollText },
   { key: "settings", group: "מערכת", label: "הגדרות", icon: Settings },
 ];
@@ -8410,6 +8511,7 @@ export default function App() {
                 {tab === "po" && isAdmin && <POsScreen data={data} refresh={refresh} onPrint={setPrintPOId} prefillItemId={poPrefillItemId} onPrefillConsumed={() => setPoPrefillItemId(null)} />}
                 {tab === "expenses" && <ExpensesScreen data={data} refresh={refresh} isAdmin={isAdmin} />}
                 {tab === "receivables" && isAdmin && <ReceivablesScreen data={data} refresh={refresh} />}
+                {tab === "cashReport" && isAdmin && <CashReportScreen data={data} />}
                 {tab === "log" && <AuditLog data={data} />}
                 {tab === "settings" && <SettingsScreen data={data} refresh={refresh} userEmail={session.user.email} logoUrl={data.logoUrl} isAdmin={isAdmin} onLogoChange={async (dataUrl) => { try { await api.updateLogoUrl(dataUrl); await refresh(); } catch (e) { alert(e.message); } }} />}
               </>
