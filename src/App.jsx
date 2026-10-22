@@ -3199,6 +3199,23 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
   const customerQuotes = data.quotes.filter((q) => q.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
   const otherHistory = history.filter((t) => t.type !== "install");
 
+  // סיכום חודשי לפי חודש ההזמנה: כמה קנה, כמה מזה שולם, וכמה עוד פתוח (חשבוניות שלא בוטלו)
+  const liveInvoices = (data.customerInvoices || []).filter((inv) => inv.customerId === customerId && inv.status !== "void");
+  const monthMap = {};
+  liveInvoices.forEach((inv) => {
+    const key = String(inv.issueDate || "").slice(0, 7);
+    if (!key) return;
+    const paidAmt = invoicePaidAmount(data, inv.id);
+    if (!monthMap[key]) monthMap[key] = { key, bought: 0, paid: 0, open: 0, count: 0 };
+    const m = monthMap[key];
+    m.bought += inv.totalAmount; m.paid += paidAmt; m.open += Math.max(0, inv.totalAmount - paidAmt); m.count += 1;
+  });
+  const monthRows = Object.values(monthMap).sort((a, b) => b.key.localeCompare(a.key));
+  const paidTotal = monthRows.reduce((s, m) => s + m.paid, 0);
+  const openTotal = monthRows.reduce((s, m) => s + m.open, 0);
+  const monthLabel = (key) => { const [y, mo] = key.split("-"); return new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString("he-IL", { month: "long", year: "numeric" }); };
+  const ils = (n) => `₪${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
   // כל מכירה חדשה יוצרת שורת customer_invoices אחת + שורות customer_invoice_lines - זהו מקור
   // הנתונים ה"נכון" לקבוצת הזמנה אחת. לפני שנוצר מודל החשבוניות, מכירות נרשמו רק כשורות
   // transactions בודדות עם תגית "הזמנה #XXXXX" בהערה - אלו מקובצות כאן בנפרד כך שלא ייעלמו.
@@ -3286,13 +3303,37 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
       </div>
 
       <div className={"grid gap-3 mb-4 " + (Math.abs(creditBalance) > 0.009 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
-        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ שולם</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ רכישות</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
         <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מכשירים שנרכשו</div><div className="text-2xl font-bold text-slate-800">{deviceCount}</div></div>
         <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">תמציות שנרכשו</div><div className="text-2xl font-bold text-slate-800">{consumableCount}</div></div>
         {Math.abs(creditBalance) > 0.009 && (
           <div className="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-5"><div className="text-emerald-700 text-sm mb-1">יתרת זיכוי ללקוח</div><div className="text-2xl font-bold text-emerald-800">₪{creditBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
         )}
       </div>
+
+      {monthRows.length > 0 && (<>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">שולם בפועל</div><div className="text-2xl font-bold text-emerald-700">{ils(paidTotal)}</div></div>
+          <div className={"rounded-2xl border shadow-sm p-5 " + (openTotal > 0.01 ? "bg-rose-50 border-rose-200" : "bg-white")}><div className="text-slate-500 text-sm mb-1">חוב פתוח</div><div className={"text-2xl font-bold " + (openTotal > 0.01 ? "text-rose-700" : "text-slate-800")}>{ils(openTotal)}</div></div>
+        </div>
+        <h3 className="font-bold text-slate-800 mb-2">סיכום חודשי <span className="text-xs font-normal text-slate-500">(לפי חודש ההזמנה, כולל מע"מ)</span></h3>
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-4">
+          <table className="w-full text-sm">
+            <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-3 font-medium">חודש</th><th className="px-5 py-3 font-medium">הזמנות</th><th className="px-5 py-3 font-medium">קנה</th><th className="px-5 py-3 font-medium">שילם</th><th className="px-5 py-3 font-medium">נשאר פתוח</th></tr></thead>
+            <tbody>
+              {monthRows.map((m) => (
+                <tr key={m.key} className="border-t">
+                  <td className="px-5 py-3 font-semibold text-slate-800">{monthLabel(m.key)}</td>
+                  <td className="px-5 py-3 text-slate-600">{m.count}</td>
+                  <td className="px-5 py-3 text-slate-800">{ils(m.bought)}</td>
+                  <td className="px-5 py-3 text-emerald-700">{ils(m.paid)}</td>
+                  <td className={"px-5 py-3 font-semibold " + (m.open > 0.01 ? "text-rose-700" : "text-slate-400")}>{m.open > 0.01 ? ils(m.open) : "שולם במלואו"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>)}
 
       <h3 className="font-bold text-slate-800 mb-2">היסטוריית הזמנות ורכישות</h3>
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
