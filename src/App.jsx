@@ -7018,6 +7018,8 @@ function MovePaymentModal({ data, payment, refresh, onClose }) {
 // עם מע"מ – שמוצגות לפני מע"מ. מכירות ישנות בלי סימון נחשבות כולל מע"מ (כמו בדוח רווח והפסד).
 function CashReportScreen({ data }) {
   const [period, setPeriod] = useState("day"); // day | week | month
+  const [fromDate, setFromDate] = useState(""); // סינון לפי טווח תאריכים (לא חובה)
+  const [toDate, setToDate] = useState("");
   const defaultVat = Number(data.companySettings?.vatRate ?? 18);
   const invById = {};
   (data.customerInvoices || []).forEach((inv) => { invById[inv.id] = inv; });
@@ -7055,7 +7057,21 @@ function CashReportScreen({ data }) {
     });
     return Object.values(map).sort((a, b) => b.key.localeCompare(a.key));
   };
+  const inRange = (r) => { const d = ymd(r.date); return (!fromDate || d >= fromDate) && (!toDate || d <= toDate); };
+  const hasRange = !!(fromDate || toDate);
+  const rangeRows = rows.filter(inRange);
+  const range = rangeRows.reduce((acc, r) => { if (r.noVat) acc.noVat += r.net; else acc.withVat += r.net; acc.count += 1; return acc; }, { noVat: 0, withVat: 0, count: 0 });
   const list = build(period);
+  const listShown = !hasRange ? list : (() => {
+    const map = {};
+    rangeRows.forEach((r) => {
+      const k = keyOf(r.date, period);
+      if (!map[k]) map[k] = { key: k, noVat: 0, withVat: 0, count: 0 };
+      if (r.noVat) map[k].noVat += r.net; else map[k].withVat += r.net;
+      map[k].count += 1;
+    });
+    return Object.values(map).sort((a, b) => b.key.localeCompare(a.key));
+  })();
   const today = new Date();
   const pick = (p) => build(p).find((x) => x.key === keyOf(today, p)) || { noVat: 0, withVat: 0, count: 0 };
   const cards = [["היום", pick("day")], ["השבוע", pick("week")], ["החודש", pick("month")]];
@@ -7073,6 +7089,24 @@ function CashReportScreen({ data }) {
         </div>
       </div>
       <p className="text-sm text-slate-500 mb-4">תשלומים שהתקבלו במזומן, לפי תאריך התשלום. כל הסכומים לפני מע"מ.</p>
+
+      <div className="bg-white rounded-2xl border shadow-sm p-4 mb-4 flex flex-wrap items-end gap-3">
+        <label className="flex flex-col text-sm text-slate-600">מתאריך
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="mt-1 border border-gray-300 rounded-xl px-3 py-2" />
+        </label>
+        <label className="flex flex-col text-sm text-slate-600">עד תאריך
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="mt-1 border border-gray-300 rounded-xl px-3 py-2" />
+        </label>
+        {hasRange && <button onClick={() => { setFromDate(""); setToDate(""); }} className="text-sm text-slate-500 underline pb-2">ניקוי תאריכים</button>}
+        {hasRange && (
+          <div className="flex-1 min-w-[220px] bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-sm">
+            <div className="font-semibold text-slate-700 mb-1">בטווח שנבחר ({range.count} תשלומים)</div>
+            <div className="flex justify-between"><span className="text-slate-600">מזומן ללא מע"מ</span><b>{ils(range.noVat)}</b></div>
+            <div className="flex justify-between"><span className="text-slate-600">מזומן עם מע"מ</span><b>{ils(range.withVat)}</b></div>
+            <div className="flex justify-between border-t border-emerald-200 mt-1 pt-1"><span className="text-slate-600">סה"כ</span><b className="text-emerald-700">{ils(range.noVat + range.withVat)}</b></div>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
         {cards.map(([title, c]) => (
@@ -7095,8 +7129,8 @@ function CashReportScreen({ data }) {
             <th className="px-5 py-3 font-medium">תשלומים</th>
           </tr></thead>
           <tbody>
-            {list.length === 0 && <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">אין עדיין תשלומים במזומן</td></tr>}
-            {list.map((r) => (
+            {listShown.length === 0 && <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">{hasRange ? "אין תשלומים במזומן בתאריכים האלה" : "אין עדיין תשלומים במזומן"}</td></tr>}
+            {listShown.map((r) => (
               <tr key={r.key} className="border-t">
                 <td className="px-5 py-3 font-semibold text-slate-800">{labelOf(r.key, period)}</td>
                 <td className="px-5 py-3">{ils(r.noVat)}</td>
