@@ -271,6 +271,16 @@ export function WeeklyCount({ userName, onBack }) {
   }, []);
 
   const setCount = (id, v) => { const next = { ...counts, [id]: v }; setCounts(next); writeDraft(next); };
+  // מכשירים בקרטונים: סופרים קרטונים סגורים + יחידות פתוחות, והסך מחושב לבד
+  const setPart = (id, part, v, perCarton) => {
+    const next = { ...counts, [`${part}:${id}`]: v };
+    const c = next[`c:${id}`], l = next[`l:${id}`];
+    next[id] = (c === undefined || c === "") && (l === undefined || l === "") ? "" : String(toInt(c) * perCarton + toInt(l));
+    setCounts(next); writeDraft(next);
+  };
+  const setNone = (r) => (r.per_carton
+    ? (() => { const next = { ...counts, [r.item_id]: "0", [`c:${r.item_id}`]: "0", [`l:${r.item_id}`]: "0" }; setCounts(next); writeDraft(next); })()
+    : setCount(r.item_id, "0"));
 
   const groups = useMemo(() => {
     const map = {};
@@ -347,7 +357,7 @@ export function WeeklyCount({ userName, onBack }) {
     <Header title="ספירה שבועית" subtitle={`${userName} · מחסן מרכזי`} onBack={onBack} />
     <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
       <div className="bg-slate-100 rounded-2xl px-3.5 py-3 text-sm text-slate-700">
-        סופרים את <b>כל המחסן</b>: ריחות בכל הגדלים (חבית, גלון, 1 ק"ג, חצי, רבע) ו<b>מכשירים</b>. המסך לא מראה מה רשום במערכת – רושמים רק מה שרואים. אין בכלל? לוחצים "אין".
+        סופרים את <b>כל המחסן</b>: ריחות בכל הגדלים (חבית, גלון, 1 ק"ג, חצי, רבע) ו<b>מכשירים</b> (במכשירים בקרטון: סופרים קרטונים סגורים + יחידות פתוחות, והסך מחושב לבד). המסך לא מראה מה רשום במערכת – רושמים רק מה שרואים. אין בכלל? לוחצים "אין".
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex justify-between text-sm"><span className="text-slate-600">נספרו</span><span className="font-bold">{filled} מתוך {total}</span></div>
@@ -372,11 +382,28 @@ export function WeeklyCount({ userName, onBack }) {
               <span className="text-lg font-bold">{g.scent}</span>
               {g.aliases ? <span className="text-xs text-slate-600">נקרא גם: {g.aliases}</span> : complete ? <Check size={18} className="text-green-600" /> : null}
             </div>
-            {g.rows.map((r) => (
+            {g.rows.map((r) => r.per_carton ? (
+              <div key={r.item_id} className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-sm leading-tight">קרטונים סגורים<br /><span className="text-xs text-slate-500 font-normal">{r.per_carton} בקרטון</span></span>
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => setNone(r)} className={`h-11 px-3 rounded-xl text-sm border-[1.5px] ${counts[r.item_id] === "0" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-300"}`}>אין</button>
+                    <Stepper id={`cc-${r.item_id}`} label={`${g.scent} קרטונים`} value={counts[`c:${r.item_id}`]} placeholder="?" onChange={(v) => setPart(r.item_id, "c", v, r.per_carton)} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-sm">יחידות פתוחות</span>
+                  <Stepper id={`cl-${r.item_id}`} label={`${g.scent} יחידות פתוחות`} value={counts[`l:${r.item_id}`]} placeholder="?" onChange={(v) => setPart(r.item_id, "l", v, r.per_carton)} />
+                </div>
+                {counts[r.item_id] !== undefined && counts[r.item_id] !== "" && (
+                  <div className="text-sm text-slate-700 text-left">סה"כ: <b>{counts[r.item_id]}</b> יחידות</div>
+                )}
+              </div>
+            ) : (
               <div key={r.item_id} className="flex items-center justify-between gap-2">
                 <span className="font-semibold w-16">{g.section === "device" ? "יחידות" : (UNIT_LABEL[r.unit] || r.unit)}</span>
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => setCount(r.item_id, "0")} className={`h-11 px-3 rounded-xl text-sm border-[1.5px] ${counts[r.item_id] === "0" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-300"}`}>אין</button>
+                  <button onClick={() => setNone(r)} className={`h-11 px-3 rounded-xl text-sm border-[1.5px] ${counts[r.item_id] === "0" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-300"}`}>אין</button>
                   <Stepper id={`c-${r.item_id}`} label={`${g.scent} ${g.section === "device" ? "" : (UNIT_LABEL[r.unit] || r.unit)}`} value={counts[r.item_id]} placeholder="?" onChange={(v) => setCount(r.item_id, v)} />
                 </div>
               </div>
