@@ -180,26 +180,17 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
   // עיגול לשקלים: כל מחיר ליחידה (כולל מע"מ) מעוגל לשקל שלם – כך גם הסכום לתשלום יוצא בלי אגורות
   const grand = subtotal + vat;
   const hasAgorot = !viaIcon && !missingPrice && cartLines.length > 0 && Math.abs(grand - Math.round(grand)) > 0.005;
-  const roundToShekel = () => {
-    const f = 1 + (Number(vatRate) || 0) / 100;
-    const next = { ...priceEdits };
-    cartLines.forEach((l) => {
-      const v = priceEdits[l.item.id];
-      if (v === undefined || v === "" || isNaN(Number(v))) return;
-      const incl = priceMode === "excl" ? Number(v) * f : Number(v);
-      next[l.item.id] = String(Math.round(incl));
-    });
-    setPriceEdits(next);
-    setPriceMode("incl");
-  };
+  // עיגול לשקלים: הסכום הסופי מעוגל כלפי מטה לשקל שלם (אף פעם לא עולה), וההפרש מתחלק על המחירים
+  const roundToShekel = () => applyTotal(Math.floor(grand + 0.000001));
 
   // שינוי הסכום הסופי (למשל 3,775 → 3,750): ההפרש מתחלק יחסית על מחירי השורות, כך שהחשבונית יוצאת בדיוק על הסכום.
   // עם מע"מ – הסכום שמקלידים כולל מע"מ; ללא מע"מ – זה הסכום לתשלום.
   const [targetOpen, setTargetOpen] = useState(false);
   const [targetTotal, setTargetTotal] = useState("");
   const [totalChange, setTotalChange] = useState(null); // { from, to } – נכנס להערת המכירה
-  const applyTarget = () => {
-    const T = Math.round(Number(targetTotal) * 100);
+  const applyTarget = () => applyTotal(Number(targetTotal));
+  const applyTotal = (target) => {
+    const T = Math.round(Number(target) * 100);
     if (!(T > 0)) { setError("יש להקליד סכום סופי תקין"); return; }
     const f = 1 + (Number(vatRate) || 0) / 100;
     const lines = cartLines.map((l) => {
