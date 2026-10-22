@@ -275,8 +275,9 @@ export function WeeklyCount({ userName, onBack }) {
   const groups = useMemo(() => {
     const map = {};
     (sheet?.items || []).forEach((r) => {
-      if (!map[r.scent]) map[r.scent] = { scent: r.scent, aliases: r.aliases || "", rows: [] };
-      map[r.scent].rows.push(r);
+      const key = `${r.section || "scent"}|${r.scent}`;
+      if (!map[key]) map[key] = { key, section: r.section || "scent", scent: r.scent, aliases: r.aliases || "", rows: [] };
+      map[key].rows.push(r);
     });
     return Object.values(map);
   }, [sheet]);
@@ -346,7 +347,7 @@ export function WeeklyCount({ userName, onBack }) {
     <Header title="ספירה שבועית" subtitle={`${userName} · מחסן מרכזי`} onBack={onBack} />
     <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
       <div className="bg-slate-100 rounded-2xl px-3.5 py-3 text-sm text-slate-700">
-        סופרים <b>גלונים 5 ק"ג</b> ו<b>חצאים</b> על המדפים. המסך לא מראה מה רשום במערכת – רושמים רק מה שרואים. אין בכלל? לוחצים "אין".
+        סופרים את <b>כל המחסן</b>: ריחות בכל הגדלים (חבית, גלון, 1 ק"ג, חצי, רבע) ו<b>מכשירים</b>. המסך לא מראה מה רשום במערכת – רושמים רק מה שרואים. אין בכלל? לוחצים "אין".
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex justify-between text-sm"><span className="text-slate-600">נספרו</span><span className="font-bold">{filled} מתוך {total}</span></div>
@@ -354,32 +355,34 @@ export function WeeklyCount({ userName, onBack }) {
       </div>
       <div className="flex items-center gap-2.5 bg-white border-[1.5px] border-slate-300 rounded-2xl px-3.5 h-[50px]">
         <Search size={20} className="text-slate-500" />
-        <label htmlFor="cq" className="sr-only">חיפוש ריח</label>
-        <input id="cq" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חפש ריח" className="flex-1 bg-transparent outline-none text-base" />
+        <label htmlFor="cq" className="sr-only">חיפוש ריח או מכשיר</label>
+        <input id="cq" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חפש ריח או מכשיר" className="flex-1 bg-transparent outline-none text-base" />
         {query && <button aria-label="ניקוי" onClick={() => setQuery("")}><X size={18} className="text-slate-400" /></button>}
       </div>
       <button onClick={() => setOnlyMissing(!onlyMissing)} className={`h-11 rounded-xl text-sm font-semibold ${onlyMissing ? "bg-slate-900 text-white" : "bg-white border-[1.5px] border-slate-300"}`}>
         {onlyMissing ? "מוצג: רק מה שעוד לא נספר" : "הצג רק מה שעוד לא נספר"}
       </button>
-      <div className={WIDE}>{shown.map((g) => {
+      <div className={WIDE}>{shown.map((g, gi) => {
         const complete = g.rows.every((r) => counts[r.item_id] !== undefined && counts[r.item_id] !== "");
-        return (
-          <div key={g.scent} className={`rounded-2xl p-3.5 flex flex-col gap-2.5 border-[1.5px] transition ${complete ? "bg-green-50/40 border-green-500" : "bg-white border-slate-200"}`}>
+        const sectionStart = gi === 0 || shown[gi - 1].section !== g.section;
+        return (<React.Fragment key={g.key}>
+          {sectionStart && <div className="col-span-full text-base font-bold text-slate-800 pt-1">{g.section === "device" ? "מכשירים" : "ריחות"}</div>}
+          <div className={`rounded-2xl p-3.5 flex flex-col gap-2.5 border-[1.5px] transition ${complete ? "bg-green-50/40 border-green-500" : "bg-white border-slate-200"}`}>
             <div className="flex justify-between items-baseline">
               <span className="text-lg font-bold">{g.scent}</span>
               {g.aliases ? <span className="text-xs text-slate-600">נקרא גם: {g.aliases}</span> : complete ? <Check size={18} className="text-green-600" /> : null}
             </div>
             {g.rows.map((r) => (
               <div key={r.item_id} className="flex items-center justify-between gap-2">
-                <span className="font-semibold w-16">{UNIT_LABEL[r.unit]}</span>
+                <span className="font-semibold w-16">{g.section === "device" ? "יחידות" : (UNIT_LABEL[r.unit] || r.unit)}</span>
                 <div className="flex items-center gap-1.5">
                   <button onClick={() => setCount(r.item_id, "0")} className={`h-11 px-3 rounded-xl text-sm border-[1.5px] ${counts[r.item_id] === "0" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-300"}`}>אין</button>
-                  <Stepper id={`c-${r.item_id}`} label={`${g.scent} ${UNIT_LABEL[r.unit]}`} value={counts[r.item_id]} placeholder="?" onChange={(v) => setCount(r.item_id, v)} />
+                  <Stepper id={`c-${r.item_id}`} label={`${g.scent} ${g.section === "device" ? "" : (UNIT_LABEL[r.unit] || r.unit)}`} value={counts[r.item_id]} placeholder="?" onChange={(v) => setCount(r.item_id, v)} />
                 </div>
               </div>
             ))}
           </div>
-        );
+        </React.Fragment>);
       })}</div>
       {shown.length === 0 && <div className="text-center text-slate-500 py-6">{onlyMissing ? "הכול נספר" : "לא נמצא"}</div>}
     </div>
@@ -476,12 +479,12 @@ export function CountReview({ onBack }) {
           <div key={l.item_id} className={`bg-white rounded-2xl border-[1.5px] ${minus ? "border-rose-200" : "border-amber-200"}`}>
             <button onClick={() => setOpen({ ...open, [l.item_id]: !isOpen })} className="w-full p-3.5 flex items-center gap-2 text-right">
               <div className="flex-1 min-w-0">
-                <div className="font-bold">{l.scent} · {UNIT_LABEL[l.unit] || l.unit}</div>
+                <div className="font-bold">{l.scent}{l.diff_kg == null ? "" : ` · ${UNIT_LABEL[l.unit] || l.unit}`}</div>
                 <div className="text-[13px] text-slate-600">רשום {kg(l.system_qty)} · נספר {kg(l.counted_qty)}</div>
               </div>
               <div className="text-left">
                 <div className={`font-bold ${minus ? "text-rose-700" : "text-amber-700"}`}>{Number(l.diff) > 0 ? "+" : ""}{kg(l.diff)}</div>
-                <div className="text-xs text-slate-600">{kg(l.diff_kg)} ק"ג · {fmt(l.diff_ils)}</div>
+                <div className="text-xs text-slate-600">{l.diff_kg == null ? "" : `${kg(l.diff_kg)} ק"ג · `}{fmt(l.diff_ils)}</div>
               </div>
               {isOpen ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
             </button>
