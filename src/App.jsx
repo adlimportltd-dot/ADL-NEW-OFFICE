@@ -3303,7 +3303,7 @@ function CustomerFile({ data, customerId, onBack, onCreateQuote, onStartSale, is
       </div>
 
       <div className={"grid gap-3 mb-4 " + (Math.abs(creditBalance) > 0.009 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
-        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ רכישות</div><div className="text-2xl font-bold text-slate-800">₪{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div></div>
+        <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">סה"כ רכישות</div><div className="text-2xl font-bold text-slate-800">{ils(liveInvoices.reduce((s, i) => s + i.totalAmount, 0) + orders.filter((o) => !o.invoiceId).reduce((s, o) => s + (o.total || 0), 0))}</div></div>
         <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">מכשירים שנרכשו</div><div className="text-2xl font-bold text-slate-800">{deviceCount}</div></div>
         <div className="bg-white rounded-2xl border shadow-sm p-5"><div className="text-slate-500 text-sm mb-1">תמציות שנרכשו</div><div className="text-2xl font-bold text-slate-800">{consumableCount}</div></div>
         {Math.abs(creditBalance) > 0.009 && (
