@@ -193,7 +193,47 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
     setPriceMode("incl");
   };
 
+  // שינוי הסכום הסופי (למשל 3,775 → 3,750): ההפרש מתחלק יחסית על מחירי השורות, כך שהחשבונית יוצאת בדיוק על הסכום.
+  // עם מע"מ – הסכום שמקלידים כולל מע"מ; ללא מע"מ – זה הסכום לתשלום.
+  const [targetOpen, setTargetOpen] = useState(false);
+  const [targetTotal, setTargetTotal] = useState("");
+  const [totalChange, setTotalChange] = useState(null); // { from, to } – נכנס להערת המכירה
+  const applyTarget = () => {
+    const T = Math.round(Number(targetTotal) * 100);
+    if (!(T > 0)) { setError("יש להקליד סכום סופי תקין"); return; }
+    const f = 1 + (Number(vatRate) || 0) / 100;
+    const lines = cartLines.map((l) => {
+      const v = Number(priceEdits[l.item.id]);
+      const incl = priceMode === "excl" ? v * f : v; // מחיר ליחידה כולל מע"מ
+      return { id: l.item.id, qty: l.qty, incl };
+    });
+    const cur = lines.reduce((s2, l) => s2 + l.qty * l.incl, 0);
+    if (!(cur > 0)) { setError("אין מחירים לעדכן"); return; }
+    const k = (T / 100) / cur;
+    const ag = lines.map((l) => ({ ...l, newAg: Math.round(l.incl * k * 100) })); // באגורות
+    let diff = T - ag.reduce((s2, l) => s2 + l.qty * l.newAg, 0);
+    if (diff !== 0) {
+      const one = ag.find((l) => l.qty === 1) || ag.find((l) => diff % l.qty === 0);
+      if (one) { one.newAg += diff / one.qty; diff = 0; }
+    }
+    // אין שורה מתאימה – מנסים לחלק את ההפרש בין שתי שורות (כמה אגורות לכל אחת) כדי להגיע לסכום המדויק
+    for (let i = 0; diff !== 0 && i < ag.length; i++) for (let j = i + 1; diff !== 0 && j < ag.length; j++)
+      for (let x = -60; diff !== 0 && x <= 60; x++) {
+        const rest = diff - ag[i].qty * x;
+        if (rest % ag[j].qty === 0 && Math.abs(rest / ag[j].qty) <= 60) { ag[i].newAg += x; ag[j].newAg += rest / ag[j].qty; diff = 0; }
+      }
+    if (ag.some((l) => l.newAg < 0)) { setError("הסכום נמוך מדי"); return; }
+    const next = { ...priceEdits };
+    ag.forEach((l) => { next[l.id] = String(l.newAg / 100); });
+    setPriceEdits(next);
+    setPriceMode("incl");
+    setTotalChange({ from: Math.round(cur * 100) / 100, to: T / 100 });
+    setTargetOpen(false); setTargetTotal("");
+    setError(diff !== 0 ? `הסכום עודכן, עם הפרש של ${(Math.abs(diff) / 100).toFixed(2)} ₪ בגלל חלוקה לכמויות` : "");
+  };
+
   const resetSale = () => {
+    setTargetOpen(false); setTargetTotal(""); setTotalChange(null);
     setBitAmount(""); setBitSaveError("");
     setCustomer(null); setCustQuery(""); setCart({}); setPriceEdits({}); setApprovedBy(""); setPayment("");
     setIconSite(false); setEndCustomer(""); setOrderRef(""); setVatRate(18); setPriceMode("incl"); setNote("");
@@ -237,7 +277,7 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
         p_end_customer: viaIcon ? endCustomer : null,
         p_order_ref: iconSite ? orderRef : null,
         p_vat_rate: Number(vatRate),
-        p_note: note || null,
+        p_note: [note, totalChange ? `סכום סופי שונה מ-₪${totalChange.from} ל-₪${totalChange.to}` : ""].filter(Boolean).join(" - ") || null,
         p_approved_by: isAdmin ? (approvedBy || null) : approvedBy,
         p_source: source === "vehicle" ? "vehicle" : "warehouse",
       });
@@ -558,6 +598,22 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
             <div className="flex justify-between text-sm text-slate-700"><span>לפני מע"מ</span><span>{fmt(subtotal)}</span></div>
             <div className="flex justify-between text-sm text-slate-700"><span>מע"מ {vatRate}%</span><span>{fmt(vat)}</span></div>
             <div className="flex justify-between text-lg font-bold"><span>לתשלום</span><span>{fmt(subtotal + vat)}</span></div>
+            {!missingPrice && cartLines.length > 0 && !targetOpen && (
+              <button onClick={() => { setTargetOpen(true); setTargetTotal(String(Math.round(subtotal + vat))); }} className="mt-1 h-11 rounded-xl border-[1.5px] border-slate-300 bg-white text-slate-800 font-semibold text-[15px]">
+                שינוי הסכום הסופי
+              </button>
+            )}
+            {targetOpen && (
+              <div className="mt-1 flex flex-col gap-2 bg-amber-50 border-[1.5px] border-amber-300 rounded-xl p-2.5">
+                <label className="text-sm text-amber-950" htmlFor="tgt">{vatOn ? 'הסכום הסופי לתשלום (כולל מע"מ)' : 'הסכום הסופי לתשלום (ללא מע"מ)'}</label>
+                <input id="tgt" inputMode="decimal" autoFocus value={targetTotal} onChange={(e) => setTargetTotal(e.target.value)} className="h-12 border border-amber-300 rounded-xl px-3 text-lg font-bold bg-white" />
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={applyTarget} className="h-11 rounded-xl font-semibold text-[15px]" style={{ background: AMBER, color: NAVY }}>עדכון הסכום</button>
+                  <button onClick={() => { setTargetOpen(false); setTargetTotal(""); }} className="h-11 rounded-xl border border-slate-300 bg-white text-[15px]">ביטול</button>
+                </div>
+              </div>
+            )}
+            {totalChange && !targetOpen && <div className="text-xs text-slate-600">הסכום שונה מ-{fmt(totalChange.from)} ל-{fmt(totalChange.to)} (יירשם בהערת המכירה)</div>}
             {hasAgorot && (
               <button onClick={roundToShekel} className="mt-1 h-11 rounded-xl border-[1.5px] border-amber-400 bg-amber-50 text-amber-900 font-semibold text-[15px]">
                 עיגול לשקלים שלמים (בלי אגורות)
