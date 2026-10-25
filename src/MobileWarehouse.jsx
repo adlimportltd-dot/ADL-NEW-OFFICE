@@ -451,18 +451,27 @@ export function CountReview({ onBack }) {
   const [busy, setBusy] = useState(false);
   const [approved, setApproved] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: list, error: e1 } = await supabase.from("stock_counts").select("id").eq("status", "submitted").order("submitted_at", { ascending: false }).limit(1);
-        if (e1) throw e1;
-        if (!list?.length) { setNone(true); return; }
-        const { data, error: e2 } = await supabase.rpc("stock_count_review", { p_count_id: list[0].id });
-        if (e2) throw e2;
-        setRev(data);
-      } catch (e) { setError(e.message); }
-    })();
+  const loadReview = useCallback(async () => {
+    try {
+      const { data: list, error: e1 } = await supabase.from("stock_counts").select("id").eq("status", "submitted").order("submitted_at", { ascending: false }).limit(1);
+      if (e1) throw e1;
+      if (!list?.length) { setNone(true); return; }
+      const { data, error: e2 } = await supabase.rpc("stock_count_review", { p_count_id: list[0].id });
+      if (e2) throw e2;
+      setRev(data);
+    } catch (e) { setError(e.message); }
   }, []);
+  useEffect(() => { loadReview(); }, [loadReview]);
+
+  // יציאה שנרשמה אחרי הספירה אבל קרתה לפניה – מקטינים את החוסר בשורה, כדי שלא ייגרע פעמיים
+  const offsetLine = async (l, qty) => {
+    setBusy(true); setError("");
+    try {
+      const { error: e } = await supabase.rpc("offset_count_line", { p_count_id: rev.count.id, p_item_id: l.item_id, p_qty: qty });
+      if (e) throw e;
+      await loadReview();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
 
   const approve = async () => {
     setBusy(true); setError("");
@@ -534,6 +543,19 @@ export function CountReview({ onBack }) {
               </div>
               {isOpen ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
             </button>
+            {minus && Number(l.after_out) > 0 && (() => {
+              const offer = Math.min(-Number(l.diff), Number(l.after_out));
+              return (
+                <div className="mx-3.5 mb-3 bg-amber-50 border border-amber-300 rounded-xl p-2.5 flex flex-col gap-2 text-amber-950">
+                  <div className="text-[13px]"><b>שים לב:</b> אחרי הספירה נרשמה יציאה של {kg(l.after_out)} מהפריט הזה:</div>
+                  {(l.after || []).map((m, i) => (
+                    <div key={i} className="text-[12px] text-amber-900">· {new Date(m.at).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })} – {TX_LABEL[m.type] || m.type} {kg(m.qty)}{m.note ? ` – ${m.note}` : ""}</div>
+                  ))}
+                  <div className="text-[13px]">אם הסחורה יצאה <b>לפני</b> הספירה ונרשמה רק אחריה – מקזזים, כדי שלא תיגרע פעמיים.</div>
+                  <button disabled={busy} onClick={() => offsetLine(l, offer)} className="h-11 rounded-xl bg-slate-900 text-white font-semibold text-sm">יצא לפני הספירה – לקזז {kg(offer)}</button>
+                </div>
+              );
+            })()}
             {isOpen && (
               <div className="border-t border-slate-100 px-3.5 py-2 flex flex-col gap-2">
                 {(l.moves || []).length === 0 && <div className="text-sm text-slate-500 py-1">אין תנועות בתקופה הזאת</div>}
