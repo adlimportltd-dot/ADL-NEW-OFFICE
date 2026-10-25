@@ -8,6 +8,7 @@ import { supabase } from "./lib/supabaseClient";
 // mode: "sale" | "repack" · onDraft(draft) – מקבל את הטיוטה מהשרת
 // ============================================================
 const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+const MOBILE = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
 
 export default function VoiceAssist({ mode, onDraft, title }) {
   const [open, setOpen] = useState(false);
@@ -17,26 +18,53 @@ export default function VoiceAssist({ mode, onDraft, title }) {
   const [error, setError] = useState("");
   const recRef = useRef(null);
   const baseRef = useRef("");
+  const lastRef = useRef("");
+  const wantRef = useRef(false);
 
-  useEffect(() => () => { try { recRef.current?.stop(); } catch (e) { /* ignore */ } }, []);
+  useEffect(() => () => { wantRef.current = false; try { recRef.current?.stop(); } catch (e) { /* ignore */ } }, []);
+
+  // ממזג תוצאות בלי לשכפל: באנדרואיד/אייפון כל תוצאה מכילה לפעמים את כל מה שנאמר עד עכשיו
+  const merge = (results) => {
+    let s = "";
+    for (let i = 0; i < results.length; i++) {
+      const t = (results[i][0].transcript || "").replace(/\s+/g, " ").trim();
+      if (!t) continue;
+      const cur = s.trim();
+      if (!cur || t.startsWith(cur)) s = t;
+      else if (cur.endsWith(t) || cur.startsWith(t)) continue;
+      else s = cur + " " + t;
+    }
+    return s;
+  };
+
+  const listen = () => {
+    const rec = new SR();
+    rec.lang = "he-IL"; rec.interimResults = true;
+    rec.continuous = !MOBILE; // בטלפון: משפט-משפט עם הפעלה מחדש אוטומטית – הכי יציב
+    lastRef.current = "";
+    rec.onresult = (e) => { lastRef.current = merge(e.results); setText((baseRef.current + lastRef.current).trim()); };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { wantRef.current = false; setError("אין הרשאה למיקרופון – צריך לאשר בדפדפן, או לכתוב בתיבה"); }
+      else if (e.error !== "no-speech" && e.error !== "aborted" && !MOBILE) setError("ההקלטה נעצרה – אפשר לנסות שוב או לכתוב");
+    };
+    rec.onend = () => {
+      if (lastRef.current) baseRef.current = (baseRef.current + lastRef.current).trim() + " ";
+      lastRef.current = "";
+      if (wantRef.current) { try { listen(); return; } catch (x) { /* ignore */ } }
+      wantRef.current = false; setListening(false);
+    };
+    recRef.current = rec;
+    rec.start();
+  };
 
   const start = () => {
     setError("");
     if (!SR) { setError("הדפדפן הזה לא תומך בהקלטה – אפשר לכתוב את המשפט בתיבה"); return; }
-    const rec = new SR();
-    rec.lang = "he-IL"; rec.interimResults = true; rec.continuous = true;
     baseRef.current = text ? text.trim() + " " : "";
-    rec.onresult = (e) => {
-      let s = "";
-      for (let i = 0; i < e.results.length; i++) s += e.results[i][0].transcript;
-      setText(baseRef.current + s);
-    };
-    rec.onerror = (e) => { if (e.error !== "no-speech" && e.error !== "aborted") setError("ההקלטה נעצרה – אפשר לנסות שוב או לכתוב"); };
-    rec.onend = () => setListening(false);
-    recRef.current = rec;
-    try { rec.start(); setListening(true); } catch (e) { setError("לא הצלחתי להפעיל את המיקרופון"); }
+    wantRef.current = true;
+    try { listen(); setListening(true); } catch (e) { wantRef.current = false; setError("לא הצלחתי להפעיל את המיקרופון"); }
   };
-  const stop = () => { try { recRef.current?.stop(); } catch (e) { /* ignore */ } setListening(false); };
+  const stop = () => { wantRef.current = false; try { recRef.current?.stop(); } catch (e) { /* ignore */ } setListening(false); };
 
   const send = async () => {
     stop();
