@@ -71,6 +71,8 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
   const [deposit, setDeposit] = useState("");
   const [depositMethod, setDepositMethod] = useState("cash");
   const [depositError, setDepositError] = useState("");
+  const [shipping, setShipping] = useState(""); // דמי משלוח – שורה נפרדת בחשבונית (כמו בריווחית), באותו מע"מ של המכירה
+  const [shipOpen, setShipOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError("");
@@ -177,13 +179,17 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
       conv[id] = String(Math.round(n * 100) / 100);
     });
     setPriceEdits(conv);
+    if (shipping !== "" && !isNaN(Number(shipping))) setShipping(String(Math.round((mode === "excl" ? Number(shipping) / f : Number(shipping) * f) * 100) / 100));
     setPriceMode(mode);
   };
   const missingPrice = !viaIcon && cartLines.some((l) => unitPriceOf(l.item) == null);
   const subtotal = cartLines.reduce((s, l) => s + l.qty * (unitPriceOf(l.item) || 0), 0);
-  const vat = subtotal * (Number(vatRate) || 0) / 100;
+  // משלוח: מוקלד באותה צורה כמו המחירים (כולל/לפני מע"מ) ונשמר לפני מע"מ; לא נוגע במלאי
+  const shipNet = viaIcon || !(Number(shipping) > 0) ? 0 : (priceMode === "excl" ? Number(shipping) : Number(shipping) / (1 + (Number(vatRate) || 0) / 100));
+  const shipIncl = Math.round(shipNet * (1 + (Number(vatRate) || 0) / 100) * 100) / 100;
+  const vat = (subtotal + shipNet) * (Number(vatRate) || 0) / 100;
   // עיגול לשקלים: כל מחיר ליחידה (כולל מע"מ) מעוגל לשקל שלם – כך גם הסכום לתשלום יוצא בלי אגורות
-  const grand = subtotal + vat;
+  const grand = subtotal + shipNet + vat;
   const hasAgorot = !viaIcon && !missingPrice && cartLines.length > 0 && Math.abs(grand - Math.round(grand)) > 0.005;
   // עיגול לשקלים: הסכום הסופי מעוגל כלפי מטה לשקל שלם (אף פעם לא עולה), וההפרש מתחלק על המחירים
   const roundToShekel = () => applyTotal(Math.floor(grand + 0.000001));
@@ -195,8 +201,9 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
   const [totalChange, setTotalChange] = useState(null); // { from, to } – נכנס להערת המכירה
   const applyTarget = () => applyTotal(Number(targetTotal));
   const applyTotal = (target) => {
-    const T = Math.round(Number(target) * 100);
-    if (!(T > 0)) { setError("יש להקליד סכום סופי תקין"); return; }
+    // המשלוח נשאר כמו שהוא – ההפרש מתחלק רק על הפריטים
+    const T = Math.round((Number(target) - shipIncl) * 100);
+    if (!(T > 0)) { setError(shipIncl > 0 ? "הסכום הסופי חייב להיות גבוה מדמי המשלוח" : "יש להקליד סכום סופי תקין"); return; }
     const f = 1 + (Number(vatRate) || 0) / 100;
     const lines = cartLines.map((l) => {
       const v = Number(priceEdits[l.item.id]);
@@ -223,7 +230,7 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
     ag.forEach((l) => { next[l.id] = String(l.newAg / 100); });
     setPriceEdits(next);
     setPriceMode("incl");
-    setTotalChange({ from: Math.round(cur * 100) / 100, to: T / 100 });
+    setTotalChange({ from: Math.round((cur + shipIncl) * 100) / 100, to: (T / 100) + shipIncl });
     setTargetOpen(false); setTargetTotal("");
     setError(diff !== 0 ? `הסכום עודכן, עם הפרש של ${(Math.abs(diff) / 100).toFixed(2)} ₪ בגלל חלוקה לכמויות` : "");
   };
@@ -255,7 +262,7 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
   const resetSale = () => {
     setVoiceDraft(null);
     setTargetOpen(false); setTargetTotal(""); setTotalChange(null);
-    setBitAmount(""); setBitSaveError(""); setDeposit(""); setDepositMethod("cash"); setDepositError("");
+    setBitAmount(""); setBitSaveError(""); setDeposit(""); setDepositMethod("cash"); setDepositError(""); setShipping(""); setShipOpen(false);
     setCustomer(null); setCustQuery(""); setCart({}); setPriceEdits({}); setApprovedBy(""); setPayment("");
     setIconSite(false); setEndCustomer(""); setOrderRef(""); setVatRate(18); setPriceMode("incl"); setNote("");
     setError(""); setResult(null); setQuery(""); setTab("consumable"); setScreen("customer");
@@ -302,6 +309,7 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
         p_note: [note, totalChange ? `סכום סופי שונה מ-₪${totalChange.from} ל-₪${totalChange.to}` : ""].filter(Boolean).join(" - ") || null,
         p_approved_by: isAdmin ? (approvedBy || null) : approvedBy,
         p_source: source === "vehicle" ? "vehicle" : "warehouse",
+        ...(shipNet > 0 ? { p_shipping: Math.round(shipNet * 10000) / 10000 } : {}),
       });
       if (e) throw e;
       setResult(data);
@@ -639,16 +647,35 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
           </div>
         )}
 
+        {!viaIcon && (shipOpen || Number(shipping) > 0 ? (
+          <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl px-3.5 py-3 flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-slate-800" htmlFor="ship">דמי משלוח ({inclLabel})</label>
+            <div className="flex gap-2">
+              <input id="ship" inputMode="decimal" autoFocus={shipOpen && !shipping} value={shipping} onChange={(e) => setShipping(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="₪" className="flex-1 h-12 border border-slate-300 rounded-xl px-3 text-base bg-white" />
+              <button onClick={() => { setShipping(""); setShipOpen(false); }} className="h-12 px-4 rounded-xl border border-slate-300 bg-white text-[15px]">הסרה</button>
+            </div>
+            <span className="text-xs text-slate-500">נכנס לחשבונית כשורה נפרדת "משלוח", עם אותו מע"מ – בדיוק כמו בריווחית. לא נוגע במלאי.</span>
+          </div>
+        ) : (
+          <button onClick={() => setShipOpen(true)} className="h-12 rounded-2xl border-[1.5px] border-dashed border-slate-300 bg-white text-slate-700 font-semibold text-[15px] flex items-center justify-center gap-1.5">
+            + הוספת משלוח
+          </button>
+        ))}
+
         <label className="text-sm text-slate-700" htmlFor="note">הערה (לא חובה)</label>
         <input id="note" value={note} onChange={(e) => setNote(e.target.value)} className="h-12 border border-slate-300 rounded-xl px-3 text-base bg-white" />
 
         {!viaIcon && (
           <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl px-3.5 py-3 flex flex-col gap-1.5">
-            <div className="flex justify-between text-sm text-slate-700"><span>לפני מע"מ</span><span>{fmt(subtotal)}</span></div>
+            {shipNet > 0 && <>
+              <div className="flex justify-between text-sm text-slate-700"><span>פריטים</span><span>{fmt(subtotal)}</span></div>
+              <div className="flex justify-between text-sm text-slate-700"><span>משלוח</span><span>{fmt(shipNet)}</span></div>
+            </>}
+            <div className="flex justify-between text-sm text-slate-700"><span>לפני מע"מ</span><span>{fmt(subtotal + shipNet)}</span></div>
             <div className="flex justify-between text-sm text-slate-700"><span>מע"מ {vatRate}%</span><span>{fmt(vat)}</span></div>
-            <div className="flex justify-between text-lg font-bold"><span>לתשלום</span><span>{fmt(subtotal + vat)}</span></div>
+            <div className="flex justify-between text-lg font-bold"><span>לתשלום</span><span>{fmt(grand)}</span></div>
             {!missingPrice && cartLines.length > 0 && !targetOpen && (
-              <button onClick={() => { setTargetOpen(true); setTargetTotal(String(Math.round(subtotal + vat))); }} className="mt-1 h-11 rounded-xl border-[1.5px] border-slate-300 bg-white text-slate-800 font-semibold text-[15px]">
+              <button onClick={() => { setTargetOpen(true); setTargetTotal(String(Math.round(grand))); }} className="mt-1 h-11 rounded-xl border-[1.5px] border-slate-300 bg-white text-slate-800 font-semibold text-[15px]">
                 שינוי הסכום הסופי
               </button>
             )}
@@ -694,6 +721,7 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
           <div className="flex justify-between"><span className="text-slate-600">לקוח</span><span className="font-semibold">{result.icon ? `אייקון אייר (${endCustomer || customer?.name})` : customer?.name}</span></div>
           <div className="flex justify-between"><span className="text-slate-600">פריטים</span><span className="font-semibold">{cartCount}</span></div>
           <div className="flex justify-between"><span className="text-slate-600">תשלום</span><span className="font-semibold">{PAYMENTS.find((p) => p.key === payment)?.label}</span></div>
+          {!result.icon && Number(result.shipping) > 0 && <div className="flex justify-between"><span className="text-slate-600">משלוח (כולל מע"מ)</span><span className="font-semibold">{fmt(Number(result.shipping))}</span></div>}
           {!result.icon && <div className="flex justify-between"><span className="text-slate-600">סכום</span><span className="font-semibold">{fmt(result.total)}</span></div>}
           {payment === "open" && Number(deposit) > 0 && !depositError && !result.icon && <>
             <div className="flex justify-between"><span className="text-slate-600">מקדמה ({PAYMENTS.find((p) => p.key === depositMethod)?.label})</span><span className="font-semibold text-green-700">{fmt(Number(deposit))}</span></div>
