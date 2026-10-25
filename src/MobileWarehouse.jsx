@@ -100,12 +100,14 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
   const outKg = outRows.reduce((s, i) => s + toInt(outQ[i.id]) * UNIT_KG[i.unit], 0);
   const pct = inKg > 0 ? Math.round((outKg / inKg - 1) * 100) : 0;
   const outOfRange = inKg > 0 && outKg > 0 && Math.abs(outKg / inKg - 1) > 0.1;
+  const [dup, setDup] = useState(null); // מזיגה דומה נרשמה לאחרונה – לוודא שזו לא כפילות
 
-  const pick = (s) => { setScent(s.scent); setOpenQ({}); setOutQ({}); setReason(""); setNote(""); setError(""); setDone(null); };
-  const clear = () => { setScent(null); setOpenQ({}); setOutQ({}); setReason(""); setNote(""); setError(""); };
+  const pick = (s) => { setScent(s.scent); setOpenQ({}); setOutQ({}); setReason(""); setNote(""); setError(""); setDone(null); setDup(null); };
+  const clear = () => { setScent(null); setOpenQ({}); setOutQ({}); setReason(""); setNote(""); setError(""); setDup(null); };
 
-  const save = async () => {
-    setError("");
+  const save = async (confirmDup = false) => {
+    setError(""); setDup(null);
+
     const consumed = openRows.filter((i) => toInt(openQ[i.id]) > 0).map((i) => ({ item_id: i.id, qty: toInt(openQ[i.id]) }));
     const produced = outRows.filter((i) => toInt(outQ[i.id]) > 0).map((i) => ({ item_id: i.id, qty: toInt(outQ[i.id]) }));
     if (!consumed.length) { setError("יש לבחור מה פותחים – חבית או גלון"); return; }
@@ -113,13 +115,18 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
     if (outOfRange && !reason.trim()) { setError("ההפרש מעל 10% – יש לכתוב סיבה"); return; }
     setBusy(true);
     try {
-      const { data, error: e } = await supabase.rpc("mobile_repack", { p_consumed: consumed, p_produced: produced, p_reason: reason || null, p_note: note || null });
+      const noteToSend = confirmDup ? `[כפילות מאושרת] ${note || ""}`.trim() : (note || null);
+      const { data, error: e } = await supabase.rpc("mobile_repack", { p_consumed: consumed, p_produced: produced, p_reason: reason || null, p_note: noteToSend });
       if (e) throw e;
       setDone(data);
       clear();
       setLoading(true);
       await load();
-    } catch (e) { setError(e.message || "שגיאה בשמירה"); } finally { setBusy(false); }
+    } catch (e) {
+      const m = String(e.message || "");
+      if (m.startsWith("DUP|")) { const [, tag, mins, by] = m.split("|"); setDup({ tag, mins, by }); }
+      else setError(m || "שגיאה בשמירה");
+    } finally { setBusy(false); }
   };
 
   // ---------- רשימת ריחות ----------
@@ -235,10 +242,22 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
         <label htmlFor="rnote" className="text-sm text-slate-600">הערה (לא חובה)</label>
         <input id="rnote" value={note} onChange={(e) => setNote(e.target.value)} className="h-12 border border-slate-300 rounded-xl px-3 bg-white" />
       </div>
+      {dup && (
+        <div className="bg-amber-50 border-[1.5px] border-amber-400 rounded-2xl p-3.5 flex flex-col gap-2.5">
+          <div className="flex items-start gap-2 text-amber-950">
+            <TriangleAlert size={20} className="shrink-0 mt-0.5 text-amber-700" />
+            <span className="text-[15px]"><b>כבר נרשמה מזיגה של {current?.scent} לפני {dup.mins} דקות</b>{dup.by ? ` (${dup.by}, ${dup.tag})` : ` (${dup.tag})`}. זו באמת מזיגה נוספת, או שהיא כבר נרשמה?</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => save(true)} disabled={busy} className="h-12 rounded-xl bg-slate-900 text-white font-semibold">כן, מזיגה נוספת</button>
+            <button onClick={clear} className="h-12 rounded-xl bg-white border-[1.5px] border-slate-300 font-semibold">לא – כבר נרשמה</button>
+          </div>
+        </div>
+      )}
       <ErrorBox>{error}</ErrorBox>
     </div>
     <BottomBar hint={inKg === 0 ? "בחר מה פותחים" : outKg === 0 ? "רשום מה יצא מהמזיגה" : outOfRange && !reason.trim() ? "כתוב למה ההפרש מעל 10%" : null}>
-      <button disabled={busy || inKg === 0 || outKg === 0} onClick={save} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
+      <button disabled={busy || inKg === 0 || outKg === 0} onClick={() => save(false)} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
         {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} {outOfRange && !isAdmin ? "שליחה לאישור" : "שמירת המזיגה"}
       </button>
     </BottomBar>
