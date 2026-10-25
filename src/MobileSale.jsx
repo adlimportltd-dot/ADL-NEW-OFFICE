@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn, Shell } from "./mobileUi";
+import VoiceAssist, { VoiceQuestions } from "./VoiceAssist";
 
 // ============================================================
 // מכירה מהירה בטלפון (אדל)
@@ -227,7 +228,32 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
     setError(diff !== 0 ? `הסכום עודכן, עם הפרש של ${(Math.abs(diff) / 100).toFixed(2)} ₪ בגלל חלוקה לכמויות` : "");
   };
 
+  // עוזר הרישום: טיוטה שמולאה מהקול/טקסט – ממלאים את הטופס, והמשתמש בודק ומאשר כרגיל
+  const [voiceDraft, setVoiceDraft] = useState(null);
+  const applySaleDraft = (d) => {
+    setVoiceDraft(d);
+    setError("");
+    const c = d.customer ? (customers.find((x) => x.id === d.customer.id) || d.customer) : null;
+    if (c) { setCustomer(c); setEndCustomer(d.end_customer || c.name); }
+    else if (d.new_customer_name) setNewCust({ name: d.new_customer_name, phone: "" });
+    const nextCart = {}; const nextPrices = {};
+    (d.lines || []).forEach((l) => {
+      nextCart[l.item_id] = (nextCart[l.item_id] || 0) + (Number(l.qty) || 1);
+      if (l.price != null) nextPrices[l.item_id] = String(Math.round(Number(l.price) * 100) / 100);
+    });
+    setCart(nextCart); setPriceEdits(nextPrices);
+    setVatRate(Number(d.vat) === 0 ? 0 : 18);
+    setPriceMode(d.price_basis === "excl" ? "excl" : "incl");
+    setPayment(d.payment || "");
+    if (d.payment === "bit") { setBitAmount(d.total != null ? String(d.total) : ""); setEndCustomer(d.end_customer || c?.name || ""); }
+    if (d.payment === "open" && d.deposit) { setDeposit(String(d.deposit)); setDepositMethod(d.deposit_method || "cash"); }
+    const noteParts = [d.end_customer && c && d.end_customer !== c.name && d.payment !== "bit" ? d.end_customer : null, d.note].filter(Boolean);
+    setNote(noteParts.join(" - "));
+    setScreen(c ? "summary" : "customer");
+  };
+
   const resetSale = () => {
+    setVoiceDraft(null);
     setTargetOpen(false); setTargetTotal(""); setTotalChange(null);
     setBitAmount(""); setBitSaveError(""); setDeposit(""); setDepositMethod("cash"); setDepositError("");
     setCustomer(null); setCustQuery(""); setCart({}); setPriceEdits({}); setApprovedBy(""); setPayment("");
@@ -330,6 +356,8 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
         onBack={onHome}
       />
       <div className="flex-1 px-4 py-4 flex flex-col gap-3">
+        {isAdmin && <VoiceAssist mode="sale" title="ספר מה מכרת – והמכירה תתמלא לבד" onDraft={applySaleDraft} />}
+        {voiceDraft && !customer && <VoiceQuestions draft={voiceDraft} onClose={() => setVoiceDraft(null)} />}
         <label htmlFor="cust" className="font-semibold">למי מוכרים?</label>
         <div className="flex items-center gap-2.5 bg-white border-[1.5px] border-slate-300 rounded-2xl px-3.5 h-14">
           <Search size={20} className="text-slate-500" />
@@ -500,6 +528,7 @@ export default function MobileSale({ profile, onHome, embedded = false, prefill 
     return shell(<>
       <Header title="בודקים ומאשרים" subtitle={`לקוח: ${customer?.name}`} step={3} onBack={() => setScreen("items")} />
       <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
+        {voiceDraft && <VoiceQuestions draft={voiceDraft} onClose={() => setVoiceDraft(null)} />}
         {!viaIcon && vatOn && (
           <div className="flex flex-col gap-1.5">
             <div className="text-[13px] font-semibold text-slate-500">המחיר שמקלידים הוא:</div>
