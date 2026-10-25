@@ -4,6 +4,7 @@ import { supabase } from "./lib/supabaseClient";
 import { NAVY, AMBER, fmt, norm, parseEssence, Header, BottomBar, bigBtn, WIDE, SectionTitle } from "./mobileUi";
 import { linesText } from "./MobileVehicle";
 import { reasonLabel } from "./MobileWaste";
+import VoiceAssist, { VoiceQuestions } from "./VoiceAssist";
 
 // ============================================================
 // מסכי מחסן בטלפון:
@@ -101,6 +102,24 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
   const pct = inKg > 0 ? Math.round((outKg / inKg - 1) * 100) : 0;
   const outOfRange = inKg > 0 && outKg > 0 && Math.abs(outKg / inKg - 1) > 0.1;
   const [dup, setDup] = useState(null); // מזיגה דומה נרשמה לאחרונה – לוודא שזו לא כפילות
+  // עוזר הרישום: טיוטת מזיגה מהקול/טקסט. כמה מזיגות במשפט אחד – אחת אחרי השנייה
+  const [voiceDraft, setVoiceDraft] = useState(null);
+  const [voiceQueue, setVoiceQueue] = useState([]);
+  const fillRepack = (r, draft) => {
+    const firstOpen = r.open[0]?.item_id;
+    const sc = scents.find((x) => Object.values(x.sizes).some((i) => i.id === firstOpen));
+    if (!sc) { setError("העוזר בחר ריח שלא נמצא ברשימה – בחרו ידנית"); return; }
+    setScent(sc.scent); setReason(""); setNote(""); setError(""); setDone(null); setDup(null);
+    setOpenQ(Object.fromEntries(r.open.map((l) => [l.item_id, String(l.qty)])));
+    setOutQ(Object.fromEntries(r.out.map((l) => [l.item_id, String(l.qty)])));
+    setVoiceDraft(draft);
+  };
+  const applyRepackDraft = (d) => {
+    const list = d.repacks || [];
+    if (!list.length) { setError("העוזר לא זיהה מזיגה – נסו לנסח שוב או בחרו ידנית"); return; }
+    setVoiceQueue(list.slice(1).map((r) => ({ r, d })));
+    fillRepack(list[0], d);
+  };
 
   const pick = (s) => { setScent(s.scent); setOpenQ({}); setOutQ({}); setReason(""); setNote(""); setError(""); setDone(null); setDup(null); };
   const clear = () => { setScent(null); setOpenQ({}); setOutQ({}); setReason(""); setNote(""); setError(""); setDup(null); };
@@ -119,7 +138,7 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
       const { data, error: e } = await supabase.rpc("mobile_repack", { p_consumed: consumed, p_produced: produced, p_reason: reason || null, p_note: noteToSend });
       if (e) throw e;
       setDone(data);
-      clear();
+      clear(); setVoiceDraft(null);
       setLoading(true);
       await load();
     } catch (e) {
@@ -136,6 +155,13 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
     return (<>
       <Header title="מזיגה ופירוק" subtitle={`${userName} · מחסן מרכזי`} onBack={onBack} />
       <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
+        <VoiceAssist mode="repack" title="ספר מה מזגת – והמזיגה תתמלא לבד" onDraft={applyRepackDraft} />
+        {voiceQueue.length > 0 && (
+          <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-300 rounded-2xl px-3.5 py-2.5">
+            <span className="text-sm text-amber-950 font-semibold">מההקלטה נשארו עוד {voiceQueue.length} מזיגות</span>
+            <button onClick={() => { const [first, ...rest] = voiceQueue; setVoiceQueue(rest); fillRepack(first.r, first.d); }} className="h-10 px-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">למלא את הבאה</button>
+          </div>
+        )}
         {done && done.status === "pending" && (
           <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-300 rounded-2xl px-3.5 py-3">
             <TriangleAlert size={22} className="text-amber-700 shrink-0" />
@@ -185,8 +211,10 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
 
   // ---------- מזיגה של ריח אחד ----------
   return (<>
-    <Header title={current.scent} subtitle="מה פותחים ומה יצא" onBack={clear} />
+    <Header title={current.scent} subtitle="מה פותחים ומה יצא" onBack={() => { clear(); setVoiceDraft(null); }} />
     <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
+      {voiceDraft && <VoiceQuestions draft={voiceDraft} onClose={() => setVoiceDraft(null)} />}
+      {!isAdmin && <div className="text-[13px] text-slate-600 bg-slate-100 rounded-xl px-3 py-2">המזיגה תישלח לאישור של ליאור או אלירן, והמלאי יתעדכן אחרי האישור.</div>}
       <div className={WIDE + " items-start"}>
       <div className="bg-white border-[1.5px] border-slate-200 rounded-2xl p-3.5 flex flex-col gap-3">
         <div className="font-bold flex items-center gap-2"><span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center">1</span> מה פותחים?</div>
@@ -258,7 +286,7 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
     </div>
     <BottomBar hint={inKg === 0 ? "בחר מה פותחים" : outKg === 0 ? "רשום מה יצא מהמזיגה" : outOfRange && !reason.trim() ? "כתוב למה ההפרש מעל 10%" : null}>
       <button disabled={busy || inKg === 0 || outKg === 0} onClick={() => save(false)} className={bigBtn} style={{ background: AMBER, color: NAVY }}>
-        {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} {outOfRange && !isAdmin ? "שליחה לאישור" : "שמירת המזיגה"}
+        {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={20} />} {!isAdmin ? "שליחה לאישור" : "שמירת המזיגה"}
       </button>
     </BottomBar>
   </>);
