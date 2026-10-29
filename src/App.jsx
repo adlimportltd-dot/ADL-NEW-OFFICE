@@ -5,7 +5,7 @@ import {
   CircleCheck, CircleX, Trash2, ChevronLeft, ChevronDown, Menu, LogOut, Loader2,
   Upload, Calculator, Ship, BarChart3, FileText, Printer, Gauge,
   Settings, Database, KeyRound, User, Pencil, TrendingUp, ShoppingCart, CalendarPlus,
-  Wallet, Banknote, Ban, CreditCard, Landmark, Receipt, FileSpreadsheet, Search, History, Undo2, Repeat, Eye, EyeOff,
+  Wallet, Banknote, Ban, CreditCard, Landmark, Percent, Receipt, FileSpreadsheet, Search, History, Undo2, Repeat, Eye, EyeOff,
   Droplets, ClipboardList, Gift, CheckCheck,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
@@ -1065,14 +1065,20 @@ const PAYMENT_METHOD_META = {
   credit_card: { label: "אשראי", icon: CreditCard, tone: "violet" },
   check: { label: "שק", icon: Receipt, tone: "amber" },
 };
+// ניכוי מס במקור: הלקוח הפחית מהתשלום מס שהעביר בעצמו לרשויות. סוגר את יתרת
+// החשבונית אבל לא כסף שנכנס לבנק/לקופה. מוצג רק ברישום תשלום על חשבונית לקוח
+// (לא בהוצאות / החזרות / מכירה), ולכן מוגדר בנפרד ולא בתוך PAYMENT_METHOD_META.
+const WITHHOLDING_METHOD_META = { withholding: { label: "ניכוי במקור", icon: Percent, tone: "slate" } };
+const ALL_PAYMENT_METHOD_META = { ...PAYMENT_METHOD_META, ...WITHHOLDING_METHOD_META };
 
 // בורר אמצעי תשלום ויזואלי (כפתורי אייקון) - בכל מקום שרושמים תשלום בפועל.
 // לא <select> רגיל: כשהאייקון עצמו מתפקד כזיהוי מהיר של סוג התשלום בהיסטוריה
 // (ר' PaymentMethodTag למטה), עקבי שהבחירה תיראה כמו האייקון הזה מההתחלה.
-function PaymentMethodPicker({ value, onChange }) {
+function PaymentMethodPicker({ value, onChange, withWithholding = false }) {
+  const methods = withWithholding ? ALL_PAYMENT_METHOD_META : PAYMENT_METHOD_META;
   return (
-    <div className="grid grid-cols-4 gap-2">
-      {Object.entries(PAYMENT_METHOD_META).map(([key, meta]) => {
+    <div className={`grid ${withWithholding ? "grid-cols-5" : "grid-cols-4"} gap-2`}>
+      {Object.entries(methods).map(([key, meta]) => {
         const Icon = meta.icon;
         const active = value === key;
         return (
@@ -1089,7 +1095,7 @@ function PaymentMethodPicker({ value, onChange }) {
 }
 
 function PaymentMethodTag({ method }) {
-  const meta = PAYMENT_METHOD_META[method];
+  const meta = ALL_PAYMENT_METHOD_META[method];
   if (!meta) return null;
   const Icon = meta.icon;
   return (
@@ -1141,7 +1147,7 @@ const AGING_BUCKETS = [
 // שמות מחלקות מלאים ומפורשים (לא בנויים דינמית) - Tailwind סורק את קובץ ה-JS
 // כטקסט חופשי בזמן build ומרכיב מחדש רק את המחלקות שהוא רואה שם כמחרוזת
 // שלמה; `text-${tone}-600` לא היה נכלל ב-CSS הסופי ונשאר בלי צבע בפועל.
-const TONE_TEXT_CLS = { emerald: "text-emerald-600", amber: "text-amber-600", rose: "text-rose-600", sky: "text-sky-600", violet: "text-violet-600" };
+const TONE_TEXT_CLS = { emerald: "text-emerald-600", amber: "text-amber-600", rose: "text-rose-600", sky: "text-sky-600", violet: "text-violet-600", slate: "text-slate-600" };
 function agingBucketOf(dueDate) {
   const daysOverdue = Math.floor((new Date(new Date().toDateString()) - new Date(dueDate)) / 86400000);
   if (daysOverdue <= 0) return "current";
@@ -6804,8 +6810,13 @@ function InvoicePaymentsModal({ data, invoice, refresh, onClose }) {
             <Field label="תאריך תשלום"><input type="date" className={inputCls} value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
           </div>
           <Field label="אמצעי תשלום">
-            <PaymentMethodPicker value={method} onChange={setMethod} />
+            <PaymentMethodPicker value={method} onChange={setMethod} withWithholding />
           </Field>
+          {method === "withholding" && (
+            <div className="bg-slate-100 text-slate-600 text-xs rounded-xl px-3 py-2 mb-2">
+              ניכוי מס במקור: הסכום שהלקוח הפחית מהתשלום. סוגר את יתרת החשבונית, אבל לא נכנס לבנק או לקופה. לבקש מהלקוח אישור ניכוי.
+            </div>
+          )}
           <Field label="הערה (לא חובה)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
           {error && <div className="bg-rose-100 text-rose-700 text-sm rounded-xl px-3 py-2 mb-3">{error}</div>}
           <button onClick={addPayment} disabled={busy} className={btnPrimary + " w-full flex items-center justify-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />}רישום תשלום</button>
