@@ -134,6 +134,24 @@ export function DailyReport({ onBack }) {
           </Section>
         )}
 
+        <Section title="תשלומים שהתקבלו" count={(r.payments || []).length} empty={(r.payments || []).length ? null : "לא התקבלו תשלומים על חובות"}>
+          {(r.payments || []).map((p, i) => (
+            <div key={i} className="flex justify-between gap-2 text-sm border-b border-slate-100 last:border-0 pb-1.5">
+              <span className="min-w-0">
+                <span className="block truncate">{p.customer} · {({ cash: "מזומן", credit_card: "אשראי", bank_transfer: "העברה", bit: "ביט", check: "צ'ק" })[p.method] || p.method}{p.by ? " · " + p.by : ""}</span>
+                <span className="block text-xs text-slate-500 truncate">{p.num} · חשבונית מ-{new Date(p.invoice_date + "T12:00:00").toLocaleDateString("he-IL")}{p.note ? " · " + p.note : ""}</span>
+              </span>
+              <span className="font-semibold shrink-0">{fmt(p.amount)}</span>
+            </div>
+          ))}
+          {(r.payments || []).length > 0 && (
+            <div className="flex justify-between gap-2 text-sm font-bold pt-1">
+              <span>סה"כ התקבל</span>
+              <span>{fmt((r.payments || []).reduce((a, p) => a + Number(p.amount || 0), 0))}</span>
+            </div>
+          )}
+        </Section>
+
         <Section title="מזיגות" count={(r.repacks || []).length} empty={(r.repacks || []).length || r.repacks_desktop ? null : "לא היו מזיגות"}>
           {(r.repacks || []).map((x) => (
             <Row key={x.tag} a={`${x.scent} · ${x.by}${x.status === "pending" ? " · ממתין" : x.status === "rejected" ? " · נדחה" : ""}`} b={`${q(x.in_kg)} ← ${q(x.out_kg)} ק"ג`} />
