@@ -16,6 +16,7 @@ import VoiceAssist, { VoiceQuestions } from "./VoiceAssist";
 
 const BULK_KG_UNIT = 'ק"ג';
 const SIZES = [
+  { key: '100 מ"ל', label: '100 מ"ל' },
   { key: 'רבע ק"ג', label: "רבע" },
   { key: 'חצי ק"ג', label: "חצי" },
   { key: '1 ק"ג', label: '1 ק"ג' },

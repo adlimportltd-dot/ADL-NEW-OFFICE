@@ -857,7 +857,7 @@ const fmtDate = (iso) =>
 const CATEGORIES = { device: "מכשירים", consumable: "נוזלים ומתכלים" };
 // כל התמציות נמדדות בקילו (נקנות מהספק בק"ג ונמכרות בק"ג). השמות הישנים בליטר
 // נשארים במפת הנפחים רק כדי שנתונים ישנים (אם יופיעו) עדיין יחושבו נכון.
-const PACKAGE_SIZES = ['25 ק"ג', '5 ק"ג', '1 ק"ג', 'חצי ק"ג', 'רבע ק"ג'];
+const PACKAGE_SIZES = ['25 ק"ג', '5 ק"ג', '1 ק"ג', 'חצי ק"ג', 'רבע ק"ג', '100 מ"ל'];
 // יחידת רכש בתפזורת (ק"ג בודד) - משמשת רק בהזמנות רכש מספק שמוכר לפי ק"ג (Sozio).
 // בקליטת מכולה היא מומרת אוטומטית לחביות של 25 ק"ג, ולכן לא מוצגת בכרטיס הריח כשאין בה מלאי.
 const BULK_KG_UNIT = 'ק"ג';
@@ -867,9 +867,9 @@ const isEmptyBulkKg = (item, stock) => item?.unit === BULK_KG_UNIT && !Object.en
 const unitLabel = (u) => (u === BULK_KG_UNIT ? 'ק"ג בתפזורת (יחידת רכש מספק)' : u);
 // אריזות "גדולות" הן תמיד מקור להמרה (נפתחות/נצרכות), "קטנות" הן תמיד תוצר (נמזגות אליהן)
 const LARGE_PACKAGES = ['25 ק"ג'];
-const SMALL_PACKAGES = ['5 ק"ג', '1 ק"ג', 'חצי ק"ג', 'רבע ק"ג'];
+const SMALL_PACKAGES = ['5 ק"ג', '1 ק"ג', 'חצי ק"ג', 'רבע ק"ג', '100 מ"ל'];
 const PACKAGE_SIZE_VOLUMES = {
-  '25 ק"ג': 25, '5 ק"ג': 5, '1 ק"ג': 1, 'חצי ק"ג': 0.5, 'רבע ק"ג': 0.25, [BULK_KG_UNIT]: 1,
+  '25 ק"ג': 25, '5 ק"ג': 5, '1 ק"ג': 1, 'חצי ק"ג': 0.5, 'רבע ק"ג': 0.25, '100 מ"ל': 0.1, [BULK_KG_UNIT]: 1,
   "25 ליטר": 25, "5 ליטר": 5, "1 ליטר": 1, "0.5 ליטר": 0.5, '250 מ"ל': 0.25,
 };
 // סדר קבוע לגדלי אריזה בכל מקום שמציג אותם יחד (25 -> 5 -> 1 -> 0.5 -> 0.25) - במקום
@@ -2441,7 +2441,7 @@ function RepackagingModal({ data, refresh, fragranceGroupList, initialFragrance,
 
           <div className="mb-3">
             <div className="text-sm font-bold text-slate-700 mb-1">אריזות להוספה למלאי (מזיגה)</div>
-            <p className="text-xs text-slate-500 mb-2">רק אריזות קטנות - 1 ק"ג, חצי ק"ג, רבע ק"ג - נוצרות מהמזיגה.</p>
+            <p className="text-xs text-slate-500 mb-2">רק אריזות קטנות - 1 ק"ג, חצי ק"ג, רבע ק"ג, 100 מ"ל - נוצרות מהמזיגה.</p>
             <div className="space-y-2">
               {SMALL_PACKAGES.map((size) => (
                 <div key={size} className="flex items-center gap-2">

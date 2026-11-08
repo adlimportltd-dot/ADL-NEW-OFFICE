@@ -9,7 +9,7 @@ import { reasonLabel } from "./MobileWaste";
 // אותו מסך נקרא כל בוקר ע"י המשימה המתוזמנת ונשלח במייל.
 // ============================================================
 
-const SIZE_LABEL = { '25 ק"ג': "חבית 25", '5 ק"ג': "גלון 5", '1 ק"ג': '1 ק"ג', 'חצי ק"ג': "חצי", 'רבע ק"ג': "רבע" };
+const SIZE_LABEL = { '25 ק"ג': "חבית 25", '5 ק"ג': "גלון 5", '1 ק"ג': '1 ק"ג', 'חצי ק"ג': "חצי", 'רבע ק"ג': "רבע", '100 מ"ל': '100 מ"ל' };
 const q = (n) => Number(n || 0).toLocaleString("he-IL", { maximumFractionDigits: 2 });
 const short = (name) => { const p = parseEssence(name); return p ? `${p.scent} ${SIZE_LABEL[p.size] || p.size}` : name; };
 const israelToday = () => new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jerusalem" }));
