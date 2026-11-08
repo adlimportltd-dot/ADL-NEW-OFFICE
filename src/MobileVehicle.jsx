@@ -10,8 +10,8 @@ import { NAVY, AMBER, norm, parseEssence, Header, BottomBar, bigBtn, WIDE, Secti
 // ============================================================
 
 const BULK_KG_UNIT = 'ק"ג';
-const SIZE_ORDER = { '25 ק"ג': 0, '5 ק"ג': 1, '1 ק"ג': 2, 'חצי ק"ג': 3, 'רבע ק"ג': 4 };
-const SIZE_LABEL = { '25 ק"ג': "חבית 25", '5 ק"ג': "גלון 5", '1 ק"ג': '1 ק"ג', 'חצי ק"ג': "חצי", 'רבע ק"ג': "רבע" };
+const SIZE_ORDER = { '25 ק"ג': 0, '5 ק"ג': 1, '1 ק"ג': 2, 'חצי ק"ג': 3, 'רבע ק"ג': 4, '100 מ"ל': 5 };
+const SIZE_LABEL = { '25 ק"ג': "חבית 25", '5 ק"ג': "גלון 5", '1 ק"ג': '1 ק"ג', 'חצי ק"ג': "חצי", 'רבע ק"ג': "רבע", '100 מ"ל': '100 מ"ל' };
 const KIND_LABEL = { load: "העמסה לרכב", return: "החזרה למחסן" };
 const STATUS = {
   pending: { label: "ממתין לאישור", cls: "bg-amber-100 text-amber-900" },

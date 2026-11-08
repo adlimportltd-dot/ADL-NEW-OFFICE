@@ -14,10 +14,10 @@ import VoiceAssist, { VoiceQuestions } from "./VoiceAssist";
 // 4) לאישור – מזיגות חריגות של נתי + ספירה שממתינה (decide_repack).
 // ============================================================
 
-const UNIT_LABEL = { '25 ק"ג': "חבית 25", '5 ק"ג': "גלון 5", '1 ק"ג': '1 ק"ג', 'חצי ק"ג': "חצי", 'רבע ק"ג': "רבע" };
-const UNIT_KG = { '25 ק"ג': 25, '5 ק"ג': 5, '1 ק"ג': 1, 'חצי ק"ג': 0.5, 'רבע ק"ג': 0.25 };
+const UNIT_LABEL = { '25 ק"ג': "חבית 25", '5 ק"ג': "גלון 5", '1 ק"ג': '1 ק"ג', 'חצי ק"ג': "חצי", 'רבע ק"ג': "רבע", '100 מ"ל': '100 מ"ל' };
+const UNIT_KG = { '25 ק"ג': 25, '5 ק"ג': 5, '1 ק"ג': 1, 'חצי ק"ג': 0.5, 'רבע ק"ג': 0.25, '100 מ"ל': 0.1 };
 const OPEN_UNITS = ['25 ק"ג', '5 ק"ג', '1 ק"ג', 'חצי ק"ג']; // אפשר לפתוח גם בקבוק 1 ק"ג או חצי
-const OUT_UNITS = ['5 ק"ג', '1 ק"ג', 'חצי ק"ג', 'רבע ק"ג'];
+const OUT_UNITS = ['5 ק"ג', '1 ק"ג', 'חצי ק"ג', 'רבע ק"ג', '100 מ"ל'];
 const TX_LABEL = { receive: "קבלה", install: "מכירה", repack: "מזיגה", writeoff: "גריעה", transfer: "העברה", return: "החזרה" };
 const kg = (n) => Number(n || 0).toLocaleString("he-IL", { maximumFractionDigits: 2 });
 const toInt = (v) => { const n = parseInt(v, 10); return isNaN(n) || n < 0 ? 0 : n; };
@@ -239,7 +239,7 @@ export function RepackScreen({ userName, isAdmin, onBack }) {
             <Stepper id={`p-${i.id}`} label={UNIT_LABEL[i.unit]} value={outQ[i.id]} onChange={(v) => setOutQ({ ...outQ, [i.id]: v })} />
           </div>
         ))}
-        <div className="text-xs text-slate-500">יוצא רק מה שקטן ממה שנפתח: מחבית – גם גלון, מבקבוק 1 ק"ג – חצי ורבע, מחצי – רבע.</div>
+        <div className="text-xs text-slate-500">יוצא רק מה שקטן ממה שנפתח: מחבית – גם גלון, מבקבוק 1 ק"ג – חצי, רבע ו-100 מ"ל, מחצי – רבע ו-100 מ"ל.</div>
       </div>
       </div>
 
@@ -404,7 +404,7 @@ export function WeeklyCount({ userName, onBack }) {
     <Header title="ספירה שבועית" subtitle={`${userName} · מחסן מרכזי`} onBack={onBack} />
     <div className="flex-1 px-4 py-3.5 flex flex-col gap-3">
       <div className="bg-slate-100 rounded-2xl px-3.5 py-3 text-sm text-slate-700">
-        סופרים את <b>כל המחסן</b>: ריחות בכל הגדלים (חבית, גלון, 1 ק"ג, חצי, רבע) ו<b>מכשירים</b> (במכשירים בקרטון: סופרים קרטונים סגורים + יחידות פתוחות, והסך מחושב לבד). המסך לא מראה מה רשום במערכת – רושמים רק מה שרואים. אין בכלל? לוחצים "אין".
+        סופרים את <b>כל המחסן</b>: ריחות בכל הגדלים (חבית, גלון, 1 ק"ג, חצי, רבע, 100 מ"ל) ו<b>מכשירים</b> (במכשירים בקרטון: סופרים קרטונים סגורים + יחידות פתוחות, והסך מחושב לבד). המסך לא מראה מה רשום במערכת – רושמים רק מה שרואים. אין בכלל? לוחצים "אין".
       </div>
       <div className="flex flex-col gap-1">
         <div className="flex justify-between text-sm"><span className="text-slate-600">נספרו</span><span className="font-bold">{filled} מתוך {total}</span></div>
