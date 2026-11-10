@@ -4236,6 +4236,76 @@ function AuditLog({ data }) {
 // ==================== מחשבון יבוא ועלויות נחיתה (Landed Cost) ====================
 const DEFAULT_FX_RATES = { USD: 3.7, EUR: 4.0, GBP: 4.6, ILS: 1 };
 
+// ---------- שנאים למכשירים ----------
+// המכשירים מגיעים מסין בלי שנאי לשקע; את השנאי קונים בארץ ומוסיפים לעלות של כל מכשיר שצריך אותו.
+// המחירים (לפני מע"מ) וסוג השנאי לכל מכשיר נשמרים בהגדרות (app_settings → company_settings.adapters).
+const ADAPTER_TYPES = { none: "ללא שנאי", "1A": "שנאי 1 אמפר", "2A": "שנאי 2 אמפר" };
+const DEFAULT_ADAPTER_COSTS = { "1A": 8.8, "2A": 12 };
+const defaultAdapterType = (item) => {
+  if (!item || item.category !== "device") return "none";
+  const n = String(item.name || "").toUpperCase().replace(/\s+/g, "");
+  // רק מכשיר שהשם שלו מתחיל בדגם (לא "בקבוקים A700" / "משאבה A90")
+  if (/^A200(?!\d)/.test(n)) return "1A";
+  if (/^A(400|500|700|900)(?!\d)/.test(n)) return "2A";
+  return "none";
+};
+const adapterTypeOf = (item, settings) => (item && settings?.adapters?.byItem?.[item.id]) || defaultAdapterType(item);
+const adapterCostOf = (item, settings) => {
+  const t = adapterTypeOf(item, settings);
+  if (t === "none") return 0;
+  return Number(settings?.adapters?.costs?.[t] ?? DEFAULT_ADAPTER_COSTS[t]) || 0;
+};
+
+function AdapterSettingsPanel({ data, refresh }) {
+  const saved = data.companySettings?.adapters || {};
+  const devices = data.items.filter((i) => i.category === "device").sort((a, b) => a.name.localeCompare(b.name, "he"));
+  const [open, setOpen] = useState(false);
+  const [costs, setCosts] = useState({ "1A": String(saved.costs?.["1A"] ?? DEFAULT_ADAPTER_COSTS["1A"]), "2A": String(saved.costs?.["2A"] ?? DEFAULT_ADAPTER_COSTS["2A"]) });
+  const [byItem, setByItem] = useState(() => Object.fromEntries(devices.map((d) => [d.id, adapterTypeOf(d, data.companySettings)])));
+  const [busy, setBusy] = useState(false);
+  const [ok, setOk] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const adapters = { costs: { "1A": Number(costs["1A"]) || 0, "2A": Number(costs["2A"]) || 0 }, byItem };
+      await api.updateCompanySettings({ ...data.companySettings, adapters });
+      await refresh();
+      setOk(true); setTimeout(() => setOk(false), 2500);
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center justify-between font-bold text-slate-800">
+        <span>שנאים למכשירים (נוסף לעלות כל מכשיר)</span>
+        <ChevronDown size={18} className={`transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {!open && <p className="text-slate-500 text-sm mt-1">שנאי 1 אמפר ₪{Number(costs["1A"] || 0).toFixed(2)} · שנאי 2 אמפר ₪{Number(costs["2A"] || 0).toFixed(2)} (לפני מע"מ)</p>}
+      {open && (
+        <div className="mt-3">
+          <p className="text-slate-500 text-sm mb-3">המכשירים מגיעים בלי שנאי. מחיר השנאי (לפני מע"מ, קנייה בארץ) נוסף כמו שהוא לעלות של כל מכשיר שצריך אותו.</p>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <Field label="שנאי 1 אמפר (₪ לפני מע״מ)"><input type="number" min="0" step="0.01" className={inputCls} value={costs["1A"]} onChange={(e) => setCosts({ ...costs, "1A": e.target.value })} /></Field>
+            <Field label="שנאי 2 אמפר (₪ לפני מע״מ)"><input type="number" min="0" step="0.01" className={inputCls} value={costs["2A"]} onChange={(e) => setCosts({ ...costs, "2A": e.target.value })} /></Field>
+          </div>
+          <div className="text-sm font-bold text-slate-700 mb-2">איזה שנאי לכל מכשיר</div>
+          <div className="space-y-1.5 mb-4">
+            {devices.map((d) => (
+              <div key={d.id} className="flex items-center gap-2">
+                <span className="text-sm text-slate-700 flex-1">{d.name}</span>
+                <select className={inputCls + " !w-40 !py-1.5"} value={byItem[d.id] || "none"} onChange={(e) => setByItem({ ...byItem, [d.id]: e.target.value })}>
+                  {Object.entries(ADAPTER_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+          {ok && <div className="bg-emerald-100 text-emerald-700 text-sm rounded-xl px-3 py-2 mb-3">הגדרות השנאים נשמרו</div>}
+          <button type="button" onClick={save} disabled={busy} className={btnPrimary + " flex items-center gap-2"}>{busy && <Loader2 size={16} className="animate-spin" />} שמירת הגדרות השנאים</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LandedCostScreen({ data, refresh }) {
   const [overhead, setOverhead] = useState({ shipping: "", customs: "", brokerage: "", inland: "", wireFee: "", bankFee: "", creditCardFee: "", fxFeeValue: "", fxFeeMode: "percent" });
   const [method, setMethod] = useState("value");
@@ -4301,9 +4371,10 @@ function LandedCostScreen({ data, refresh }) {
     const basis = method === "value" ? qty * unitPriceILS : qty * (Number(l.unitVolume) || 0);
     const share = totalBasis > 0 ? basis / totalBasis : 0;
     const allocatedOverhead = totalOverhead * share;
-    const landedPerUnit = unitPriceILS + allocatedOverhead / qty;
     const item = data.items.find((i) => i.id === l.itemId);
-    return { ...l, item, qty, unitPriceILS, share, allocatedOverhead, landedPerUnit };
+    const adapterUnit = adapterCostOf(item, data.companySettings);
+    const landedPerUnit = unitPriceILS + allocatedOverhead / qty + adapterUnit;
+    return { ...l, item, qty, unitPriceILS, share, allocatedOverhead, adapterUnit, landedPerUnit };
   });
   const canCompute = validLines.length > 0 && totalBasis > 0;
 
@@ -4340,6 +4411,7 @@ function LandedCostScreen({ data, refresh }) {
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-1 flex items-center gap-2"><Ship size={22} className="text-amber-600" /> מחשבון יבוא ועלויות נחיתה (Landed Cost)</h2>
       <p className="text-slate-500 text-sm mb-4">חשב את מחיר הנחיתה הסופי ליחידה עבור משלוח, וחלק את עלויות המשלוח בין הפריטים לפי נפח או לפי ערך.</p>
+      <AdapterSettingsPanel data={data} refresh={refresh} />
 
       {shipmentsWithPOs.length > 0 && (
         <div className="bg-white rounded-2xl border shadow-sm p-5 mb-4">
@@ -4489,7 +4561,7 @@ function LandedCostScreen({ data, refresh }) {
           <div className="px-4 py-3 border-b"><h3 className="font-bold text-slate-800">תוצאת חישוב עלות הנחיתה</h3></div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">מחיר בסיס (₪)</th><th className="px-5 py-4 font-medium">חלק יחסי</th><th className="px-5 py-4 font-medium">Landed Cost ליח'</th></tr></thead>
+              <thead><tr className="bg-gray-50 text-slate-500 text-right"><th className="px-5 py-4 font-medium">פריט</th><th className="px-5 py-4 font-medium">כמות</th><th className="px-5 py-4 font-medium">מחיר בסיס (₪)</th><th className="px-5 py-4 font-medium">חלק יחסי</th><th className="px-5 py-4 font-medium">שנאי ליח'</th><th className="px-5 py-4 font-medium">Landed Cost ליח'</th></tr></thead>
               <tbody>
                 {results.map((r) => (
                   <tr key={r.id} className="border-t">
@@ -4497,6 +4569,7 @@ function LandedCostScreen({ data, refresh }) {
                     <td className="px-5 py-4">{r.qty}</td>
                     <td className="px-5 py-4">₪{r.unitPriceILS.toFixed(2)}{r.currency !== "ILS" && <span className="text-slate-500 text-xs"> ({CURRENCY_SYMBOLS[r.currency]}{Number(r.unitPrice).toFixed(2)})</span>}</td>
                     <td className="px-5 py-4">{(r.share * 100).toFixed(1)}%</td>
+                    <td className="px-5 py-4">{r.adapterUnit > 0 ? `₪${r.adapterUnit.toFixed(2)}` : "-"}</td>
                     <td className="px-5 py-4 font-bold text-amber-800">₪{r.landedPerUnit.toFixed(2)}</td>
                   </tr>
                 ))}
@@ -5138,12 +5211,15 @@ function computeShipmentCosts(data, shipmentId, estRates, method = "value") {
     // חלוקת ההוצאות: לפי כמות (כל ק"ג/יחידה נושא אותו חלק) או לפי ערך הסחורה
     const share = method === "quantity" ? (qtyTotal > 0 ? x.qty / qtyTotal : 0) : (goodsTotal > 0 ? x.valueIls / goodsTotal : 0);
     const allocated = overhead * share;
-    const landedTotal = x.valueIls + allocated;
+    // שנאי שנקנה בארץ - נוסף כמו שהוא לכל מכשיר שצריך אותו (לא מתחלק לפי ערך)
+    const adapterUnit = adapterCostOf(x.item, data.companySettings);
+    const adapterTotal = adapterUnit * x.qty;
+    const landedTotal = x.valueIls + allocated + adapterTotal;
     const currentStock = Object.entries(data.stock || {}).reduce((s, [k, q]) => (k.startsWith(x.itemId + "|") ? s + q : s), 0);
     const currentCost = x.item?.unitCost ?? null;
     const unitCost = landedTotal / x.qty;
     const newAvg = currentStock > 0 && currentCost != null ? (currentStock * currentCost + x.qty * unitCost) / (currentStock + x.qty) : unitCost;
-    return { ...x, share, allocated, landedTotal, unitCost, goodsUnitIls: x.valueIls / x.qty, currentStock, currentCost, newAvg };
+    return { ...x, share, allocated, adapterUnit, adapterTotal, landedTotal, unitCost, goodsUnitIls: x.valueIls / x.qty, currentStock, currentCost, newAvg };
   });
   return { pos, poRows, expenses, expensesTotal, feesTotal, overhead, goodsTotal, qtyTotal, items, estimated: poRows.some((r) => r.estimated), total: goodsTotal + overhead };
 }
