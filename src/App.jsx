@@ -4411,6 +4411,7 @@ function LandedCostScreen({ data, refresh }) {
     <div>
       <h2 className="font-bold text-xl text-slate-800 mb-1 flex items-center gap-2"><Ship size={22} className="text-amber-600" /> מחשבון יבוא ועלויות נחיתה (Landed Cost)</h2>
       <p className="text-slate-500 text-sm mb-4">חשב את מחיר הנחיתה הסופי ליחידה עבור משלוח, וחלק את עלויות המשלוח בין הפריטים לפי נפח או לפי ערך.</p>
+      <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm font-bold rounded-xl px-4 py-3 mb-4">מחשבון בלבד – מה שמוקלד כאן לא נשמר. תשלומים לספקים והוצאות שילוח רושמים במסך המכולה (משלוחים / מכולות).</div>
       <AdapterSettingsPanel data={data} refresh={refresh} />
 
       {shipmentsWithPOs.length > 0 && (
