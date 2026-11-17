@@ -5277,8 +5277,27 @@ function ShipmentDetail({ data, refresh, shipment, onBack }) {
       const list = jumps.map((it) => `• ${it.item?.name}: היום ₪${it.currentCost.toFixed(2)} ← במכולה ₪${it.unitCost.toFixed(2)}`).join("\n");
       if (!confirm(`⚠️ אזהרה: בפריטים הבאים העלות במכולה שונה ביותר מ-50% מהעלות שיש היום במערכת.\nבדרך כלל זה אומר שהשורה בהזמנה מחוברת לפריט ביחידה לא נכונה (למשל ק"ג מול ג'ריקן).\n\n${list}\n\nלהמשיך בכל זאת?`)) return;
     }
+    // הגנה: אותו פריט ביותר משורה אחת בהזמנות של המכולה – חוסמים, כי זה כמעט תמיד צבע/גודל שגוי
+    const lineCount = {};
+    c.pos.forEach((po) => po.lines.forEach((l) => { lineCount[l.itemId] = (lineCount[l.itemId] || 0) + 1; }));
+    const dupItems = Object.keys(lineCount).filter((id) => lineCount[id] > 1).map((id) => data.items.find((i) => i.id === id)?.name || id);
+    if (dupItems.length > 0) {
+      alert(`⛔ לא ניתן לקלוט: הפריטים הבאים מופיעים ביותר משורה אחת בהזמנות הרכש של המכולה:\n\n${dupItems.map((n) => "• " + n).join("\n")}\n\nכנראה שבאחת השורות נבחר צבע או גודל לא נכון. תקנו את הזמנת הרכש ואז קלטו.`);
+      return;
+    }
+    // סיכום לפי דגם וצבע לפני הקליטה, כולל צבעים של אותו דגם שלא מגיעים במכולה
+    const modelOf = (name) => String(name || "").split(" - ")[0].trim();
+    const inShipment = new Set(c.items.map((it) => it.itemId));
+    const devices = c.items.filter((it) => it.item && it.item.category !== "consumable");
+    const otherColors = [...new Set(devices.map((it) => modelOf(it.item.name)))].flatMap((m) =>
+      data.items.filter((x) => x.category !== "consumable" && modelOf(x.name) === m && x.name.includes(" - ") && !inShipment.has(x.id)).map((x) => x.name));
+    const summary = devices.length > 0
+      ? "מה נכנס למלאי (מכשירים לפי דגם וצבע):\n" + devices.slice().sort((a, b) => a.item.name.localeCompare(b.item.name)).map((it) => `• ${it.item.name}: ${it.qty}`).join("\n") +
+        (otherColors.length ? `\n\nשימו לב – צבעים שלא נכנסים בכלל במכולה (0 יחידות):\n${otherColors.map((n) => "• " + n).join("\n")}\nאם הגיעו גם בצבעים האלה – עצרו ותקנו את הזמנת הרכש.` : "") + "\n\n"
+      : "";
     const loc = data.locations.find((l) => l.id === locationId);
     const txt = `לקלוט את המכולה "${shipment.name}" למחסן "${loc?.name}"?\n\n` +
+      summary +
       `${c.items.length} פריטים ייכנסו למלאי, ועלות כל פריט תתעדכן לפי ממוצע משוקלל.\n` +
       (c.estimated ? "שימו לב: יש ספקים שעוד לא שולמו - העלות תיקלט כמשוערת ותתוקן אחרי התשלום.\n" : "") +
       "לא ניתן לקלוט את אותה מכולה פעמיים.";
@@ -7622,6 +7641,15 @@ function POsScreen({ data, refresh, onPrint, prefillItemId, onPrefillConsumed })
     if (valid.length === 0) { setError("יש להוסיף לפחות שורת פריט אחת"); return; }
     if (paymentTerms === "deposit_balance" && (!depositPercent || Number(depositPercent) <= 0 || Number(depositPercent) >= 100)) { setError("יש להזין אחוז מקדמה תקין (בין 1 ל-99)"); return; }
     if (paymentTerms === "net_x" && (!netDays || Number(netDays) <= 0)) { setError("יש להזין מספר ימי שוטף תקין"); return; }
+    // הגנה: אותו פריט פעמיים באותה הזמנה זה כמעט תמיד צבע/גודל שנבחר לא נכון באחת השורות (כך קרה ב-A700 במכולת יולי)
+    const seen = {};
+    valid.forEach((l) => { seen[l.itemId] = (seen[l.itemId] || 0) + 1; });
+    const dupIds = Object.keys(seen).filter((id) => seen[id] > 1);
+    if (dupIds.length > 0) {
+      const names = dupIds.map((id) => data.items.find((i) => i.id === id)?.name || id).join(", ");
+      setError(`⚠️ אותו פריט מופיע ביותר משורה אחת: ${names}. כנראה שבאחת השורות נבחר צבע או גודל לא נכון – תקנו את השורה (או אחדו לשורה אחת) ורק אז שמרו.`);
+      return;
+    }
     setBusy(true);
     try {
       const linesPayload = valid.map((l) => ({ itemId: l.itemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) }));
