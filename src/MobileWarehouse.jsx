@@ -501,6 +501,24 @@ export function CountReview({ onBack }) {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
+  // תיקון ספירה לשורה אחת – סופרים שוב רק את הפריט הזה, בלי לבטל את כל הספירה
+  const [fix, setFix] = useState({});      // item_id -> הכמות החדשה שהוקלדה (פתוח לעריכה)
+  const [fixedMsg, setFixedMsg] = useState("");
+  const recountLine = async (l) => {
+    const raw = String(fix[l.item_id] ?? "").trim();
+    const qty = Number(raw);
+    if (raw === "" || isNaN(qty) || qty < 0) { setError("צריך להקליד כמות שנספרה (0 ומעלה)"); return; }
+    if (qty === Number(l.counted_qty)) { setError("הכמות זהה למה שכבר נספר"); return; }
+    setBusy(true); setError(""); setFixedMsg("");
+    try {
+      const { error: e } = await supabase.rpc("recount_count_line", { p_count_id: rev.count.id, p_item_id: l.item_id, p_new_qty: qty });
+      if (e) throw e;
+      const { [l.item_id]: _, ...rest } = fix; setFix(rest);
+      setFixedMsg(`${l.scent} ${UNIT_LABEL[l.unit] || l.unit || ""}: הספירה תוקנה מ-${kg(l.counted_qty)} ל-${kg(qty)}`);
+      await loadReview();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
   const approve = async () => {
     setBusy(true); setError("");
     try {
@@ -584,6 +602,30 @@ export function CountReview({ onBack }) {
                 </div>
               );
             })()}
+            {l.recounted_at && (
+              <div className="mx-3.5 mb-2 text-[12px] text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                <b>תוקן:</b> נספר קודם {kg(l.recounted_from)} ← עכשיו {kg(l.counted_qty)} · {l.recounted_by_name || ""} · {new Date(l.recounted_at).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}
+              </div>
+            )}
+            <div className="mx-3.5 mb-3">
+              {fix[l.item_id] === undefined ? (
+                <button disabled={busy} onClick={() => setFix({ ...fix, [l.item_id]: "" })} className="h-10 px-3 rounded-xl border border-slate-300 text-slate-800 text-sm font-semibold">תיקון ספירה</button>
+              ) : (
+                <div className="flex flex-col gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                  <div className="text-[13px] text-slate-700">ספרו שוב את <b>{l.scent} {UNIT_LABEL[l.unit] || l.unit || ""}</b>. כמה יש בפועל?</div>
+                  <div className="flex gap-2">
+                    <input type="number" inputMode="decimal" min="0" step="any" autoFocus value={fix[l.item_id]}
+                      onChange={(e) => setFix({ ...fix, [l.item_id]: e.target.value })}
+                      aria-label={`כמות חדשה ל${l.scent}`} placeholder={kg(l.counted_qty)}
+                      className="flex-1 h-11 rounded-xl border-[1.5px] border-slate-300 px-3 text-center text-[17px] font-semibold" />
+                    <button disabled={busy} onClick={() => recountLine(l)} className="h-11 px-4 rounded-xl text-sm font-bold" style={{ background: AMBER, color: NAVY }}>
+                      {busy ? <Loader2 className="animate-spin" size={16} /> : "שמירה"}
+                    </button>
+                    <button disabled={busy} onClick={() => { const { [l.item_id]: _, ...rest } = fix; setFix(rest); }} className="h-11 px-3 rounded-xl border border-slate-300 text-slate-700 text-sm">ביטול</button>
+                  </div>
+                </div>
+              )}
+            </div>
             {isOpen && (
               <div className="border-t border-slate-100 px-3.5 py-2 flex flex-col gap-2">
                 {(l.moves || []).length === 0 && <div className="text-sm text-slate-500 py-1">אין תנועות בתקופה הזאת</div>}
@@ -599,6 +641,7 @@ export function CountReview({ onBack }) {
           </div>
         );
       })}
+      {fixedMsg && <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-green-900 text-sm font-semibold"><CircleCheck size={16} /> {fixedMsg}</div>}
       <ErrorBox>{error}</ErrorBox>
       {!rev.can_approve && <div className="text-sm bg-amber-50 text-amber-900 rounded-xl px-3 py-2">את הספירה הזאת ספרת בעצמך – מנהל אחר צריך לאשר אותה.</div>}
     </div>
